@@ -47,7 +47,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
 /** One SSM2 trouble code: a bit in the "current" (tmp) and "memorized" (mem) status bytes. */
-data class DtcDef(val code: String, val desc: String, val tmpAddr: Int, val memAddr: Int, val bit: Int)
+data class DtcDef(val code: String, val desc: String, val tmpAddr: Int, val memAddr: Int, val bit: Int, val descRu: String = "")
 
 data class DtcHit(val def: DtcDef, val current: Boolean, val memorized: Boolean)
 
@@ -66,6 +66,7 @@ object DtcRepo {
                 tmpAddr = o.getString("tmp").removePrefix("0x").toInt(16),
                 memAddr = o.getString("mem").removePrefix("0x").toInt(16),
                 bit = o.getInt("bit"),
+                descRu = o.optString("ru"),
             )
         }
         out
@@ -88,9 +89,11 @@ object DtcRepo {
             val raw = EcuLink.use { it.read(chunk.toIntArray(), dest) } ?: return null
             chunk.forEachIndexed { i, a -> values[a] = raw[i].toInt() and 0xFF }
         }
+        // 0xFF = address not implemented by this unit (returns junk), ignore it
+        fun bits(a: Int) = values[a]?.takeIf { it != 0xFF } ?: 0
         return defs.mapNotNull { def ->
-            val cur = (values[def.tmpAddr] ?: 0) shr def.bit and 1 == 1
-            val mem = (values[def.memAddr] ?: 0) shr def.bit and 1 == 1
+            val cur = bits(def.tmpAddr) shr def.bit and 1 == 1
+            val mem = bits(def.memAddr) shr def.bit and 1 == 1
             if (cur || mem) DtcHit(def, cur, mem) else null
         }
     }
@@ -159,7 +162,10 @@ fun DtcScreen() {
                 items(hits ?: emptyList()) { h ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         T(h.def.code, 15.sp, C.Orange, FontWeight.Bold, Modifier.weight(0.6f))
-                        T(h.def.desc, 14.sp, modifier = Modifier.weight(2.4f))
+                        Column(Modifier.weight(2.4f)) {
+                            T(h.def.descRu.ifBlank { h.def.desc }, 14.sp)
+                            if (h.def.descRu.isNotBlank()) T(h.def.desc, 11.sp, C.Sub)
+                        }
                         T(if (h.current) "да" else "—", 14.sp, if (h.current) C.Red else C.Sub, modifier = Modifier.weight(0.5f))
                         T(if (h.memorized) "да" else "—", 14.sp, modifier = Modifier.weight(0.5f))
                     }

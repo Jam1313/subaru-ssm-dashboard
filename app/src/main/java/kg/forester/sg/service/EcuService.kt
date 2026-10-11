@@ -77,6 +77,7 @@ class EcuService : Service() {
         Repo.init(this)
         startInForeground()
         startGps()
+        battery // restore the last battery readings for the UI right away
         pollJob = scope.launch { pollLoop() }
         scope.launch {
             while (isActive) {

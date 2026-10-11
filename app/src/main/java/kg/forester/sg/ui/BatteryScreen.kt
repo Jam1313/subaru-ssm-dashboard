@@ -54,7 +54,7 @@ private fun crankVerdict(v: Float?) = when {
 }
 
 private fun chargeVerdict(v: Float?) = when {
-    v == null -> Verdict("нет данных — через минуту работы", C.Sub)
+    v == null -> Verdict("нет данных — через 30 с работы двигателя", C.Sub)
     v < 13.2f -> Verdict("недозаряд — проверьте генератор/ремень", C.Red)
     v <= 14.8f -> Verdict("генератор в норме", C.Green)
     else -> Verdict("перезаряд — проверьте регулятор", C.Red)
@@ -96,9 +96,10 @@ fun BatteryScreen() {
             )
             VoltCard(
                 "Заряд от генератора", b.chargingV, chargeVerdict(b.chargingV), 0, Modifier.weight(1f),
-                extra = if (b.chargingMinV != null) "мин %.2f / макс %.2f В, генератор %s%%".format(
-                    b.chargingMinV, b.chargingMaxV, fmtF(e.altDutyPct, 0)
-                ) else null,
+                extra = if (b.chargingMinV != null) {
+                    "мин %.2f / макс %.2f В".format(b.chargingMinV, b.chargingMaxV) +
+                        (e.altDutyPct?.takeIf { it > 0f }?.let { ", генератор %.0f%%".format(it) } ?: "")
+                } else null,
             )
         }
         Row(Modifier.weight(1.3f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -137,7 +138,7 @@ fun BatteryScreen() {
                     }
                     val extra = when (ev.type) {
                         "crank" -> "длительность %.1f с".format(ev.extra / 1000)
-                        "charging" -> "генератор %.0f%%".format(ev.extra)
+                        "charging" -> if (ev.extra > 0) "генератор %.0f%%".format(ev.extra) else ""
                         else -> ""
                     }
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {

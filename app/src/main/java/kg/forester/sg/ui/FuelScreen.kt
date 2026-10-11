@@ -321,9 +321,15 @@ private fun TripRow(t: Trip) {
     ) {
         T(dayLabel(t.startMs), 13.sp, modifier = Modifier.width(110.dp))
         Column(Modifier.weight(1f)) {
-            T("${fmt(t.per100)} л/100 км", 14.sp, weight = FontWeight.SemiBold)
             val d = t.durationS
-            T("${fmt(t.distanceKm, 0)} км • %d:%02d".format(d / 3600, d / 60 % 60), 11.sp, C.Sub)
+            if (t.per100 != null) {
+                T("${fmt(t.per100)} л/100 км", 14.sp, weight = FontWeight.SemiBold)
+                T("${fmt(t.distanceKm, 0)} км • %d:%02d".format(d / 3600, d / 60 % 60), 11.sp, C.Sub)
+            } else {
+                // too short to compute per-100 km (mostly idling): show litres used instead
+                T("${fmt(t.fuelL, 2)} л", 14.sp, weight = FontWeight.SemiBold)
+                T("стоянка • %d:%02d".format(d / 3600, d / 60 % 60), 11.sp, C.Sub)
+            }
         }
         val icon = when {
             t.hwyKm >= t.cityKm && t.hwyKm >= t.mixKm -> Lucide.Milestone

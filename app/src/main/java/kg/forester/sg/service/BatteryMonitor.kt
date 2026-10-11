@@ -2,6 +2,7 @@ package kg.forester.sg.service
 
 import android.content.Context
 import kg.forester.sg.data.BatteryEvent
+import kg.forester.sg.data.BatteryState
 import kg.forester.sg.data.Repo
 import kg.forester.sg.ssm.EcuSnapshot
 import java.io.File
@@ -13,29 +14,37 @@ import java.util.Locale
 /**
  * Tracks battery health from ECU voltage:
  *  - resting: ignition on, engine not running (before cranking)
- *  - cranking: minimum voltage while the starter turns the engine
- *  - charging: alternator output with the engine running
+ *  - cranking: minimum voltage in the last seconds before the engine catches
+ *  - charging: alternator output once the engine has been running for a while (idle counts)
+ * The last value of each kind is restored from the event log on start.
  */
 class BatteryMonitor(private val ctx: Context) {
+    private data class Sample(val t: Long, val v: Float, val rpm: Int)
+
+    private val recent = ArrayDeque<Sample>()
     private var wasRunning = false
-    private var restingSamples = ArrayList<Float>()
-    private var preCrankMin: Float? = null
-    private var crankStartMs = 0L
-    private var cranking = false
+    private var lastStoppedMs = 0L
     private var runningSinceMs = 0L
-    private var chargeSamples = ArrayList<Float>()
-    private var chargeLogged = false
+    private val restingSamples = ArrayList<Float>()
     private var restingLogged = false
+    private val chargeSamples = ArrayList<Float>()
+    private var chargeLogged = false
     private var voltSum = 0.0
     private var voltN = 0
     private var voltSlot = 0L
+
+    init {
+        restoreFromLog()
+    }
 
     fun process(s: EcuSnapshot) {
         val v = s.batteryV ?: return
         val rpm = s.rpm ?: 0
         val now = s.timeMs
-        val running = rpm > 600
-        val state = Repo.battery.value
+        val running = rpm > 500
+
+        recent.addLast(Sample(now, v, rpm))
+        while (recent.isNotEmpty() && now - recent.first().t > 4000) recent.removeFirst()
 
         // 1-minute averages for the history chart
         val slot = now / 60_000 * 60_000
@@ -47,55 +56,68 @@ class BatteryMonitor(private val ctx: Context) {
         voltSum += v; voltN++
 
         if (rpm == 0) {
-            if (cranking) cranking = false
+            lastStoppedMs = now
             restingSamples.add(v)
             if (restingSamples.size > 40) restingSamples.removeAt(0)
-            preCrankMin = null
-            // After 5 s of steady ignition-on readings, publish the resting voltage.
-            if (restingSamples.size >= 20 && (now - state.restingTimeMs > 60_000 || state.restingV == null)) {
+            // after ~5 s of steady ignition-on readings publish the resting voltage
+            if (restingSamples.size >= 20) {
                 val med = restingSamples.sorted()[restingSamples.size / 2]
-                Repo.battery.value = state.copy(restingV = med, restingTimeMs = now)
+                Repo.battery.value = Repo.battery.value.copy(restingV = med, restingTimeMs = now)
                 if (!restingLogged) {
                     restingLogged = true
                     event(now, "resting", med.toDouble(), 0.0)
                 }
             }
-        } else if (!running) {
-            // Starter is turning the engine (rpm between 1 and 600).
-            if (!cranking) {
-                cranking = true; crankStartMs = now; preCrankMin = v
-            }
-            preCrankMin = minOf(preCrankMin ?: v, v)
         }
 
         if (running && !wasRunning) {
             runningSinceMs = now
             chargeSamples.clear()
             chargeLogged = false
-            val minV = preCrankMin ?: restingSamples.minOrNull()
-            if (minV != null) {
-                val dur = if (crankStartMs > 0) now - crankStartMs else 0
-                Repo.battery.value = Repo.battery.value.copy(crankMinV = minV, crankTimeMs = now, crankMs = dur)
-                event(now, "crank", minV.toDouble(), dur.toDouble())
+            // A real start: the engine was stopped within the last 10 s. The ECU can report 0 rpm while
+            // the starter turns, so take the minimum over the last few seconds of samples.
+            if (now - lastStoppedMs < 10_000) {
+                val window = recent.filter { it.rpm < 500 }
+                val minV = window.minOfOrNull { it.v }
+                if (minV != null) {
+                    val crankStart = window.firstOrNull { it.v < (restingSamples.lastOrNull() ?: minV) - 0.3f }?.t
+                    val dur = if (crankStart != null) now - crankStart else 0L
+                    Repo.battery.value = Repo.battery.value.copy(crankMinV = minV, crankTimeMs = now, crankMs = dur)
+                    event(now, "crank", minV.toDouble(), dur.toDouble())
+                }
             }
-            cranking = false; preCrankMin = null; restingSamples.clear(); restingLogged = false
+            restingSamples.clear()
+            restingLogged = false
         }
 
-        if (running && now - runningSinceMs > 60_000 && rpm > 1000) {
+        if (running && now - runningSinceMs > 30_000) {
             chargeSamples.add(v)
             if (chargeSamples.size > 600) chargeSamples.removeAt(0)
-            val avg = chargeSamples.average().toFloat()
-            Repo.battery.value = Repo.battery.value.copy(
-                chargingV = avg,
-                chargingMinV = minOf(Repo.battery.value.chargingMinV ?: v, v),
-                chargingMaxV = maxOf(Repo.battery.value.chargingMaxV ?: v, v),
+            val b = Repo.battery.value
+            Repo.battery.value = b.copy(
+                chargingV = chargeSamples.average().toFloat(),
+                chargingMinV = minOf(b.chargingMinV ?: v, v),
+                chargingMaxV = maxOf(b.chargingMaxV ?: v, v),
             )
-            if (!chargeLogged && chargeSamples.size >= 120) {
+            if (!chargeLogged && chargeSamples.size >= 60) {
                 chargeLogged = true
-                event(now, "charging", avg.toDouble(), (s.altDutyPct ?: 0f).toDouble())
+                event(now, "charging", chargeSamples.average(), (s.altDutyPct ?: 0f).toDouble())
             }
         }
         wasRunning = running
+    }
+
+    private fun restoreFromLog() {
+        runCatching { Repo.db.purgeBogusCranks() }
+        val events = runCatching { Repo.db.batteryEvents(200) }.getOrDefault(emptyList())
+        val resting = events.firstOrNull { it.type == "resting" }
+        val crank = events.firstOrNull { it.type == "crank" }
+        val charging = events.firstOrNull { it.type == "charging" }
+        Repo.battery.value = BatteryState(
+            restingV = resting?.value?.toFloat(), restingTimeMs = resting?.timeMs ?: 0,
+            crankMinV = crank?.value?.toFloat(), crankTimeMs = crank?.timeMs ?: 0, crankMs = crank?.extra?.toLong(),
+            chargingV = charging?.value?.toFloat(),
+        )
     }
 
     private fun event(now: Long, type: String, value: Double, extra: Double) {

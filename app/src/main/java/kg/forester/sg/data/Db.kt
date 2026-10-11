@@ -72,6 +72,11 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 2) {
         writableDatabase.insert("battery", null, cv)
     }
 
+    /** Removes implausible crank records (a real start always pulls the battery well below 11.5 V). */
+    fun purgeBogusCranks() {
+        writableDatabase.delete("battery", "type='crank' AND value>11.5", null)
+    }
+
     fun batteryEvents(limit: Int = 100): List<BatteryEvent> =
         readableDatabase.rawQuery("SELECT time,type,value,extra FROM battery ORDER BY time DESC LIMIT $limit", null).use { c ->
             val out = ArrayList<BatteryEvent>()
