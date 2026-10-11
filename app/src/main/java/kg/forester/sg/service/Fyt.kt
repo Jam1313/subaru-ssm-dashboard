@@ -145,10 +145,12 @@ object Fyt {
         }
     }
 
+    private var btState = MusicState(source = "bt")
+
     private val btCb = object : Callback() {
         override fun onUpdate(code: Int, ints: IntArray?, strs: Array<String?>?) {
-            val m = music.value.takeIf { it.source == "bt" } ?: MusicState(source = "bt")
-            music.value = when (code) {
+            val m = btState
+            btState = when (code) {
                 0 -> m.copy(title = strs?.getOrNull(0).orEmpty())
                 1 -> m.copy(artist = strs?.getOrNull(0).orEmpty())
                 2 -> m.copy(totalMs = (ints?.getOrNull(0) ?: 0).toLong())
@@ -156,6 +158,9 @@ object Fyt {
                 28 -> m.copy(posMs = (ints?.getOrNull(0) ?: 0).toLong())
                 else -> return
             }.copy(updatedMs = System.currentTimeMillis())
+            // show BT only when it actually has something and the stock player isn't the fresher source
+            val stockFresh = music.value.source == "music" && System.currentTimeMillis() - music.value.updatedMs < 5000
+            if (btState.title.isNotBlank() && (btState.playing || !stockFresh)) music.value = btState
         }
     }
 

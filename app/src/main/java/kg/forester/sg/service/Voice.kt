@@ -18,8 +18,6 @@ import org.vosk.LibVosk
 import org.vosk.LogLevel
 import org.vosk.Model
 import org.vosk.Recognizer
-import org.vosk.android.RecognitionListener
-import org.vosk.android.SpeechService
 import java.io.File
 import java.net.URL
 import java.util.zip.ZipInputStream
@@ -40,7 +38,8 @@ object Voice {
     val toast = MutableStateFlow<Pair<Long, String>?>(null)
     val navigate = MutableStateFlow<Pair<Long, VoiceTarget>?>(null)
 
-    private var service: SpeechService? = null
+    private var service: Thread? = null
+    @Volatile private var running = false
     private var model: Model? = null
     private var armedUntil = 0L
     private val starting = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -51,6 +50,16 @@ object Voice {
     fun enabled(ctx: Context) = prefs(ctx).getBoolean("enabled", false)
     fun wakeWord(ctx: Context) = prefs(ctx).getString("wake", "форестер")!!
     fun setWakeWord(ctx: Context, w: String) = prefs(ctx).edit().putString("wake", w.trim().lowercase()).apply()
+
+    /** Software microphone gain, 1..4. */
+    fun gain(ctx: Context) = prefs(ctx).getFloat("gain", 2f)
+    fun setGain(ctx: Context, g: Float) = prefs(ctx).edit().putFloat("gain", g).apply()
+
+    /** true: plain MIC source (more sensitive on many head units), false: VOICE_RECOGNITION. */
+    fun sensitive(ctx: Context) = prefs(ctx).getBoolean("micSource", true)
+    fun setSensitive(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean("micSource", v).apply()
+
+    fun restart(ctx: Context) { stop(); start(ctx) }
 
     fun setEnabled(ctx: Context, on: Boolean) {
         prefs(ctx).edit().putBoolean("enabled", on).apply()
@@ -69,7 +78,8 @@ object Voice {
                 LibVosk.setLogLevel(LogLevel.WARNINGS)
                 val m = model ?: Model(File(app.filesDir, MODEL_DIR).absolutePath).also { model = it }
                 val rec = Recognizer(m, 16000f)
-                service = SpeechService(rec, 16000f).also { it.startListening(listener) }
+                running = true
+                service = Thread({ listenLoop(rec) }, "voice").also { it.start() }
                 status.value = "слушаю «${wakeWord(app)}»"
                 starting.set(false)
             }.onFailure {
@@ -82,7 +92,8 @@ object Voice {
     }
 
     fun stop() {
-        runCatching { service?.stop(); service?.shutdown() }
+        running = false
+        runCatching { service?.join(1500) }
         service = null
         status.value = "выключено"
     }
@@ -109,15 +120,39 @@ object Voice {
         tmp.delete()
     }
 
-    private val listener = object : RecognitionListener {
-        override fun onPartialResult(hypothesis: String?) {}
-        override fun onResult(hypothesis: String?) = handle(hypothesis)
-        override fun onFinalResult(hypothesis: String?) = handle(hypothesis)
-        override fun onError(exception: Exception?) { status.value = "ошибка микрофона: ${exception?.message}" }
-        override fun onTimeout() {}
+    /** Own capture loop so we can boost quiet head-unit microphones and use the platform AGC / noise suppressor. */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun listenLoop(rec: Recognizer) {
+        val rate = 16000
+        val min = android.media.AudioRecord.getMinBufferSize(rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT)
+        val source = if (sensitive(app)) android.media.MediaRecorder.AudioSource.MIC else android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION
+        val ar = android.media.AudioRecord(source, rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 8192))
+        val agc = runCatching { if (android.media.audiofx.AutomaticGainControl.isAvailable()) android.media.audiofx.AutomaticGainControl.create(ar.audioSessionId)?.also { it.enabled = true } else null }.getOrNull()
+        val ns = runCatching { if (android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(ar.audioSessionId)?.also { it.enabled = true } else null }.getOrNull()
+        val buf = ShortArray(2048)
+        try {
+            ar.startRecording()
+            while (running) {
+                val n = ar.read(buf, 0, buf.size)
+                if (n <= 0) continue
+                val g = gain(app)
+                if (g != 1f) for (i in 0 until n) {
+                    buf[i] = (buf[i] * g).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                }
+                if (rec.acceptWaveForm(buf, n)) handle(rec.result)
+            }
+        } catch (e: Exception) {
+            status.value = "ошибка микрофона: ${e.message}"
+        } finally {
+            runCatching { ar.stop() }; ar.release(); agc?.release(); ns?.release(); rec.close()
+        }
     }
 
-    private fun handle(json: String?) {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private fun handle(json: String?) = main.post { handleOnMain(json) }
+
+    private fun handleOnMain(json: String?) {
         val text = runCatching { JSONObject(json ?: "").optString("text") }.getOrDefault("").trim().lowercase()
         if (text.isEmpty()) return
         lastHeard.value = text

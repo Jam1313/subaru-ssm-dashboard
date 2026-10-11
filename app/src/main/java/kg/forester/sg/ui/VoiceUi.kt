@@ -101,7 +101,23 @@ fun VoiceSettings() {
                 Voice.setWakeWord(ctx, wake)
                 if (on) { Voice.stop(); Voice.start(ctx) }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
+            var gain by remember { mutableStateOf(Voice.gain(ctx)) }
+            var sens by remember { mutableStateOf(Voice.sensitive(ctx)) }
+            T("Чувствительность микрофона", 14.sp)
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(1f to "×1", 2f to "×2", 3f to "×3", 4f to "×4").forEach { (g, l) ->
+                    Chip(l, gain == g, { gain = g; Voice.setGain(ctx, g) })
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T("Чувствительный режим микрофона", 13.sp, modifier = Modifier.weight(1f))
+                Switch(sens, { sens = it; Voice.setSensitive(ctx, it); if (on) Voice.restart(ctx) },
+                    colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
+            }
+            Spacer(Modifier.height(10.dp))
             T("Статус: $status", 13.sp, if (status.startsWith("слушаю")) C.Green else C.Sub)
             T("Услышано: ${heard.ifBlank { "—" }}", 13.sp, C.Sub)
         }

@@ -3,7 +3,6 @@ package kg.forester.sg.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.LruCache
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -37,8 +36,22 @@ import kotlin.math.roundToInt
 /** Pre-rendered 360° turntable frames in assets/car/car_NNN.webp. */
 private class FrameSource(private val ctx: Context) {
     val count: Int = ctx.assets.list("car")?.count { it.startsWith("car_") } ?: 0
-    // ~20 decoded frames in memory; neighbours are decoded on demand.
-    private val cache = object : LruCache<Int, Bitmap>(20) {}
+    // All frames are decoded once in the background and kept in memory: on-the-fly decoding made the
+    // rotation stutter. ~1.3 MB per frame, needs largeHeap.
+    private val frames = arrayOfNulls<Bitmap>(count)
+    @Volatile var loaded = 0
+        private set
+
+    fun preload() {
+        for (i in 0 until count) {
+            if (frames[i] == null) frames[i] = decode(i)
+            loaded = i + 1
+        }
+    }
+
+    private fun decode(i: Int): Bitmap? = runCatching {
+        ctx.assets.open("car/car_%03d.webp".format(i)).use { BitmapFactory.decodeStream(it) }
+    }.getOrNull()
 
     /** Per-frame plate corners (front/rear), normalised 0..1, TL TR BR BL. */
     val plates: List<Map<String, FloatArray>> = runCatching {
@@ -54,15 +67,12 @@ private class FrameSource(private val ctx: Context) {
 
     fun index(i: Int) = if (count == 0) 0 else ((i % count) + count) % count
 
+    fun cached(i: Int): Bitmap? = if (count == 0) null else frames[index(i)]
+
     fun get(i: Int): Bitmap? {
         if (count == 0) return null
-        val idx = ((i % count) + count) % count
-        cache.get(idx)?.let { return it }
-        val bmp = runCatching {
-            ctx.assets.open("car/car_%03d.webp".format(idx)).use { BitmapFactory.decodeStream(it) }
-        }.getOrNull() ?: return null
-        cache.put(idx, bmp)
-        return bmp
+        val idx = index(i)
+        return frames[idx] ?: decode(idx)?.also { frames[idx] = it }
     }
 }
 
@@ -82,15 +92,16 @@ fun CarViewer(rpm: Int?, modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) { if (kg.forester.sg.data.Plate.bitmap.value == null) kg.forester.sg.data.Plate.load(ctx) }
 
     // Slow auto-rotation when the user is not touching it.
+    LaunchedEffect(Unit) { withContext(Dispatchers.Default) { src.preload() } }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(66)
-            if (System.currentTimeMillis() - lastTouch > 4000) angle += 0.12f
+            delay(110) // one 5° frame per tick ≈ 8 s per revolution
+            if (System.currentTimeMillis() - lastTouch > 4000) angle += 1f
         }
     }
     LaunchedEffect(angle.roundToInt()) {
         val i = angle.roundToInt()
-        val b = withContext(Dispatchers.IO) { src.get(i) }
+        val b = src.cached(i) ?: withContext(Dispatchers.IO) { src.get(i) }
         if (b != null) { frame = b; frameIdx = src.index(i) }
     }
 
@@ -100,7 +111,7 @@ fun CarViewer(rpm: Int?, modifier: Modifier = Modifier) {
         modifier.pointerInput(Unit) {
             detectHorizontalDragGestures { _, drag ->
                 lastTouch = System.currentTimeMillis()
-                angle -= drag / 12f
+                angle -= drag / 9f
             }
         },
         contentAlignment = Alignment.Center,
