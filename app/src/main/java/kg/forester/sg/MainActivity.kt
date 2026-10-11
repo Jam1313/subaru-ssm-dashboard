@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.composables.icons.lucide.*
 import androidx.compose.material3.Icon
@@ -80,6 +81,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Repo.init(this)
+        kg.forester.sg.data.Shortcuts.load(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
         requestPermissions(
@@ -112,11 +114,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun App() {
     var screen by remember { mutableStateOf(Screen.Fuel) }
-    Box(
+    androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier.fillMaxSize().background(
             Brush.verticalGradient(listOf(Color(0xFF0E1222), C.Bg))
         )
     ) {
+        // Split screen next to the navigator: switch to the compact driver layout instead of squeezing.
+        if (maxWidth < 900.dp) {
+            kg.forester.sg.ui.CompactScreen()
+            return@BoxWithConstraints
+        }
         Row(Modifier.fillMaxSize().padding(10.dp)) {
             NavRail(screen) { screen = it }
             Spacer(Modifier.width(10.dp))
@@ -144,25 +151,40 @@ fun App() {
 
 @Composable
 private fun NavRail(current: Screen, onSelect: (Screen) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val shortcuts by kg.forester.sg.data.Shortcuts.list.collectAsState()
     Column(
-        Modifier.width(92.dp).fillMaxHeight().padding(top = 66.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.width(92.dp).fillMaxHeight().padding(top = 62.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Screen.entries.forEach { s ->
-            val sel = s == current
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(if (sel) C.Purple.copy(alpha = 0.3f) else Color.Transparent)
-                    .then(if (sel) Modifier.border(1.dp, C.Purple, RoundedCornerShape(14.dp)) else Modifier)
-                    .clickable { onSelect(s) }
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(s.icon, null, tint = if (sel) C.Violet else C.Sub, modifier = Modifier.size(26.dp))
-                Spacer(Modifier.height(3.dp))
-                T(s.title, 13.sp, if (sel) C.Text else C.Sub)
+            RailItem(s.icon, s.title, s == current) { onSelect(s) }
+        }
+        if (shortcuts.isNotEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp).height(1.dp).background(C.Border))
+            shortcuts.forEach { sc ->
+                RailItem(kg.forester.sg.data.Shortcuts.icon(sc.icon), sc.label, false, accent = true) {
+                    kg.forester.sg.data.Shortcuts.launch(ctx, sc)
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun RailItem(icon: ImageVector, title: String, selected: Boolean, accent: Boolean = false, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(if (selected) C.Purple.copy(alpha = 0.3f) else Color.Transparent)
+            .then(if (selected) Modifier.border(1.dp, C.Purple, RoundedCornerShape(14.dp)) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, null, tint = if (selected) C.Violet else if (accent) C.Blue else C.Sub, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(2.dp))
+        T(title, 12.sp, if (selected) C.Text else C.Sub, maxLines = 1)
     }
 }
 

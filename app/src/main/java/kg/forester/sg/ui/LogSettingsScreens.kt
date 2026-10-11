@@ -2,6 +2,7 @@ package kg.forester.sg.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -124,6 +125,21 @@ fun LogScreen() {
 
 @Composable
 fun SettingsScreen() {
+    var tab by remember { mutableStateOf(0) }
+    Column(Modifier.fillMaxSize()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip("Основные", tab == 0, { tab = 0 }, Lucide.SlidersHorizontal)
+            Chip("Кнопки быстрого запуска", tab == 1, { tab = 1 }, Lucide.LayoutGrid)
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.weight(1f)) {
+            if (tab == 0) GeneralSettings() else ShortcutSettings()
+        }
+    }
+}
+
+@Composable
+private fun GeneralSettings() {
     val s = Repo.settings
     val init by Repo.ecuInit.collectAsState()
     val msg by Repo.linkMessage.collectAsState()
