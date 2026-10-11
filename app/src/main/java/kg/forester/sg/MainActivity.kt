@@ -153,21 +153,33 @@ fun App() {
 private fun NavRail(current: Screen, onSelect: (Screen) -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val shortcuts by kg.forester.sg.data.Shortcuts.list.collectAsState()
-    Column(
-        Modifier.width(92.dp).fillMaxHeight().padding(top = 62.dp)
-            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        Screen.entries.forEach { s ->
-            RailItem(s.icon, s.title, s == current) { onSelect(s) }
-        }
-        if (shortcuts.isNotEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp).height(1.dp).background(C.Border))
-            shortcuts.forEach { sc ->
-                RailItem(kg.forester.sg.data.Shortcuts.icon(sc.icon), sc.label, false, accent = true) {
-                    kg.forester.sg.data.Shortcuts.launch(ctx, sc)
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    // The scrolling area starts below the logo; fades hint that more buttons are above/below.
+    Box(Modifier.width(92.dp).fillMaxHeight().padding(top = 62.dp)) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(scroll),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Screen.entries.forEach { s ->
+                RailItem(s.icon, s.title, s == current) { onSelect(s) }
+            }
+            if (shortcuts.isNotEmpty()) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp).height(1.dp).background(C.Border))
+                shortcuts.forEach { sc ->
+                    RailItem(kg.forester.sg.data.Shortcuts.icon(sc.icon), sc.label, false, accent = true) {
+                        kg.forester.sg.data.Shortcuts.launch(ctx, sc)
+                    }
                 }
             }
+            Spacer(Modifier.height(6.dp))
+        }
+        if (scroll.value > 0) {
+            Box(Modifier.fillMaxWidth().height(28.dp).align(Alignment.TopCenter)
+                .background(Brush.verticalGradient(listOf(Color(0xFF0D1120), Color.Transparent))))
+        }
+        if (scroll.value < scroll.maxValue) {
+            Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF0A0C16)))))
         }
     }
 }
