@@ -22,6 +22,7 @@ data class Trip(
     val hardBrake: Int = 0,
     val maxBoostKpa: Double = 0.0,
     val maxRpm: Int = 0,
+    val idleL: Double = 0.0,
 ) {
     val durationS: Long get() = (endMs - startMs) / 1000
     val per100: Double? get() = if (distanceKm > 0.5) fuelL / distanceKm * 100 else null
@@ -42,13 +43,13 @@ data class Bucket(val timeMs: Long, val fuelL: Double, val km: Double)
 
 data class BatteryEvent(val timeMs: Long, val type: String, val value: Double, val extra: Double)
 
-class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 2) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """CREATE TABLE trips(id INTEGER PRIMARY KEY AUTOINCREMENT, start INTEGER, end INTEGER,
                km REAL, fuel REAL, city_km REAL, city_l REAL, hwy_km REAL, hwy_l REAL, mix_km REAL, mix_l REAL,
-               idle_s REAL, hard_accel INTEGER, hard_brake INTEGER, max_boost REAL, max_rpm INTEGER)"""
+               idle_s REAL, hard_accel INTEGER, hard_brake INTEGER, max_boost REAL, max_rpm INTEGER, idle_l REAL DEFAULT 0)"""
         )
         db.execSQL(
             """CREATE TABLE refills(id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER, liters REAL,
@@ -65,6 +66,7 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 2) {
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) createV2(db)
+        if (oldVersion < 3) db.execSQL("ALTER TABLE trips ADD COLUMN idle_l REAL DEFAULT 0")
     }
 
     fun addBatteryEvent(e: BatteryEvent) {
@@ -106,7 +108,7 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 2) {
             put("city_km", t.cityKm); put("city_l", t.cityL); put("hwy_km", t.hwyKm); put("hwy_l", t.hwyL)
             put("mix_km", t.mixKm); put("mix_l", t.mixL); put("idle_s", t.idleS)
             put("hard_accel", t.hardAccel); put("hard_brake", t.hardBrake)
-            put("max_boost", t.maxBoostKpa); put("max_rpm", t.maxRpm)
+            put("max_boost", t.maxBoostKpa); put("max_rpm", t.maxRpm); put("idle_l", t.idleL)
         }
         return if (t.id == 0L) writableDatabase.insert("trips", null, cv)
         else {
@@ -125,6 +127,7 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 2) {
                     mixKm = c.getDouble(9), mixL = c.getDouble(10), idleS = c.getDouble(11),
                     hardAccel = c.getInt(12), hardBrake = c.getInt(13), maxBoostKpa = c.getDouble(14),
                     maxRpm = c.getInt(15),
+                    idleL = c.getDouble(16),
                 )
             }
             out

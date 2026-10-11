@@ -132,7 +132,7 @@ fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier
         modifier
             .clip(RoundedCornerShape(12.dp))
             .background(C.CardHi)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = C.Sub, modifier = Modifier.size(20.dp))

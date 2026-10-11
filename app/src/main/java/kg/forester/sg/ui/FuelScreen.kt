@@ -77,12 +77,18 @@ fun FuelScreen() {
             }
             Spacer(Modifier.width(12.dp))
             Panel(Modifier.width(240.dp).fillMaxHeight(), padding = 10.dp) {
-                T("Средний расход (весь период)", 12.sp, C.Sub)
+                T("Средний расход (весь период)", 12.sp, C.Sub, maxLines = 1)
                 Row(verticalAlignment = Alignment.Bottom) {
-                    val avg = if (totals.first > 1) totals.second / totals.first * 100 else null
-                    T(fmt(avg), 24.sp, weight = FontWeight.Bold)
-                    Spacer(Modifier.width(6.dp))
-                    T("л/100 км", 13.sp, C.Sub, modifier = Modifier.padding(bottom = 4.dp))
+                    if (totals.first > 1) {
+                        T(fmt(totals.second / totals.first * 100), 24.sp, weight = FontWeight.Bold)
+                        Spacer(Modifier.width(6.dp))
+                        T("л/100 км", 13.sp, C.Sub, modifier = Modifier.padding(bottom = 4.dp))
+                    } else {
+                        // no mileage yet: show what was burned instead of a dash
+                        T(fmt(totals.second, 1), 24.sp, weight = FontWeight.Bold)
+                        Spacer(Modifier.width(6.dp))
+                        T("л · пробега пока нет", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 4.dp), maxLines = 1)
+                    }
                 }
             }
         }
@@ -126,9 +132,11 @@ private fun CurrentTab() {
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.width(210.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Tile(Lucide.Milestone, "Запас хода", fmt(ts.rangeKm, 0), "км", Modifier.fillMaxWidth())
+                        Tile(Lucide.Milestone, "Запас хода", fmt(ts.rangeKm, 0), "км", Modifier.fillMaxWidth().weight(1f))
                         Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.CardHi).padding(horizontal = 10.dp, vertical = 6.dp)
+                            Modifier.fillMaxWidth().weight(1.25f).clip(RoundedCornerShape(12.dp)).background(C.CardHi)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.Center,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Lucide.Fuel, null, tint = C.Sub, modifier = Modifier.size(22.dp))
@@ -151,7 +159,11 @@ private fun CurrentTab() {
                             }
                             T("с заправки: ${fmt(Repo.settings.usedSinceRefillL)} л", 11.sp, C.Sub)
                         }
-                        Tile(Lucide.Gauge, "Средний (поездка)", fmt(trip?.per100), "л/100 км", Modifier.fillMaxWidth())
+                        if (trip != null && trip.per100 == null && trip.durationS > 30) {
+                            Tile(Lucide.Gauge, "Средний (стоянка)", fmt(trip.fuelL / (trip.durationS / 3600.0)), "л/ч", Modifier.fillMaxWidth().weight(1f))
+                        } else {
+                            Tile(Lucide.Gauge, "Средний (поездка)", fmt(trip?.per100), "л/100 км", Modifier.fillMaxWidth().weight(1f))
+                        }
                     }
                 }
             }
@@ -247,7 +259,11 @@ private fun TripInfoPanel(trip: Trip?, modifier: Modifier) {
                 Tile(Lucide.Gauge, "Ср. скорость", fmt(trip?.avgSpeed, 0), "км/ч", Modifier.weight(1f).fillMaxHeight())
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tile(Lucide.Fuel, "Ср. расход", fmt(trip?.per100), "л/100", Modifier.weight(1f).fillMaxHeight())
+                if (trip != null && trip.per100 == null && trip.durationS > 30) {
+                    Tile(Lucide.Fuel, "Ср. расход", fmt(trip.fuelL / (trip.durationS / 3600.0)), "л/ч", Modifier.weight(1f).fillMaxHeight())
+                } else {
+                    Tile(Lucide.Fuel, "Ср. расход", fmt(trip?.per100), "л/100", Modifier.weight(1f).fillMaxHeight())
+                }
                 Tile(Lucide.Droplet, "Топливо", fmt(trip?.fuelL), "л", Modifier.weight(1f).fillMaxHeight())
                 Tile(Lucide.Banknote, "Стоимость", fmt(trip?.fuelL?.times(price), 0), "KGS", Modifier.weight(1f).fillMaxHeight())
             }
@@ -257,50 +273,66 @@ private fun TripInfoPanel(trip: Trip?, modifier: Modifier) {
 
 @Composable
 private fun ModesPanel(trip: Trip?, modifier: Modifier) {
-    // Current trip if it has data, otherwise all-time from the trip list.
+    // Current trip if it has data, otherwise all trips. Shares are by fuel burned.
     val version by Repo.dataVersion.collectAsState()
     val all = remember(version) { Repo.db.trips(500) }
-    val src = if (trip != null && trip.distanceKm > 3) listOf(trip) else all
-    val city = src.sumOf { it.cityKm } to src.sumOf { it.cityL }
-    val hwy = src.sumOf { it.hwyKm } to src.sumOf { it.hwyL }
-    val mix = src.sumOf { it.mixKm } to src.sumOf { it.mixL }
-    val totalKm = city.first + hwy.first + mix.first
-    val totalL = city.second + hwy.second + mix.second
-    fun per(p: Pair<Double, Double>) = if (p.first > 0.3) p.second / p.first * 100 else null
-    fun pct(p: Pair<Double, Double>) = if (totalKm > 0) (p.first / totalKm * 100).toInt() else 0
-    Panel(modifier) {
+    val src = if (trip != null && trip.fuelL > 0.2) listOf(trip) else all
+    // Trips recorded before the idle mode existed put parked fuel into "city": treat 0-km trips as parked.
+    val driven = src.filter { it.cityKm + it.hwyKm + it.mixKm >= 0.05 }
+    val parked = src.filter { it.cityKm + it.hwyKm + it.mixKm < 0.05 }
+    val cityKm = driven.sumOf { it.cityKm }; val cityL = driven.sumOf { it.cityL }
+    val hwyKm = driven.sumOf { it.hwyKm }; val hwyL = driven.sumOf { it.hwyL }
+    val mixKm = driven.sumOf { it.mixKm }; val mixL = driven.sumOf { it.mixL }
+    val idleL = driven.sumOf { it.idleL } + parked.sumOf { it.fuelL }
+    val idleS = driven.sumOf { it.idleS } + parked.sumOf { it.durationS.toDouble() }
+    val totalL = cityL + hwyL + mixL + idleL
+    val totalKm = cityKm + hwyKm + mixKm
+    fun per(km: Double, l: Double) = if (km > 0.3) "${fmt(l / km * 100)} л/100 км" else "— л/100 км"
+    fun pct(l: Double) = if (totalL > 0) (l / totalL * 100).toInt() else 0
+    Panel(modifier, padding = 12.dp) {
         T("Расход по режимам", 16.sp, weight = FontWeight.SemiBold)
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(140.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(124.dp), contentAlignment = Alignment.Center) {
                 Donut(
-                    listOf(city.first.toFloat() to C.Violet, hwy.first.toFloat() to C.Blue, mix.first.toFloat() to C.Gray),
+                    listOf(cityL.toFloat() to C.Violet, hwyL.toFloat() to C.Blue, mixL.toFloat() to C.Gray, idleL.toFloat() to C.Orange),
                     Modifier.fillMaxSize()
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    T(fmt(if (totalKm > 0.3) totalL / totalKm * 100 else null), 24.sp, weight = FontWeight.Bold)
-                    T("л/100 км", 11.sp, C.Sub)
+                    if (totalKm > 0.3) {
+                        T(fmt(totalL / totalKm * 100), 22.sp, weight = FontWeight.Bold)
+                        T("л/100 км", 10.sp, C.Sub)
+                    } else {
+                        T(fmt(totalL, 2), 22.sp, weight = FontWeight.Bold)
+                        T("литров", 10.sp, C.Sub)
+                    }
                 }
             }
-            Spacer(Modifier.width(14.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ModeRow("Город", C.Violet, per(city), pct(city))
-                ModeRow("Трасса", C.Blue, per(hwy), pct(hwy))
-                ModeRow("Смешанный", C.Gray, per(mix), pct(mix))
+            Spacer(Modifier.width(12.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ModeRow("Город", C.Violet, per(cityKm, cityL), pct(cityL))
+                ModeRow("Трасса", C.Blue, per(hwyKm, hwyL), pct(hwyL))
+                ModeRow("Смешанный", C.Gray, per(mixKm, mixL), pct(mixL))
+                ModeRow(
+                    "Стоянка", C.Orange,
+                    "${fmt(idleL, 2)} л · ${if (idleS > 60) fmt(idleL / idleS * 3600) else "—"} л/ч", pct(idleL),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ModeRow(name: String, color: Color, per100: Double?, pct: Int) {
+private fun ModeRow(name: String, color: Color, detail: String, pct: Int) {
     Row(verticalAlignment = Alignment.Top) {
-        Box(Modifier.padding(top = 5.dp).size(10.dp).clip(CircleShape).background(color))
+        Box(Modifier.padding(top = 5.dp).size(9.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(8.dp))
-        Column(Modifier.width(110.dp)) {
-            T(name, 14.sp)
-            T("${fmt(per100)} л/100 км", 12.sp, C.Sub)
+        Column(Modifier.width(118.dp)) {
+            Row {
+                T(name, 13.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                T("$pct%", 13.sp, color, FontWeight.SemiBold)
+            }
+            T(detail, 11.sp, C.Sub, maxLines = 1)
         }
-        T("$pct%", 14.sp, color, FontWeight.SemiBold)
     }
 }
 
@@ -311,35 +343,35 @@ private fun RecentTripsPanel(version: Long, modifier: Modifier) {
         T("Последние поездки", 16.sp, weight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         if (trips.isEmpty()) T("Пока нет поездок", 13.sp, C.Sub)
-        trips.forEach { TripRow(it); Spacer(Modifier.height(6.dp)) }
+        trips.forEach { TripRow(it); Spacer(Modifier.height(5.dp)) }
     }
 }
 
 @Composable
 private fun TripRow(t: Trip) {
+    val d = t.durationS
+    val parked = t.per100 == null
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.CardHi).padding(horizontal = 10.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.CardHi).padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        T(dayLabel(t.startMs), 13.sp, modifier = Modifier.width(110.dp))
         Column(Modifier.weight(1f)) {
-            val d = t.durationS
-            if (t.per100 != null) {
-                T("${fmt(t.per100)} л/100 км", 14.sp, weight = FontWeight.SemiBold)
-                T("${fmt(t.distanceKm, 0)} км • %d:%02d".format(d / 3600, d / 60 % 60), 11.sp, C.Sub)
-            } else {
-                // too short to compute per-100 km (mostly idling): show litres used instead
-                T("${fmt(t.fuelL, 2)} л", 14.sp, weight = FontWeight.SemiBold)
-                T("стоянка • %d:%02d".format(d / 3600, d / 60 % 60), 11.sp, C.Sub)
+            Row(verticalAlignment = Alignment.Bottom) {
+                T(if (parked) fmt(t.fuelL, 2) else fmt(t.per100), 16.sp, weight = FontWeight.Bold, maxLines = 1)
+                T(if (parked) " л" else " л/100 км", 11.sp, C.Sub, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
             }
+            val km = if (parked) "стоянка" else "${fmt(t.distanceKm, 0)} км"
+            T("${dayLabel(t.startMs)} · $km · %d:%02d".format(d / 3600, d / 60 % 60), 11.sp, C.Sub, maxLines = 1)
         }
         val icon = when {
+            parked -> Lucide.SquareParking
             t.hwyKm >= t.cityKm && t.hwyKm >= t.mixKm -> Lucide.Milestone
             t.cityKm >= t.mixKm -> Lucide.Building2
             else -> Lucide.Route
         }
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(C.Blue.copy(alpha = 0.25f)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = C.Blue, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(C.Blue.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = C.Blue, modifier = Modifier.size(18.dp))
         }
     }
 }

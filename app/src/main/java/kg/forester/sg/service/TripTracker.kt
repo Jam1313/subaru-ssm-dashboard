@@ -80,6 +80,7 @@ class TripTracker {
             speedWindow.addLast(now to speed)
             while (speedWindow.isNotEmpty() && now - speedWindow.first().first > 120_000) speedWindow.removeFirst()
             val avg = speedWindow.sumOf { it.second } / speedWindow.size
+            val moving = speed >= 2
             val accel = (speed - lastSpeed) / 3.6 / dt // m/s^2
             var hardA = 0
             var hardB = 0
@@ -91,13 +92,14 @@ class TripTracker {
                 endMs = now,
                 distanceKm = t.distanceKm + dKm,
                 fuelL = t.fuelL + dFuel,
-                cityKm = t.cityKm + if (avg < 45) dKm else 0.0,
-                cityL = t.cityL + if (avg < 45) dFuel else 0.0,
-                hwyKm = t.hwyKm + if (avg >= 75) dKm else 0.0,
-                hwyL = t.hwyL + if (avg >= 75) dFuel else 0.0,
-                mixKm = t.mixKm + if (avg in 45.0..75.0) dKm else 0.0,
-                mixL = t.mixL + if (avg in 45.0..75.0) dFuel else 0.0,
-                idleS = t.idleS + if (engineOn && speed < 2) dt else 0.0,
+                cityKm = t.cityKm + if (moving && avg < 45) dKm else 0.0,
+                cityL = t.cityL + if (moving && avg < 45) dFuel else 0.0,
+                hwyKm = t.hwyKm + if (moving && avg >= 75) dKm else 0.0,
+                hwyL = t.hwyL + if (moving && avg >= 75) dFuel else 0.0,
+                mixKm = t.mixKm + if (moving && avg in 45.0..75.0) dKm else 0.0,
+                mixL = t.mixL + if (moving && avg in 45.0..75.0) dFuel else 0.0,
+                idleS = t.idleS + if (engineOn && !moving) dt else 0.0,
+                idleL = t.idleL + if (!moving) dFuel else 0.0,
                 hardAccel = t.hardAccel + hardA,
                 hardBrake = t.hardBrake + hardB,
                 maxBoostKpa = maxOf(t.maxBoostKpa, (e.gaugeKpa ?: 0f).toDouble()),
