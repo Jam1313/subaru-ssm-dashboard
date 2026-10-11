@@ -23,6 +23,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -177,6 +179,8 @@ private fun GeneralSettings() {
             Spacer(Modifier.height(8.dp))
             T(saved, 13.sp, C.Green)
             Spacer(Modifier.height(14.dp))
+            PlateSettings()
+            Spacer(Modifier.height(14.dp))
             val navPos by Repo.navPosition.collectAsState()
             T("Панель навигации", 15.sp)
             Spacer(Modifier.height(6.dp))
@@ -242,3 +246,38 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit) {
 }
 
 private fun String.toD(): Double? = replace(',', '.').trim().toDoubleOrNull()
+
+/** Licence plate shown on the 3D car: text (optionally with the KG flag) or an uploaded picture. */
+@Composable
+private fun PlateSettings() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val plate by kg.forester.sg.data.Plate.bitmap.collectAsState()
+    LaunchedEffect(Unit) { if (plate == null) kg.forester.sg.data.Plate.load(ctx) }
+    var text by remember { mutableStateOf(kg.forester.sg.data.Plate.text(ctx)) }
+    var flag by remember { mutableStateOf(kg.forester.sg.data.Plate.flag(ctx)) }
+    var msg by remember { mutableStateOf("") }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri -> if (uri != null) msg = if (kg.forester.sg.data.Plate.setImage(ctx, uri)) "Картинка номера загружена" else "Не удалось открыть картинку" }
+
+    T("Номер на 3D-модели", 15.sp)
+    Spacer(Modifier.height(6.dp))
+    plate?.let {
+        androidx.compose.foundation.Image(
+            it.asImageBitmap(), "номер",
+            Modifier.fillMaxWidth().height(70.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+        )
+    }
+    Spacer(Modifier.height(6.dp))
+    Field("Текст номера", text) { text = it }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Checkbox(flag, { flag = it }, colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = C.Purple))
+        T("Флаг KG слева", 13.sp, modifier = Modifier.weight(1f))
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.weight(1f)) { ActionButton("Применить текст", text.isNotBlank()) { kg.forester.sg.data.Plate.setText(ctx, text, flag); msg = "Номер обновлён" } }
+        Box(Modifier.weight(1f)) { ActionButton("Загрузить картинку", true) { picker.launch("image/*") } }
+    }
+    if (msg.isNotEmpty()) T(msg, 12.sp, C.Green)
+}

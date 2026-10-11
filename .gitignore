@@ -12,6 +12,7 @@ local.properties
 # local research dumps (third-party files, see README for sources)
 research/
 
-# 3D model / renders are not part of the public app
-render/
-app/src/main/assets/car/
+# 3D source model and render scratch files (the rendered frames in assets/car are published)
+render/*
+!render/render_turntable.py
+!render/plate_sg5.png

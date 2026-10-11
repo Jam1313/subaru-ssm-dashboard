@@ -82,6 +82,11 @@
 - вкладка «Приложения»: все установленные программы, поиск и кнопка «Штатный лаунчер Teyes»;
 - после перезагрузки режим восстанавливается скриптом Magisk (`/data/adb/service.d/forester_home.sh`).
 
+**3D-модель Forester SG на главной:**
+- 72 кадра поворота на 360° (крутится пальцем, медленный автоповорот, подсветка в такт оборотам), цвет «баклажан-хамелеон»;
+- свой номер: Настройки → «Номер на 3D-модели» (текст, флаг KG или своя картинка) — номер накладывается на табличку с перспективой;
+- кадры отрендерены скриптом `render/render_turntable.py` (Blender 4.2).
+
 **Прочее:**
 - GPS: высота, контроль спидометра (коэффициент коррекции учится по GPS), пробег;
 - CSV-лог каждой поездки со всеми параметрами;
@@ -131,6 +136,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - [FreeSSM](https://github.com/Comer352L/FreeSSM): таблицы параметров и ошибок ЭБУ и АКПП, таблица температуры ATF, GPL-3.0;
 - [usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android): драйверы USB-serial, MIT;
 - [Lucide](https://lucide.dev/) через [composables icons-lucide](https://github.com/composablehorizons/compose-icons): иконки, ISC.
+
+## 3D-модель
+Кадры отрендерены из модели [«Subaru Forester MK2 2002-2008»](https://sketchfab.com/3d-models/subaru-forester-mk2-2002-2008-1df01538f1954a5c87adcc4a792a365a) автора **szymonpasterczyk** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: убраны тюнинг-детали и салон мода, собраны колёса и капот, перекрашено, пустые номерные таблички.
 
 ## Лицензия
 [GPL-3.0](LICENSE). Таблицы параметров и кодов ошибок получены из проектов под GPL.

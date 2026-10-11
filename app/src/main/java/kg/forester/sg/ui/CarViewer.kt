@@ -7,7 +7,6 @@ import android.util.LruCache
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,10 +24,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -40,6 +39,20 @@ private class FrameSource(private val ctx: Context) {
     val count: Int = ctx.assets.list("car")?.count { it.startsWith("car_") } ?: 0
     // ~20 decoded frames in memory; neighbours are decoded on demand.
     private val cache = object : LruCache<Int, Bitmap>(20) {}
+
+    /** Per-frame plate corners (front/rear), normalised 0..1, TL TR BR BL. */
+    val plates: List<Map<String, FloatArray>> = runCatching {
+        val arr = org.json.JSONArray(ctx.assets.open("car/plates.json").bufferedReader().readText())
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            o.keys().asSequence().associateWith { k ->
+                val q = o.getJSONArray(k)
+                FloatArray(8) { j -> q.getJSONArray(j / 2).getDouble(j % 2).toFloat() }
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    fun index(i: Int) = if (count == 0) 0 else ((i % count) + count) % count
 
     fun get(i: Int): Bitmap? {
         if (count == 0) return null
@@ -63,7 +76,10 @@ fun CarViewer(rpm: Int?, modifier: Modifier = Modifier) {
     val src = remember { FrameSource(ctx.applicationContext) }
     var angle by remember { mutableFloatStateOf(0f) } // in frames
     var lastTouch by remember { mutableLongStateOf(0L) }
-    var frame by remember { mutableStateOf<ImageBitmap?>(null) }
+    var frame by remember { mutableStateOf<Bitmap?>(null) }
+    var frameIdx by remember { mutableStateOf(0) }
+    val plate by kg.forester.sg.data.Plate.bitmap.collectAsState()
+    LaunchedEffect(Unit) { if (kg.forester.sg.data.Plate.bitmap.value == null) kg.forester.sg.data.Plate.load(ctx) }
 
     // Slow auto-rotation when the user is not touching it.
     LaunchedEffect(Unit) {
@@ -74,7 +90,8 @@ fun CarViewer(rpm: Int?, modifier: Modifier = Modifier) {
     }
     LaunchedEffect(angle.roundToInt()) {
         val i = angle.roundToInt()
-        frame = withContext(Dispatchers.IO) { src.get(i)?.asImageBitmap() } ?: frame
+        val b = withContext(Dispatchers.IO) { src.get(i) }
+        if (b != null) { frame = b; frameIdx = src.index(i) }
     }
 
     val glow by animateFloatAsState(((rpm ?: 0) / 7000f).coerceIn(0f, 1f), tween(300), label = "glow")
@@ -122,8 +139,31 @@ fun CarViewer(rpm: Int?, modifier: Modifier = Modifier) {
                 topLeft = Offset(w * 0.16f, h * 0.70f), size = Size(w * 0.68f, h * 0.2f),
             )
         }
-        frame?.let {
-            Image(it, "Forester SG5", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+        val f = frame
+        if (f != null) {
+            Canvas(Modifier.fillMaxSize()) {
+                // fit the frame into the box (like ContentScale.Fit)
+                val scale = minOf(size.width / f.width, size.height / f.height)
+                val dw = f.width * scale
+                val dh = f.height * scale
+                val ox = (size.width - dw) / 2
+                val oy = (size.height - dh) / 2
+                drawIntoCanvas { cnv ->
+                    val nc = cnv.nativeCanvas
+                    val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG)
+                    nc.drawBitmap(f, null, android.graphics.RectF(ox, oy, ox + dw, oy + dh), paint)
+                    val pb = plate
+                    val quads = src.plates.getOrNull(frameIdx)
+                    if (pb != null && quads != null) {
+                        val srcPts = floatArrayOf(0f, 0f, pb.width.toFloat(), 0f, pb.width.toFloat(), pb.height.toFloat(), 0f, pb.height.toFloat())
+                        quads.values.forEach { q ->
+                            val dst = FloatArray(8) { j -> if (j % 2 == 0) ox + q[j] * dw else oy + q[j] * dh }
+                            val m = android.graphics.Matrix()
+                            if (m.setPolyToPoly(srcPts, 0, dst, 0, 4)) nc.drawBitmap(pb, m, paint)
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -25,7 +25,7 @@ import java.net.URL
 import java.util.zip.ZipInputStream
 
 /** Screens the voice can open in our UI. */
-enum class VoiceTarget { HOME, DRIVE, FUEL, GEARBOX, BATTERY, DTC }
+enum class VoiceTarget { HOME, DRIVE, FUEL, GEARBOX, BATTERY, DTC, MEDIA }
 
 /**
  * Offline voice control (Vosk, small Russian model downloaded on first use).
@@ -156,16 +156,18 @@ object Voice {
             "весь экран" in c || "на весь" in c -> { say("Весь экран"); Shortcuts.exitSplit(app) }
             "громче" in c -> volume(+2)
             "тише" in c -> volume(-2)
-            "следующ" in c || "дальше" in c || "далее" in c -> mediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, "Следующий трек")
-            "предыдущ" in c || "назад" in c -> mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, "Предыдущий трек")
-            "пауза" in c || "стоп" in c -> mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE, "Пауза")
-            "играй" in c || "продолж" in c || "включи музыку" in c -> mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "Играю")
+            "следующ" in c || "дальше" in c || "далее" in c -> { Fyt.next(); say("Следующий") }
+            "предыдущ" in c || "назад" in c -> { Fyt.prev(); say("Предыдущий") }
+            "пауза" in c || "стоп" in c -> { if (Fyt.music.value.playing) Fyt.playPause() else mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE, ""); say("Пауза") }
+            "играй" in c || "продолж" in c || "включи музыку" in c -> { if (!Fyt.music.value.playing) Fyt.playPause(); say("Играю") }
+            "радио" in c -> { Fyt.ensureRadio(); go(VoiceTarget.MEDIA, "Радио") }
             "расход" in c -> go(VoiceTarget.FUEL, "Расход")
             "коробк" in c || "акпп" in c -> go(VoiceTarget.GEARBOX, "АКПП")
             "аккумулятор" in c || "батаре" in c -> go(VoiceTarget.BATTERY, "Аккумулятор")
             "ошибк" in c -> go(VoiceTarget.DTC, "Ошибки")
             "динамик" in c || "наддув" in c -> go(VoiceTarget.DRIVE, "Динамика")
             "главн" in c || "приборы" in c -> go(VoiceTarget.HOME, "Главная")
+            "медиа" in c || "плеер" in c -> go(VoiceTarget.MEDIA, "Медиа")
             else -> say("Не понял: $cmd")
         }
     }

@@ -70,6 +70,7 @@ import kotlin.math.sin
 enum class Screen(val title: String, val icon: ImageVector) {
     Home("Главная", Lucide.House),
     Drive("Динамика", Lucide.Gauge),
+    Media("Медиа", Lucide.Music),
     Fuel("Расход", Lucide.ChartColumn),
     Gearbox("АКПП", Lucide.Cog),
     Battery("АКБ", Lucide.BatteryCharging),
@@ -134,6 +135,7 @@ fun App() {
                 kg.forester.sg.service.VoiceTarget.GEARBOX -> Screen.Gearbox
                 kg.forester.sg.service.VoiceTarget.BATTERY -> Screen.Battery
                 kg.forester.sg.service.VoiceTarget.DTC -> Screen.Dtc
+                kg.forester.sg.service.VoiceTarget.MEDIA -> Screen.Media
             }
         }
     }
@@ -154,6 +156,7 @@ fun App() {
                 when (screen) {
                     Screen.Home -> HomeScreen()
                     Screen.Drive -> kg.forester.sg.ui.DriveScreen()
+                    Screen.Media -> kg.forester.sg.ui.MediaScreen()
                     Screen.Fuel -> FuelScreen()
                     Screen.Gearbox -> kg.forester.sg.ui.TransmissionScreen()
                     Screen.Battery -> kg.forester.sg.ui.BatteryScreen()

@@ -79,6 +79,7 @@ class EcuService : Service() {
         startGps()
         battery // restore the last battery readings for the UI right away
         Voice.start(this)
+        Fyt.bind(this)
         pollJob = scope.launch { pollLoop() }
         scope.launch {
             while (isActive) {
