@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.composables.icons.lucide.*
 import androidx.compose.material3.Icon
@@ -86,7 +87,10 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
         requestPermissions(
-            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.RECORD_AUDIO,
+            ), 1
         )
         EcuService.start(this)
         setContent { App() }
@@ -120,6 +124,19 @@ fun App() {
     androidx.activity.compose.BackHandler(enabled = screen != Screen.Home || kg.forester.sg.ui.isDefaultHome(ctx)) {
         screen = Screen.Home
     }
+    val voiceNav by kg.forester.sg.service.Voice.navigate.collectAsState()
+    LaunchedEffect(voiceNav) {
+        voiceNav?.second?.let {
+            screen = when (it) {
+                kg.forester.sg.service.VoiceTarget.HOME -> Screen.Home
+                kg.forester.sg.service.VoiceTarget.DRIVE -> Screen.Drive
+                kg.forester.sg.service.VoiceTarget.FUEL -> Screen.Fuel
+                kg.forester.sg.service.VoiceTarget.GEARBOX -> Screen.Gearbox
+                kg.forester.sg.service.VoiceTarget.BATTERY -> Screen.Battery
+                kg.forester.sg.service.VoiceTarget.DTC -> Screen.Dtc
+            }
+        }
+    }
     androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier.fillMaxSize().background(
             Brush.verticalGradient(listOf(Color(0xFF0E1222), C.Bg))
@@ -128,31 +145,48 @@ fun App() {
         // Split screen next to the navigator: switch to the compact driver layout instead of squeezing.
         if (maxWidth < 900.dp) {
             kg.forester.sg.ui.CompactScreen()
+            kg.forester.sg.ui.VoiceToast(Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
             return@BoxWithConstraints
         }
-        Row(Modifier.fillMaxSize().padding(10.dp)) {
-            NavRail(screen) { screen = it }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                TopBar(screen)
-                Spacer(Modifier.height(10.dp))
-                Box(Modifier.weight(1f)) {
-                    when (screen) {
-                        Screen.Home -> HomeScreen()
-                        Screen.Drive -> kg.forester.sg.ui.DriveScreen()
-                        Screen.Fuel -> FuelScreen()
-                        Screen.Gearbox -> kg.forester.sg.ui.TransmissionScreen()
-                        Screen.Battery -> kg.forester.sg.ui.BatteryScreen()
-                        Screen.Dtc -> DtcScreen()
-                        Screen.Log -> LogScreen()
-                        Screen.Apps -> kg.forester.sg.ui.AppsScreen()
-                        Screen.Settings -> SettingsScreen()
-                    }
+        val navPos by Repo.navPosition.collectAsState()
+        val content: @Composable (Modifier) -> Unit = { m ->
+            Box(m) {
+                when (screen) {
+                    Screen.Home -> HomeScreen()
+                    Screen.Drive -> kg.forester.sg.ui.DriveScreen()
+                    Screen.Fuel -> FuelScreen()
+                    Screen.Gearbox -> kg.forester.sg.ui.TransmissionScreen()
+                    Screen.Battery -> kg.forester.sg.ui.BatteryScreen()
+                    Screen.Dtc -> DtcScreen()
+                    Screen.Log -> LogScreen()
+                    Screen.Apps -> kg.forester.sg.ui.AppsScreen()
+                    Screen.Settings -> SettingsScreen()
                 }
-                Spacer(Modifier.height(10.dp))
-                BottomBar()
             }
         }
+        when (navPos) {
+            "top", "bottom" -> Column(Modifier.fillMaxSize().padding(10.dp)) {
+                TopBar(screen)
+                Spacer(Modifier.height(8.dp))
+                if (navPos == "top") { NavBar(screen) { screen = it }; Spacer(Modifier.height(8.dp)) }
+                content(Modifier.weight(1f))
+                Spacer(Modifier.height(8.dp))
+                BottomBar()
+                if (navPos == "bottom") { Spacer(Modifier.height(8.dp)); NavBar(screen) { screen = it } }
+            }
+            else -> Row(Modifier.fillMaxSize().padding(10.dp)) {
+                if (navPos != "right") { NavRail(screen) { screen = it }; Spacer(Modifier.width(10.dp)) }
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    TopBar(screen)
+                    Spacer(Modifier.height(10.dp))
+                    content(Modifier.weight(1f))
+                    Spacer(Modifier.height(10.dp))
+                    BottomBar()
+                }
+                if (navPos == "right") { Spacer(Modifier.width(10.dp)); NavRail(screen) { screen = it } }
+            }
+        }
+        kg.forester.sg.ui.VoiceToast(Modifier.align(Alignment.TopCenter).padding(top = 14.dp))
     }
 }
 
@@ -187,6 +221,46 @@ private fun NavRail(current: Screen, onSelect: (Screen) -> Unit) {
         if (scroll.value < scroll.maxValue) {
             Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF0A0C16)))))
+        }
+    }
+}
+
+/** Horizontal navigation for the top/bottom positions; scrolls when there are many buttons. */
+@Composable
+private fun NavBar(current: Screen, onSelect: (Screen) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val shortcuts by kg.forester.sg.data.Shortcuts.list.collectAsState()
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    Box(
+        Modifier.fillMaxWidth().height(62.dp).clip(RoundedCornerShape(14.dp)).background(C.Card)
+            .border(1.dp, C.Border, RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            Modifier.fillMaxSize().horizontalScroll(scroll).padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Screen.entries.forEach { s ->
+                Box(Modifier.width(96.dp)) { RailItem(s.icon, s.title, s == current) { onSelect(s) } }
+            }
+            if (shortcuts.isNotEmpty()) {
+                Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(34.dp).background(C.Border))
+                shortcuts.forEach { sc ->
+                    Box(Modifier.width(96.dp)) {
+                        RailItem(kg.forester.sg.data.Shortcuts.icon(sc.icon), sc.label, false, accent = true) {
+                            kg.forester.sg.data.Shortcuts.launch(ctx, sc)
+                        }
+                    }
+                }
+            }
+        }
+        if (scroll.value > 0) {
+            Box(Modifier.fillMaxHeight().width(28.dp).align(Alignment.CenterStart)
+                .background(Brush.horizontalGradient(listOf(C.Card, Color.Transparent))))
+        }
+        if (scroll.value < scroll.maxValue) {
+            Box(Modifier.fillMaxHeight().width(36.dp).align(Alignment.CenterEnd)
+                .background(Brush.horizontalGradient(listOf(Color.Transparent, C.Card))))
         }
     }
 }

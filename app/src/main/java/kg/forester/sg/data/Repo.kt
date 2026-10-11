@@ -86,6 +86,11 @@ class Settings(ctx: Context) {
         get() = p.getInt("logHours", 24)
         set(v) = p.edit().putInt("logHours", v).apply()
 
+    /** Navigation panel position: left, right, top, bottom. */
+    var navPosition: String
+        get() = p.getString("navPos", "left")!!
+        set(v) { p.edit().putString("navPos", v).apply(); Repo.navPosition.value = v }
+
     var currentTripId: Long
         get() = p.getLong("tripId", 0)
         set(v) = p.edit().putLong("tripId", v).apply()
@@ -113,11 +118,13 @@ object Repo {
     val tcuStatus = MutableStateFlow("АКПП: ожидание")
     val battery = MutableStateFlow(BatteryState())
     val knockEvents = MutableStateFlow(0)
+    val navPosition = MutableStateFlow("left")
 
     fun init(ctx: Context) {
         if (!::db.isInitialized) {
             db = Db(ctx.applicationContext)
             settings = Settings(ctx.applicationContext)
+            navPosition.value = settings.navPosition
         }
     }
 

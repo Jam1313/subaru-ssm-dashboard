@@ -17,6 +17,8 @@ data class Shortcut(
     val pkg: String,
     val icon: String,
     val split: Boolean,
+    /** Extra voice phrase (the label always works too). */
+    val phrase: String = "",
 )
 
 data class InstalledApp(val label: String, val pkg: String, val icon: Drawable?)
@@ -46,7 +48,10 @@ object Shortcuts {
             val arr = JSONArray(raw)
             (0 until arr.length()).map {
                 val o = arr.getJSONObject(it)
-                Shortcut(o.getLong("id"), o.getString("label"), o.getString("pkg"), o.optString("icon", "app"), o.optBoolean("split", true))
+                Shortcut(
+                    o.getLong("id"), o.getString("label"), o.getString("pkg"), o.optString("icon", "app"),
+                    o.optBoolean("split", true), o.optString("phrase", ""),
+                )
             }
         }.getOrDefault(defaults(ctx))
     }
@@ -55,7 +60,7 @@ object Shortcuts {
         list.value = items
         val arr = JSONArray()
         items.forEach {
-            arr.put(JSONObject().put("id", it.id).put("label", it.label).put("pkg", it.pkg).put("icon", it.icon).put("split", it.split))
+            arr.put(JSONObject().put("id", it.id).put("label", it.label).put("pkg", it.pkg).put("icon", it.icon).put("split", it.split).put("phrase", it.phrase))
         }
         prefs(ctx).edit().putString("list", arr.toString()).apply()
     }
@@ -67,7 +72,7 @@ object Shortcuts {
         listOf("ru.yandex.yandexnavi", "ru.yandex.yandexmaps", "com.google.android.apps.maps").firstOrNull(::has)
             ?.let { out += Shortcut(1, "Навигатор", it, "navigation", true) }
         listOf("com.syu.music", "ru.yandex.music", "com.yf.teyesspotify", "com.spotify.music").firstOrNull(::has)
-            ?.let { out += Shortcut(2, "Музыка", it, "music", true) }
+            ?.let { out += Shortcut(2, "Музыка", it, "music", false) }
         return out
     }
 

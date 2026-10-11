@@ -78,6 +78,7 @@ class EcuService : Service() {
         startInForeground()
         startGps()
         battery // restore the last battery readings for the UI right away
+        Voice.start(this)
         pollJob = scope.launch { pollLoop() }
         scope.launch {
             while (isActive) {
@@ -90,7 +91,7 @@ class EcuService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_RESET_TRIP -> scope.launch { tracker.resetTrip() }
-            ACTION_START_GPS -> startGps()
+            ACTION_START_GPS -> { startGps(); Voice.start(this) }
         }
         return START_STICKY
     }
@@ -286,6 +287,11 @@ class EcuService : Service() {
             var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+            if (Build.VERSION.SDK_INT >= 30 &&
+                checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            ) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
             startForeground(1, n, type)
         } else {

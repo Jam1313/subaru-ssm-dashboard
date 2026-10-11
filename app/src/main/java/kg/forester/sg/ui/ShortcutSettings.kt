@@ -115,6 +115,7 @@ private fun ShortcutEditor(initial: Shortcut, apps: List<InstalledApp>, onSave: 
     var pkg by remember(initial.id) { mutableStateOf(initial.pkg) }
     var icon by remember(initial.id) { mutableStateOf(initial.icon) }
     var split by remember(initial.id) { mutableStateOf(initial.split) }
+    var phrase by remember(initial.id) { mutableStateOf(initial.phrase) }
     var query by remember(initial.id) { mutableStateOf("") }
 
     Row(Modifier.fillMaxSize()) {
@@ -160,6 +161,16 @@ private fun ShortcutEditor(initial: Shortcut, apps: List<InstalledApp>, onSave: 
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = phrase, onValueChange = { phrase = it }, singleLine = true,
+                label = { T("Голосовая фраза (необязательно)", 12.sp, C.Sub) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = C.Text, unfocusedTextColor = C.Text,
+                    focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T("Открывать рядом с приборами", 13.sp, modifier = Modifier.weight(1f))
@@ -181,7 +192,7 @@ private fun ShortcutEditor(initial: Shortcut, apps: List<InstalledApp>, onSave: 
             }
             Spacer(Modifier.height(8.dp))
             ActionButton("Сохранить", pkg.isNotBlank() && label.isNotBlank()) {
-                onSave(initial.copy(label = label.trim(), pkg = pkg, icon = icon, split = split))
+                onSave(initial.copy(label = label.trim(), pkg = pkg, icon = icon, split = split, phrase = phrase.trim()))
             }
         }
     }

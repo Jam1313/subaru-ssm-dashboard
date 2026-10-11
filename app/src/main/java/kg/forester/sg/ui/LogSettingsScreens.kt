@@ -3,6 +3,7 @@ package kg.forester.sg.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -130,10 +131,15 @@ fun SettingsScreen() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Основные", tab == 0, { tab = 0 }, Lucide.SlidersHorizontal)
             Chip("Кнопки быстрого запуска", tab == 1, { tab = 1 }, Lucide.LayoutGrid)
+            Chip("Голос", tab == 2, { tab = 2 }, Lucide.Mic)
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f)) {
-            if (tab == 0) GeneralSettings() else ShortcutSettings()
+            when (tab) {
+                0 -> GeneralSettings()
+                1 -> ShortcutSettings()
+                else -> VoiceSettings()
+            }
         }
     }
 }
@@ -150,7 +156,7 @@ private fun GeneralSettings() {
     var saved by remember { mutableStateOf("") }
 
     Row(Modifier.fillMaxSize()) {
-        Panel(Modifier.width(460.dp).fillMaxHeight()) {
+        Panel(Modifier.width(460.dp).fillMaxHeight().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
             PanelTitle(Lucide.Cog, "Настройки")
             Spacer(Modifier.height(12.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -170,6 +176,15 @@ private fun GeneralSettings() {
             }
             Spacer(Modifier.height(8.dp))
             T(saved, 13.sp, C.Green)
+            Spacer(Modifier.height(14.dp))
+            val navPos by Repo.navPosition.collectAsState()
+            T("Панель навигации", 15.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("left" to "Слева", "right" to "Справа", "top" to "Сверху", "bottom" to "Снизу").forEach { (k, l) ->
+                    Chip(l, navPos == k, { Repo.settings.navPosition = k })
+                }
+            }
             Spacer(Modifier.height(14.dp))
             val ctx = androidx.compose.ui.platform.LocalContext.current
             var home by remember { mutableStateOf(isDefaultHome(ctx)) }
