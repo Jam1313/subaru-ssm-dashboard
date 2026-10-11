@@ -1,0 +1,17 @@
+# build
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# local research dumps (third-party files, see README for sources)
+research/
+
+# 3D model / renders are not part of the public app
+render/
+app/src/main/assets/car/
