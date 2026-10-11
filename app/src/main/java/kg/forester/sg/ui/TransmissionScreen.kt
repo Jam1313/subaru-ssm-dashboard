@@ -116,13 +116,7 @@ private fun AtfCard(atf: Int?, modifier: Modifier) {
     }
     Panel(modifier) {
         T("Температура ATF", 14.sp, C.Sub)
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            ArcGauge((atf ?: 0).toFloat(), 130f, emptyList(), Modifier.fillMaxSize())
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                T(atf?.let { "$it°" } ?: "—", 40.sp, weight = FontWeight.Bold)
-                T(label, 13.sp, color)
-            }
-        }
+        RingGauge((atf ?: 0) / 130f, atf?.let { "$it°" } ?: "—", label, Modifier.weight(1f).fillMaxWidth(), unitColor = color)
         Row(verticalAlignment = Alignment.CenterVertically) {
             T("0", 11.sp, C.Sub)
             Spacer(Modifier.width(6.dp))

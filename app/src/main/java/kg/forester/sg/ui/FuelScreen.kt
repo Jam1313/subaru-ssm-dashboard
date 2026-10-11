@@ -111,14 +111,16 @@ private fun CurrentTab() {
             Panel(Modifier.weight(1.05f).fillMaxHeight()) {
                 PanelTitle(Lucide.Fuel, "Текущий расход")
                 Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                         val per100 = ts.instPer100
-                        ArcGauge((per100 ?: 0.0).toFloat(), 20f, listOf(0, 5, 10, 15, 20), Modifier.fillMaxSize())
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            T(if (per100 != null) fmt(per100) else fmt(ts.instLh), 54.sp, weight = FontWeight.Bold)
-                            T(if (per100 != null) "л/100 км" else "л/ч (стоянка)", 14.sp, C.Sub)
-                            Spacer(Modifier.height(18.dp))
-                            T("Мгновенный", 12.sp, C.Sub)
+                        RingGauge(
+                            ((per100 ?: 0.0) / 20.0).toFloat(),
+                            if (per100 != null) fmt(per100) else fmt(ts.instLh),
+                            if (per100 != null) "л/100 км" else "л/ч · стоянка",
+                            Modifier.weight(1f).fillMaxWidth(),
+                        )
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            T("Мгновенный  ", 13.sp, C.Sub)
                             T("${fmt(ts.instLh)} л/ч", 16.sp, weight = FontWeight.SemiBold)
                         }
                     }

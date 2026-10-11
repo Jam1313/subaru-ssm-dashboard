@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -335,6 +336,37 @@ fun ChartCard(title: String, series: List<Series>, min: Float, max: Float, modif
                 T(format.format(min), 10.sp, C.Sub)
             }
             LiveChart(series, min, max, Modifier.weight(1f).fillMaxHeight(), zeroLine)
+        }
+    }
+}
+
+/**
+ * Arc gauge with its value centred inside; text is sized from the space actually available,
+ * so it never overlaps the arc no matter how small the cell is.
+ */
+@Composable
+fun RingGauge(
+    fraction: Float,
+    value: String,
+    unit: String,
+    modifier: Modifier = Modifier,
+    unitColor: Color = C.Sub,
+) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val d = if (maxWidth < maxHeight) maxWidth else maxHeight
+        Box(Modifier.size(d), contentAlignment = Alignment.Center) {
+            ArcGauge(fraction.coerceIn(0f, 1f) * 100f, 100f, emptyList(), Modifier.fillMaxSize())
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(top = d * 0.08f),
+            ) {
+                val digits = value.length.coerceAtLeast(2)
+                // inner free width is ~0.62·d; a digit is ~0.58 em wide
+                val byWidth = d.value * 0.62f / (digits * 0.58f)
+                val size = minOf(byWidth, d.value * 0.26f, 60f)
+                T(value, size.sp, weight = FontWeight.Bold, maxLines = 1)
+                T(unit, maxOf(10f, size * 0.32f).sp, unitColor, maxLines = 1)
+            }
         }
     }
 }

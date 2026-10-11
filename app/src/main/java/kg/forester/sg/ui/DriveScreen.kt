@@ -81,14 +81,14 @@ fun DriveScreen() {
 }
 
 @Composable
-fun MiniGauge(title: String, value: Float?, min: Float, max: Float, unit: String, format: String, modifier: Modifier, sub: String? = null) {
+fun MiniGauge(title: String, value: Float?, min: Float, max: Float, unit: String, format: String, modifier: Modifier, sub: String? = null, big: Boolean = false) {
     Panel(modifier.fillMaxHeight(), padding = 12.dp) {
         T(title, 13.sp, C.Sub, maxLines = 1)
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.Bottom) {
-            T(value?.let { format.format(it) } ?: "—", 30.sp, weight = FontWeight.Bold, maxLines = 1)
-            Spacer(Modifier.width(4.dp))
-            T(unit, 13.sp, C.Sub, modifier = Modifier.padding(bottom = 5.dp))
+            T(value?.let { format.format(it) } ?: "—", if (big) 46.sp else 30.sp, weight = FontWeight.Bold, maxLines = 1)
+            Spacer(Modifier.width(6.dp))
+            T(unit, if (big) 15.sp else 13.sp, C.Sub, modifier = Modifier.padding(bottom = if (big) 9.dp else 5.dp))
         }
         T(sub ?: " ", 11.sp, C.Sub, maxLines = 1)
         Spacer(Modifier.height(6.dp))

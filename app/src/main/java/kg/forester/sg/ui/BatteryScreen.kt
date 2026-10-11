@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -78,16 +79,20 @@ fun BatteryScreen() {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Panel(Modifier.weight(0.9f).fillMaxHeight()) {
-                T("Сейчас", 14.sp, C.Sub)
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    ArcGauge(((e.batteryV ?: 10f) - 10f), 5f, emptyList(), Modifier.fillMaxSize())
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        T(fmtF(e.batteryV, 2), 40.sp, weight = FontWeight.Bold)
-                        T("вольт", 12.sp, C.Sub)
-                    }
+                T("Сейчас", 13.sp, C.Sub)
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    T(fmtF(e.batteryV, 2), 36.sp, weight = FontWeight.Bold)
+                    T(" В", 14.sp, C.Sub, modifier = Modifier.padding(bottom = 6.dp))
+                }
+                ProgressBar(((e.batteryV ?: 10f) - 10f) / 5f, Brush.horizontalGradient(listOf(C.Red, C.Orange, C.Green, C.Green)), Modifier.fillMaxWidth(), 7.dp)
+                Row(Modifier.fillMaxWidth()) {
+                    T("10", 10.sp, C.Sub, modifier = Modifier.weight(1f))
+                    T("15 В", 10.sp, C.Sub)
                 }
                 val soc = b.restingV?.let { BatteryMonitor.socPct(it) }
-                T("Заряд (по напряжению покоя): ${soc?.let { "$it%" } ?: "—"}", 13.sp, C.Sub)
+                T("Заряд по напряжению покоя: ${soc?.let { "$it%" } ?: "—"}", 12.sp, C.Sub)
+                Spacer(Modifier.weight(1f))
             }
             VoltCard("Покой (зажигание, двигатель заглушен)", b.restingV, restingVerdict(b.restingV), b.restingTimeMs, Modifier.weight(1f))
             VoltCard(

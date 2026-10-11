@@ -35,8 +35,8 @@ fun HomeScreen() {
                 CarViewer(e.rpm, Modifier.fillMaxSize())
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                BigGauge("Обороты", e.rpm?.toFloat(), 7000f, "об/мин", "%.0f", Modifier.weight(1f).fillMaxWidth())
-                BigGauge("Скорость", e.speedKmh?.toFloat(), 200f, "км/ч", "%.0f", Modifier.weight(1f).fillMaxWidth())
+                MiniGauge("Обороты", e.rpm?.toFloat(), 0f, 7000f, "об/мин", "%.0f", Modifier.weight(1f).fillMaxWidth(), big = true)
+                MiniGauge("Скорость", e.speedKmh?.toFloat(), 0f, 200f, "км/ч", "%.0f", Modifier.weight(1f).fillMaxWidth(), big = true)
             }
         }
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -70,15 +70,12 @@ fun HomeScreen() {
 private fun BigGauge(
     title: String, value: Float?, max: Float, unit: String, format: String, modifier: Modifier, min: Float = 0f,
 ) {
-    Panel(modifier) {
-        T(title, 15.sp, C.Sub)
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            ArcGauge(((value ?: min) - min), max - min, emptyList(), Modifier.fillMaxSize())
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                T(value?.let { format.format(it) } ?: "—", 44.sp, weight = FontWeight.Bold)
-                T(unit, 13.sp, C.Sub)
-            }
-        }
+    Panel(modifier, padding = 10.dp) {
+        T(title, 14.sp, C.Sub, maxLines = 1)
+        RingGauge(
+            ((value ?: min) - min) / (max - min), value?.let { format.format(it) } ?: "—", unit,
+            Modifier.fillMaxSize(),
+        )
     }
 }
 

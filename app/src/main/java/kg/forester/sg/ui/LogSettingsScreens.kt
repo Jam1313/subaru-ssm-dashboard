@@ -65,8 +65,9 @@ fun LogScreen() {
             T("Папка: Android/data/kg.forester.sg/files/logs", 13.sp, C.Sub)
             Spacer(Modifier.height(8.dp))
             var hours by remember { mutableStateOf(Repo.settings.logRetentionHours) }
+            T("Хранить подробные логи:", 14.sp)
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                T("Хранить подробные логи:", 14.sp, modifier = Modifier.weight(1f))
                 listOf(24, 72, 168).forEach { h ->
                     Chip(if (h == 168) "7 дн" else "${h / 24} сут", hours == h, { hours = h; Repo.settings.logRetentionHours = h })
                     Spacer(Modifier.width(6.dp))
