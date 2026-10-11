@@ -170,6 +170,18 @@ private fun GeneralSettings() {
             }
             Spacer(Modifier.height(8.dp))
             T(saved, 13.sp, C.Green)
+            Spacer(Modifier.height(14.dp))
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            var home by remember { mutableStateOf(isDefaultHome(ctx)) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    T("Главный экран магнитолы", 15.sp)
+                    T("Открывать Subaru Dashboard кнопкой «Домой» вместо лаунчера Teyes", 11.sp, C.Sub)
+                }
+                Switch(home, {
+                    setDefaultHome(ctx, it); home = isDefaultHome(ctx)
+                }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
+            }
         }
         Spacer(Modifier.width(12.dp))
         Panel(Modifier.weight(1f).fillMaxHeight()) {

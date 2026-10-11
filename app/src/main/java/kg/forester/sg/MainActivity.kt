@@ -74,6 +74,7 @@ enum class Screen(val title: String, val icon: ImageVector) {
     Battery("АКБ", Lucide.BatteryCharging),
     Dtc("Ошибки", Lucide.TriangleAlert),
     Log("Лог", Lucide.FileText),
+    Apps("Приложения", Lucide.LayoutGrid),
     Settings("Настройки", Lucide.SlidersHorizontal),
 }
 
@@ -113,7 +114,12 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun App() {
-    var screen by remember { mutableStateOf(Screen.Fuel) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var screen by remember { mutableStateOf(if (kg.forester.sg.ui.isDefaultHome(ctx)) Screen.Home else Screen.Fuel) }
+    // Back goes to the Home screen first; as the home app we never close ourselves.
+    androidx.activity.compose.BackHandler(enabled = screen != Screen.Home || kg.forester.sg.ui.isDefaultHome(ctx)) {
+        screen = Screen.Home
+    }
     androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier.fillMaxSize().background(
             Brush.verticalGradient(listOf(Color(0xFF0E1222), C.Bg))
@@ -139,6 +145,7 @@ fun App() {
                         Screen.Battery -> kg.forester.sg.ui.BatteryScreen()
                         Screen.Dtc -> DtcScreen()
                         Screen.Log -> LogScreen()
+                        Screen.Apps -> kg.forester.sg.ui.AppsScreen()
                         Screen.Settings -> SettingsScreen()
                     }
                 }
