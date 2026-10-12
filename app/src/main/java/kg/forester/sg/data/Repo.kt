@@ -54,8 +54,26 @@ class Settings(ctx: Context) {
 
     /** Currency shown next to prices (₽, ₸, $, KGS…). */
     var currency: String
-        get() = p.getString("currency", "KGS")!!
-        set(v) = p.edit().putString("currency", v.trim().ifEmpty { "KGS" }).apply()
+        get() = p.getString("currency", null) ?: localCurrency()
+        set(v) = p.edit().putString("currency", v.trim().ifEmpty { localCurrency() }).apply()
+
+    /** Currency of the device's country, as people write it on fuel prices. */
+    private fun localCurrency(): String {
+        val country = java.util.Locale.getDefault().country
+        return when (country) {
+            "RU" -> "₽"
+            "KZ" -> "₸"
+            "KG" -> "KGS"
+            "BY" -> "BYN"
+            "UZ" -> "сум"
+            "UA" -> "₴"
+            "AM" -> "֏"
+            "GE" -> "₾"
+            "AZ" -> "₼"
+            "TJ" -> "TJS"
+            else -> runCatching { java.util.Currency.getInstance(java.util.Locale.getDefault()).symbol }.getOrDefault("")
+        }
+    }
 
     /** Fuel calculation correction, learned from full-to-full refills. */
     var fuelK: Double
