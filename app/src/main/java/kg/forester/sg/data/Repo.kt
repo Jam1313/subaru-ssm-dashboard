@@ -44,6 +44,11 @@ data class TripState(
 class Settings(ctx: Context) {
     private val p: SharedPreferences = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
+    init {
+        // installs from before the currency setting priced fuel in KGS: keep that for them
+        if (!p.contains("currency") && p.contains("price")) p.edit().putString("currency", "KGS").apply()
+    }
+
     var tankL: Double
         get() = p.getFloat("tank", 60f).toDouble() // 0 = unknown
         set(v) = p.edit().putFloat("tank", v.toFloat()).apply()
