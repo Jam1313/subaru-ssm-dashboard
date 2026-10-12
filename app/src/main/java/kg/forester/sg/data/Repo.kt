@@ -95,10 +95,19 @@ class Settings(ctx: Context) {
         get() = p.getString("navPos", "left")!!
         set(v) { p.edit().putString("navPos", v).apply(); Repo.navPosition.value = v }
 
-    /** Diagnostic adapter: "kkl" (USB KKL cable) or "op2" (Tactrix OpenPort 2.0 / clone). */
+    /** Diagnostic adapter: "kkl" (USB KKL cable), "op2" (Tactrix OpenPort 2.0 / clone), "elm_bt" (Bluetooth ELM327). */
     var adapter: String
         get() = p.getString("adapter", "kkl")!!
         set(v) = p.edit().putString("adapter", v).apply()
+
+    /** Paired Bluetooth OBD adapter (ELM327) used when [adapter] is "elm_bt". */
+    var btAddress: String
+        get() = p.getString("btAddress", "")!!
+        set(v) = p.edit().putString("btAddress", v).apply()
+
+    var btName: String
+        get() = p.getString("btName", "")!!
+        set(v) = p.edit().putString("btName", v).apply()
 
     /** Bus the ECU is on: "kline", "can" or "auto" (K-line first, then CAN). CAN needs the OpenPort. */
     var bus: String

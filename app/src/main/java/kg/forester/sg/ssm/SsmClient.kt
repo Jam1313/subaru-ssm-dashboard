@@ -25,6 +25,8 @@ interface SsmTransport {
     val name: String
     /** CAN units answer the init with 0xAA/0xEA instead of 0xBF/0xFF. */
     val isCan: Boolean
+    /** Addresses per read request (an ELM327 fits only one into its single frame). */
+    val maxReadAddrs: Int get() = 64
     fun exchange(dest: Int, body: ByteArray): ByteArray?
     fun close()
 }
@@ -145,6 +147,16 @@ class SsmClient(val transport: SsmTransport) {
     }
 
     fun read(addresses: IntArray, dest: Int = ECU): ByteArray? {
+        val step = transport.maxReadAddrs.coerceAtLeast(1)
+        if (addresses.size <= step) return readChunk(addresses, dest)
+        val out = java.io.ByteArrayOutputStream(addresses.size)
+        for (i in addresses.indices step step) {
+            out.write(readChunk(addresses.copyOfRange(i, minOf(i + step, addresses.size)), dest) ?: return null)
+        }
+        return out.toByteArray()
+    }
+
+    private fun readChunk(addresses: IntArray, dest: Int): ByteArray? {
         val body = ByteArray(2 + addresses.size * 3)
         body[0] = 0xA8.toByte()
         body[1] = 0x00

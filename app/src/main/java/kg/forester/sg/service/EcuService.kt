@@ -29,6 +29,9 @@ import kg.forester.sg.data.LinkState
 import kg.forester.sg.data.Repo
 import kg.forester.sg.ssm.EcuInit
 import kg.forester.sg.ssm.EcuParams
+import kg.forester.sg.ssm.Elm327
+import kg.forester.sg.ssm.ElmCanTransport
+import kg.forester.sg.ssm.ElmKLineTransport
 import kg.forester.sg.ssm.KklTransport
 import kg.forester.sg.ssm.Op2CanTransport
 import kg.forester.sg.ssm.Op2KLineTransport
@@ -126,6 +129,7 @@ class EcuService : Service() {
         var noCableSince = System.currentTimeMillis()
         while (scope.isActive) {
             if (Repo.settings.demo) { demoLoop(); continue }
+            if (Repo.settings.adapter == "elm_bt") { bluetoothSession(); delay(3000); continue }
             tracker.tick(System.currentTimeMillis())
             val wantOp2 = Repo.settings.adapter == "op2"
             val drivers = adapterProber.findAllDrivers(usb)
@@ -217,6 +221,60 @@ class EcuService : Service() {
         Repo.link.value = LinkState.NO_CABLE
     }
 
+    /** Bluetooth OBD adapter (ELM327 and clones) over the serial port profile. */
+    @SuppressLint("MissingPermission")
+    private suspend fun bluetoothSession() {
+        val addr = Repo.settings.btAddress
+        if (addr.isEmpty()) {
+            Repo.link.value = LinkState.NO_CABLE
+            Repo.linkMessage.value = "Выберите Bluetooth-адаптер: Настройки → «Авто и адаптер»"
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 31 &&
+            checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Repo.link.value = LinkState.NO_PERMISSION
+            Repo.linkMessage.value = "Нет разрешения на Bluetooth (Настройки → «Авто и адаптер»)"
+            return
+        }
+        val bt = (getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        if (bt == null || !bt.isEnabled) {
+            Repo.link.value = LinkState.NO_CABLE
+            Repo.linkMessage.value = "Bluetooth выключен"
+            return
+        }
+        Repo.link.value = LinkState.CONNECTING
+        Repo.linkMessage.value = "Подключение к ${Repo.settings.btName.ifEmpty { addr }}…"
+        SsmTrace.enabled = Repo.settings.traceEnabled
+        SsmTrace.log("=== Bluetooth $addr, шина ${Repo.settings.bus}")
+        val spp = java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        val dev = bt.getRemoteDevice(addr)
+        runCatching { bt.cancelDiscovery() }
+        val sock = runCatching { dev.createRfcommSocketToServiceRecord(spp).also { it.connect() } }
+            .recoverCatching { dev.createInsecureRfcommSocketToServiceRecord(spp).also { it.connect() } }
+            .getOrElse { e ->
+                SsmTrace.log("bt connect: $e")
+                Repo.link.value = LinkState.NO_CABLE
+                Repo.linkMessage.value = "Адаптер ${Repo.settings.btName.ifEmpty { addr }} не отвечает (включено зажигание?)"
+                return
+            }
+        val elm = Elm327(sock.inputStream, sock.outputStream, sock)
+        try {
+            elm.open()
+            SsmTrace.log("ELM: ${elm.version}")
+            session { kline -> if (kline) ElmKLineTransport(elm).also { it.open() } else ElmCanTransport(elm).also { it.open() } }
+        } catch (e: Exception) {
+            SsmTrace.log("error: $e")
+            Repo.link.value = LinkState.ERROR
+            Repo.linkMessage.value = e.message ?: "Ошибка связи"
+        } finally {
+            EcuLink.client?.close()
+            EcuLink.client = null
+            elm.close()
+            logger?.close(); logger = null
+        }
+    }
+
     private fun openOp2(op2: OpenPort2, kline: Boolean): SsmTransport =
         if (kline) Op2KLineTransport(op2).also { it.open() } else Op2CanTransport(op2).also { it.open() }
 
@@ -226,7 +284,7 @@ class EcuService : Service() {
      */
     private suspend fun session(open: (Boolean) -> SsmTransport) {
         val buses = when {
-            Repo.settings.adapter != "op2" -> listOf(true) // a KKL cable has no CAN
+            Repo.settings.adapter == "kkl" -> listOf(true) // a KKL cable has no CAN
             Repo.settings.bus == "kline" -> listOf(true)
             Repo.settings.bus == "can" -> listOf(false)
             else -> listOf(true, false)

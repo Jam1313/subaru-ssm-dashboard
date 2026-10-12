@@ -45,7 +45,7 @@ import kg.forester.sg.data.CarModels
 import kg.forester.sg.data.Repo
 import kg.forester.sg.ssm.SsmTrace
 
-private val adapters = listOf("kkl" to "KKL-кабель", "op2" to "OpenPort 2.0")
+private val adapters = listOf("kkl" to "KKL-кабель", "op2" to "OpenPort 2.0", "elm_bt" to "Bluetooth OBD")
 private val gearboxes = listOf("at" to "Автомат (АКПП)", "mt" to "Механика")
 private val buses = listOf("auto" to "Авто", "kline" to "K-Line", "can" to "CAN")
 
@@ -148,21 +148,30 @@ fun CarAdapterSettings() {
             }
             Spacer(Modifier.height(6.dp))
             T(
-                if (adapter == "op2") "Tactrix OpenPort 2.0 или китайский клон. Умеет K-Line и CAN."
-                else "Простой USB KKL (VAG-COM 409.1, CH340/FTDI). Только K-Line.",
+                when (adapter) {
+                    "op2" -> "Tactrix OpenPort 2.0 или китайский клон. Умеет K-Line и CAN."
+                    "elm_bt" -> "Bluetooth-свисток ELM327 (β). CAN работает (SH 2009+ и новее). K-Line только у оригинальных " +
+                        "ELM327 v1.4+, многие клоны не умеют. Данные обновляются примерно раз в секунду."
+                    else -> "Простой USB KKL (VAG-COM 409.1, CH340/FTDI). Только K-Line."
+                },
                 12.sp, C.Sub,
             )
+            if (adapter == "elm_bt") {
+                Spacer(Modifier.height(10.dp))
+                BluetoothPicker()
+            }
             Spacer(Modifier.height(14.dp))
-            T("Шина", 15.sp, if (adapter == "op2") C.Text else C.Sub)
+            val multiBus = adapter != "kkl"
+            T("Шина", 15.sp, if (multiBus) C.Text else C.Sub)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 buses.forEach { (k, l) ->
-                    Chip(l, adapter == "op2" && bus == k, { if (adapter == "op2") { bus = k; s.bus = k } })
+                    Chip(l, multiBus && bus == k, { if (multiBus) { bus = k; s.bus = k } })
                 }
             }
             Spacer(Modifier.height(6.dp))
             T(
-                if (adapter == "op2") "«Авто»: сначала K-Line, если ЭБУ молчит, то CAN (Forester SH 2009+)."
+                if (multiBus) "«Авто»: сначала K-Line, если ЭБУ молчит, то CAN (Forester SH 2009+)."
                 else "KKL-кабель работает только по K-Line.",
                 12.sp, C.Sub,
             )
@@ -239,6 +248,44 @@ fun FirstRunSetup(onDone: () -> Unit) {
                 s.setupDone = true
                 onDone()
             }
+        }
+    }
+}
+
+/** Paired Bluetooth devices to pick the OBD adapter from (pairing itself is done in the phone's settings). */
+@OptIn(ExperimentalLayoutApi::class)
+@android.annotation.SuppressLint("MissingPermission")
+@Composable
+private fun BluetoothPicker() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val s = Repo.settings
+    fun granted() = android.os.Build.VERSION.SDK_INT < 31 ||
+        ctx.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    var ok by remember { mutableStateOf(granted()) }
+    var chosen by remember { mutableStateOf(s.btAddress) }
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { ok = it }
+    if (!ok) {
+        ActionButton("Разрешить Bluetooth", true) { ask.launch(android.Manifest.permission.BLUETOOTH_CONNECT) }
+        return
+    }
+    val bt = (ctx.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+    val devices = runCatching { bt?.bondedDevices?.toList() }.getOrNull().orEmpty()
+        .sortedByDescending { d -> listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE").any { (d.name ?: "").uppercase().contains(it) } }
+    if (bt == null) { T("На устройстве нет Bluetooth", 12.sp, C.Orange); return }
+    if (!bt.isEnabled) T("Bluetooth выключен", 12.sp, C.Orange)
+    if (devices.isEmpty()) {
+        T("Нет сопряжённых устройств. Сопрягите адаптер в настройках Bluetooth телефона (PIN обычно 1234 или 0000).", 12.sp, C.Sub)
+        return
+    }
+    T("Адаптер", 13.sp, C.Sub)
+    Spacer(Modifier.height(6.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        devices.forEach { d ->
+            Chip(d.name ?: d.address, chosen == d.address, {
+                chosen = d.address; s.btAddress = d.address; s.btName = d.name ?: d.address
+            })
         }
     }
 }
