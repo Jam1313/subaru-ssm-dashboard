@@ -1,5 +1,9 @@
 # Subaru SSM Dashboard (K-Line)
 
+> 🧪 **Бета 0.9 — Subaru Dashboard** (Forester SH, OpenPort 2.0, Bluetooth ELM327, свой главный экран, дизайны приборов, телефоны):
+> **[⬇️ Скачать бету](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta1/subaru-ssm-dashboard-0.9-beta1.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta1) · [исходники](https://github.com/surtaeff/subaru-ssm-dashboard/tree/beta/0.9).
+> Бета подписана новым ключом: перед установкой удалите 0.8 (поездки и заправки удалятся).
+
 Приложение для Android-магнитол (Teyes и подобных): бортовой компьютер, приборы, расход топлива, ошибки двигателя и АКПП для Subaru с протоколом **SSM2 по K-Line** через дешёвый **USB KKL-кабель**.
 
 Сделано и проверено на **Subaru Forester SG5 2003 (JDM, EJ20 turbo, 4EAT)** с Android-магнитолой **Teyes CC3** (Android 10, 1280×720), установленной вместо штатной. Должно работать и на других Subaru 2001–2008 с SSM2 по K-Line (Forester SG, Impreza GD/GG, Legacy BE/BH/BL/BP), но там не проверялось.
