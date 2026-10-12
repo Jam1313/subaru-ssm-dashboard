@@ -191,8 +191,7 @@ private fun PhoneMenu(onClose: () -> Unit, onSelect: (Screen) -> Unit) {
                 .border(1.dp, C.Border, RoundedCornerShape(16.dp)).padding(vertical = 6.dp)
                 .verticalScroll(androidx.compose.foundation.rememberScrollState()),
         ) {
-            // Media (FYT radio/BT) and Apps (launcher) only make sense on the head unit
-            (visibleScreens() - Screen.Media - Screen.Apps).forEach { s ->
+            visibleScreens().forEach { s ->
                 Row(
                     Modifier.fillMaxWidth().clickable { onSelect(s) }.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -224,7 +223,7 @@ fun App() {
                 kg.forester.sg.service.VoiceTarget.GEARBOX -> if (Repo.settings.gearbox == "mt") screen else Screen.Gearbox
                 kg.forester.sg.service.VoiceTarget.BATTERY -> Screen.Battery
                 kg.forester.sg.service.VoiceTarget.DTC -> Screen.Dtc
-                kg.forester.sg.service.VoiceTarget.MEDIA -> Screen.Media
+                kg.forester.sg.service.VoiceTarget.MEDIA -> if (kg.forester.sg.service.Fyt.present(ctx)) Screen.Media else screen
             }
         }
     }
@@ -295,7 +294,14 @@ fun App() {
 @Composable
 private fun visibleScreens(): List<Screen> {
     Repo.carVersion.collectAsState().value
-    return if (Repo.settings.gearbox == "mt") Screen.entries - Screen.Gearbox else Screen.entries
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    // Media talks to the FYT system service: only on FYT head units (Teyes etc.), not on phones or other units
+    val fyt = remember { kg.forester.sg.service.Fyt.present(ctx) }
+    var list = Screen.entries.toList()
+    if (Repo.settings.gearbox == "mt") list = list - Screen.Gearbox
+    if (!fyt) list = list - Screen.Media
+    if (isPhone(ctx)) list = list - Screen.Apps // the app launcher is for head units
+    return list
 }
 
 @Composable

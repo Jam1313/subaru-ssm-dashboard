@@ -24,6 +24,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <queries>
+        <!-- FYT head units (Teyes etc.): media service, decides whether the Media screen is shown -->
+        <package android:name="com.syu.ms" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

@@ -64,6 +64,10 @@ class FytMusicService : Service() {
 }
 
 object Fyt {
+    /** True on FYT-platform head units (Teyes and other UIS7862/… units): the system service is installed. */
+    fun present(ctx: android.content.Context): Boolean =
+        runCatching { ctx.packageManager.getPackageInfo("com.syu.ms", 0); true }.getOrDefault(false)
+
     private const val D_TOOLKIT = "com.syu.ipc.IRemoteToolkit"
     private const val D_MODULE = "com.syu.ipc.IRemoteModule"
     private const val D_CALLBACK = "com.syu.ipc.IModuleCallback"
