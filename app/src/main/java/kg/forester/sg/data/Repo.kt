@@ -138,6 +138,16 @@ class Settings(ctx: Context) {
         get() = p.getString("carPaint", "chameleon")!!
         set(v) { p.edit().putString("carPaint", v).apply(); Repo.carPaint.value = v }
 
+    /** Home screen cards (see HomeLayout), "" = factory layout. */
+    var homeTiles: String
+        get() = p.getString("homeTiles", "")!!
+        set(v) { p.edit().putString("homeTiles", v).apply(); Repo.homeTiles.value = v }
+
+    /** 3D car + dials block: 0 hidden, 1 normal, 2 large, 3 huge. */
+    var clusterSize: Int
+        get() = p.getInt("clusterSize", 1)
+        set(v) { p.edit().putInt("clusterSize", v).apply(); Repo.clusterSize.value = v }
+
     /** Generated data instead of the car, to look at the screens. */
     var demo: Boolean
         get() = p.getBoolean("demo", false)
@@ -197,6 +207,8 @@ object Repo {
     val uiScale = MutableStateFlow(0)
     val car3d = MutableStateFlow("SG")
     val carPaint = MutableStateFlow("chameleon")
+    val homeTiles = MutableStateFlow("")
+    val clusterSize = MutableStateFlow(1)
     val carVersion = MutableStateFlow(0)
     /** How many parameters the ECU is polled for (fewer than all = some are not supported). */
     val pollAddresses = MutableStateFlow(0)
@@ -209,6 +221,8 @@ object Repo {
             uiScale.value = settings.uiScale
             car3d.value = settings.car3d
             carPaint.value = settings.carPaint
+            homeTiles.value = settings.homeTiles
+            clusterSize.value = settings.clusterSize
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled
         }
     }
