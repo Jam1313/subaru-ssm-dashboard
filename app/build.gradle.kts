@@ -16,10 +16,22 @@ android {
         versionName = "0.9-beta1"
     }
 
+    // Release key lives outside the repo: SUBARU_RELEASE_STORE / _PASSWORD / _ALIAS in ~/.gradle/gradle.properties.
+    // Without it (e.g. someone building from source) the debug key is used.
+    val releaseStore = (project.findProperty("SUBARU_RELEASE_STORE") as String?)?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseStore != null) create("release") {
+            storeFile = releaseStore
+            storePassword = project.property("SUBARU_RELEASE_PASSWORD") as String
+            keyAlias = project.property("SUBARU_RELEASE_ALIAS") as String
+            keyPassword = project.property("SUBARU_RELEASE_PASSWORD") as String
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

@@ -37,6 +37,8 @@ ap.add_argument("--fix", default="", help="model-specific clean-up: sg, sh")
 ap.add_argument("--wheelz", type=float, default=0.43, help="sg: wheel centre height in model units")
 ap.add_argument("--altfront", action="store_true", help="sg: use the alternative front end parked next to the car")
 ap.add_argument("--floor", action="store_true", help="add a shadow-catcher floor (Cycles only)")
+ap.add_argument("--paintmode", default="chameleon",
+                help="chameleon | white (neutral body the app tints to any colour) | mask (body white, rest black)")
 args = ap.parse_args(argv)
 
 # ---------- scene ----------
@@ -326,8 +328,32 @@ def chameleon_material():
 
 
 
+def white_material():
+    m = bpy.data.materials.new("WhitePaint")
+    m.use_nodes = True
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (0.82, 0.82, 0.82, 1)
+    b.inputs["Metallic"].default_value = 0.0
+    b.inputs["Roughness"].default_value = 0.28
+    b.inputs["Coat Weight"].default_value = 1.0
+    b.inputs["Coat Roughness"].default_value = 0.03
+    return m
+
+def emission(name, rgb):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    em = nt.nodes.new("ShaderNodeEmission")
+    em.inputs["Color"].default_value = (*rgb, 1)
+    em.inputs["Strength"].default_value = 1.0
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    return m
+
 paint_names = [s.strip().lower() for s in args.paint.split(",") if s.strip()]
-paint = chameleon_material()
+paint = {"white": white_material, "mask": lambda: emission("MaskBody", (1, 1, 1))}.get(args.paintmode, chameleon_material)()
+mask_other = emission("MaskOther", (0, 0, 0)) if args.paintmode == "mask" else None
 plate = plate_material(args.plate_image) if args.plate and os.path.exists(args.plate_image) else None
 for o in meshes:
     for slot in o.material_slots:
@@ -338,6 +364,14 @@ for o in meshes:
             slot.material = paint
         elif plate and args.plate.lower() in n:
             slot.material = plate
+        elif mask_other:
+            slot.material = mask_other
+if mask_other:  # plates and anything without a material are not body either
+    for o in bpy.context.scene.objects:
+        if o.type == "MESH":
+            for slot in o.material_slots:
+                if slot.material is None or slot.material.name == "PlateBlank":
+                    slot.material = mask_other
 
 # ---------- lights / world ----------
 scene = bpy.context.scene
@@ -394,6 +428,9 @@ scene.render.image_settings.file_format = "PNG"
 scene.render.image_settings.color_mode = "RGBA"
 scene.view_settings.view_transform = "AgX"
 scene.view_settings.look = "AgX - Medium High Contrast"
+if args.paintmode == "mask":  # exact 0/1 values
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.look = "None"
 if args.engine.upper() == "CYCLES":
     scene.render.engine = "CYCLES"
     scene.cycles.samples = args.samples

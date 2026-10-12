@@ -268,7 +268,7 @@ private fun TripInfoPanel(trip: Trip?, modifier: Modifier) {
                     Tile(Lucide.Fuel, "Ср. расход", fmt(trip?.per100), "л/100", Modifier.weight(1f).fillMaxHeight())
                 }
                 Tile(Lucide.Droplet, "Топливо", fmt(trip?.fuelL), "л", Modifier.weight(1f).fillMaxHeight())
-                Tile(Lucide.Banknote, "Стоимость", fmt(trip?.fuelL?.times(price), 0), "KGS", Modifier.weight(1f).fillMaxHeight())
+                Tile(Lucide.Banknote, "Стоимость", fmt(trip?.fuelL?.times(price), 0), Repo.settings.currency, Modifier.weight(1f).fillMaxHeight())
             }
         }
     }
@@ -390,7 +390,7 @@ private fun HistoryTab() {
     Panel(Modifier.fillMaxSize()) {
         PanelTitle(Lucide.FileText, "История за 30 дней")
         Spacer(Modifier.height(8.dp))
-        HeaderRow(listOf("Дата", "Пробег, км", "Топливо, л", "Расход, л/100", "Стоимость, KGS"))
+        HeaderRow(listOf("Дата", "Пробег, км", "Топливо, л", "Расход, л/100", "Стоимость, ${Repo.settings.currency}"))
         LazyColumn {
             items(days) { b ->
                 val per = if (b.km > 0.5) b.fuelL / b.km * 100 else null
@@ -421,7 +421,7 @@ private fun RefillsTab() {
             Spacer(Modifier.height(12.dp))
             NumField("Сколько залил, литров", liters) { liters = it }
             Spacer(Modifier.height(10.dp))
-            NumField("Цена за литр, KGS (необязательно)", price) { price = it }
+            NumField("Цена за литр, ${Repo.settings.currency} (необязательно)", price) { price = it }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { full = !full }) {
                 Checkbox(full, { full = it }, colors = CheckboxDefaults.colors(checkedColor = C.Purple))
@@ -477,13 +477,17 @@ object RefillLogic {
         val computed = s.usedSinceFullL
         var note = "Заправка добавлена"
         if (full) {
-            if (s.hadFullRefill && computed > 5) {
-                // Litres put in since the previous full tank (this one + partial refills in between).
-                val partials = Repo.db.refills().takeWhile { !it.full }.sumOf { it.liters }
-                val actual = liters + partials
-                val ratio = (actual / computed).coerceIn(0.6, 1.6)
-                s.fuelK = s.fuelK * ratio
+            // Litres put in since the previous full tank (this one + partial refills in between).
+            val partials = Repo.db.refills().takeWhile { !it.full }.sumOf { it.liters }
+            val actual = liters + partials
+            if (s.hadFullRefill && computed >= 20 && actual >= 15) {
+                // "Full" is never exactly full: only long intervals are trusted, one step is at most ±25 %
+                // and the coefficient as a whole stays within 0.7…1.4, so a bad refill can't run away.
+                val ratio = (actual / computed).coerceIn(0.8, 1.25)
+                s.fuelK = (s.fuelK * ratio).coerceIn(0.7, 1.4)
                 note = "Калибровка: факт ${fmt(actual)} л, расчёт ${fmt(computed)} л → коэф. ${fmt(s.fuelK, 3)}"
+            } else if (s.hadFullRefill) {
+                note = "Полный бак отмечен. Для калибровки мало проехали (нужно от 20 л), коэффициент не менялся."
             } else {
                 note = "Полный бак отмечен. Калибровка будет после следующего полного бака."
             }

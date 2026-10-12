@@ -83,16 +83,18 @@ fun HomeScreen() {
         if (edit) HomeEditBar { edit = false }
         // the "cluster": tachometer, the car on the road, speedometer
         if (clusterW > 0f) Panel(Modifier.weight(clusterW).fillMaxWidth().then(longPress), padding = 0.dp) {
-            Box(Modifier.fillMaxSize()) {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                // dials as big as the block is tall, but never wider than ~27 % each; the car gets the room between
+                val d = minOf(maxHeight - 20.dp, (maxWidth - 28.dp) * 0.27f)
+                val carShare = ((maxWidth - (d + 14.dp) * 2) / maxWidth).coerceIn(0.3f, 1f)
                 CarViewer(
                     e.rpm, e.speedKmh, Modifier.fillMaxSize(),
-                    throttlePct = e.throttlePct, boostBar = e.boostBar,
+                    throttlePct = e.throttlePct, boostBar = e.boostBar, carShare = carShare,
                 )
-                Row(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f, Modifier.fillMaxHeight().aspectRatio(1f))
-                    Spacer(Modifier.weight(1f))
-                    Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null, Modifier.fillMaxHeight().aspectRatio(1f))
-                }
+                Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f,
+                    Modifier.align(Alignment.CenterStart).padding(start = 14.dp).size(d))
+                Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null,
+                    Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(d))
                 if (!edit) Box(
                     Modifier.align(Alignment.TopEnd).padding(8.dp).size(30.dp).clip(RoundedCornerShape(9.dp))
                         .background(C.Card.copy(alpha = 0.6f)).clickable { edit = true },

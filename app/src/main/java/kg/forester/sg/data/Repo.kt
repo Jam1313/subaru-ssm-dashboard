@@ -52,9 +52,14 @@ class Settings(ctx: Context) {
         get() = p.getFloat("price", 82f).toDouble()
         set(v) = p.edit().putFloat("price", v.toFloat()).apply()
 
+    /** Currency shown next to prices (₽, ₸, $, KGS…). */
+    var currency: String
+        get() = p.getString("currency", "KGS")!!
+        set(v) = p.edit().putString("currency", v.trim().ifEmpty { "KGS" }).apply()
+
     /** Fuel calculation correction, learned from full-to-full refills. */
     var fuelK: Double
-        get() = p.getFloat("fuelK", 1f).toDouble()
+        get() = p.getFloat("fuelK", 1f).toDouble().coerceIn(0.7, 1.4) // older versions could drift far off
         set(v) = p.edit().putFloat("fuelK", v.toFloat()).apply()
 
     /** Real speed / ECU speed, learned from GPS. */

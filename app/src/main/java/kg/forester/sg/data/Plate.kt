@@ -23,16 +23,15 @@ object Plate {
     private fun imageFile(ctx: Context) = File(ctx.filesDir, "plate.png")
 
     fun text(ctx: Context) = prefs(ctx).getString("text", "SG5")!!
-    fun flag(ctx: Context) = prefs(ctx).getBoolean("flag", false)
     fun usesImage(ctx: Context) = prefs(ctx).getBoolean("image", false) && imageFile(ctx).exists()
 
     fun load(ctx: Context) {
-        bitmap.value = if (usesImage(ctx)) BitmapFactory.decodeFile(imageFile(ctx).absolutePath) ?: render(text(ctx), flag(ctx))
-        else render(text(ctx), flag(ctx))
+        bitmap.value = if (usesImage(ctx)) BitmapFactory.decodeFile(imageFile(ctx).absolutePath) ?: render(text(ctx))
+        else render(text(ctx))
     }
 
-    fun setText(ctx: Context, text: String, flag: Boolean) {
-        prefs(ctx).edit().putString("text", text.trim().ifBlank { "SG5" }).putBoolean("flag", flag).putBoolean("image", false).apply()
+    fun setText(ctx: Context, text: String) {
+        prefs(ctx).edit().putString("text", text.trim().ifBlank { "SG5" }).putBoolean("image", false).apply()
         load(ctx)
     }
 
@@ -48,8 +47,8 @@ object Plate {
         return ok
     }
 
-    /** White plate with a black frame, condensed bold text and an optional red KG flag block. */
-    fun render(text: String, flag: Boolean): Bitmap {
+    /** White plate with a black frame and condensed bold text (a country flag etc. can be a custom picture). */
+    fun render(text: String): Bitmap {
         val w = 1040
         val h = 226
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -62,19 +61,7 @@ object Plate {
         p.color = Color.BLACK
         c.drawRoundRect(RectF(5f, 5f, w - 5f, h - 5f), 18f, 18f, p)
         p.style = Paint.Style.FILL
-        var left = 0f
-        if (flag) {
-            p.color = Color.rgb(232, 17, 45)
-            c.drawRoundRect(RectF(18f, 18f, 150f, h - 18f), 8f, 8f, p)
-            p.color = Color.rgb(255, 215, 0)
-            c.drawCircle(84f, h / 2f - 18f, 32f, p)
-            p.color = Color.WHITE
-            p.textSize = 34f
-            p.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            p.textAlign = Paint.Align.CENTER
-            c.drawText("KG", 84f, h - 38f, p)
-            left = 150f
-        }
+        val left = 0f
         p.color = Color.BLACK
         p.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
         p.textAlign = Paint.Align.CENTER

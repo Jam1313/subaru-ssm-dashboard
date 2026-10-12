@@ -155,6 +155,7 @@ private fun GeneralSettings() {
     val msg by Repo.linkMessage.collectAsState()
     var tank by remember { mutableStateOf(fmt(s.tankL, 0)) }
     var price by remember { mutableStateOf(fmt(s.pricePerL, 1)) }
+    var currency by remember { mutableStateOf(s.currency) }
     var k by remember { mutableStateOf(fmt(s.fuelK, 3)) }
     var left by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf("") }
@@ -165,7 +166,19 @@ private fun GeneralSettings() {
             Spacer(Modifier.height(12.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Field("Объём бака, л (0 — не учитывать)", tank) { tank = it }
-                Field("Цена топлива, KGS/л", price) { price = it }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.weight(1f)) { Field("Цена топлива за литр", price) { price = it } }
+                    Box(Modifier.width(120.dp)) {
+                        OutlinedTextField(
+                            value = currency, onValueChange = { currency = it.take(6) }, singleLine = true,
+                            label = { T("Валюта", 12.sp, C.Sub) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = C.Text, unfocusedTextColor = C.Text,
+                                focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
+                            ),
+                        )
+                    }
+                }
                 Field("Коэффициент расхода (калибровка)", k) { k = it }
                 Field("Сейчас в баке, л (если знаете точно)", left) { left = it }
             }
@@ -173,7 +186,8 @@ private fun GeneralSettings() {
             ActionButton("Сохранить", true) {
                 tank.toD()?.let { s.tankL = it }
                 price.toD()?.let { s.pricePerL = it }
-                k.toD()?.let { if (it in 0.5..2.0) s.fuelK = it }
+                s.currency = currency
+                k.toD()?.let { if (it in 0.7..1.4) s.fuelK = it }
                 left.toD()?.let { s.fuelAtRefillL = it; s.usedSinceRefillL = 0.0; left = "" }
                 Repo.touch()
                 saved = "Сохранено"
@@ -248,14 +262,13 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit) {
 
 private fun String.toD(): Double? = replace(',', '.').trim().toDoubleOrNull()
 
-/** Licence plate shown on the 3D car: text (optionally with the KG flag) or an uploaded picture. */
+/** Licence plate shown on the 3D car: text or an uploaded picture (e.g. with your country's flag). */
 @Composable
 private fun PlateSettings() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val plate by kg.forester.sg.data.Plate.bitmap.collectAsState()
     LaunchedEffect(Unit) { if (plate == null) kg.forester.sg.data.Plate.load(ctx) }
     var text by remember { mutableStateOf(kg.forester.sg.data.Plate.text(ctx)) }
-    var flag by remember { mutableStateOf(kg.forester.sg.data.Plate.flag(ctx)) }
     var msg by remember { mutableStateOf("") }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
@@ -272,12 +285,10 @@ private fun PlateSettings() {
     }
     Spacer(Modifier.height(6.dp))
     Field("Текст номера", text) { text = it }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.material3.Checkbox(flag, { flag = it }, colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = C.Purple))
-        T("Флаг KG слева", 13.sp, modifier = Modifier.weight(1f))
-    }
+    T("Номер с флагом или регионом можно загрузить картинкой (фото или скан своего номера).", 11.sp, C.Sub)
+    Spacer(Modifier.height(6.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.weight(1f)) { ActionButton("Применить текст", text.isNotBlank()) { kg.forester.sg.data.Plate.setText(ctx, text, flag); msg = "Номер обновлён" } }
+        Box(Modifier.weight(1f)) { ActionButton("Применить текст", text.isNotBlank()) { kg.forester.sg.data.Plate.setText(ctx, text); msg = "Номер обновлён" } }
         Box(Modifier.weight(1f)) { ActionButton("Загрузить картинку", true) { picker.launch("image/*") } }
     }
     if (msg.isNotEmpty()) T(msg, 12.sp, C.Green)

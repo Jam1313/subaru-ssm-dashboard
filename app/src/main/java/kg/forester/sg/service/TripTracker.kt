@@ -52,6 +52,7 @@ class TripTracker(ctx: android.content.Context) {
     private var speedK = s.speedK
     private val sensorCal = FuelSensorCal(ctx)
     private var sensorLeftL: Double? = null
+    private var lhShown = 0.0
     private var lastSpeedKSave = 0L
 
     fun process(e: EcuSnapshot, gps: GpsFix?) {
@@ -122,7 +123,9 @@ class TripTracker(ctx: android.content.Context) {
         }
 
         if (now - lastSaveMs > 30_000) save(now)
-        publish(lh, speed)
+        // the number on screen is smoothed over ~1.5 s; the trip totals above use the raw flow
+        lhShown += (lh - lhShown) * 0.3
+        publish(lhShown, speed)
     }
 
     /** Called periodically even without ECU data so trips close when the engine stops. */
@@ -210,7 +213,8 @@ class TripTracker(ctx: android.content.Context) {
         Repo.trip.value = TripState(
             trip = t,
             instLh = lh,
-            instPer100 = if (speed >= 5) lh / speed * 100 else null,
+            // below 20 km/h litres per 100 km shoot past 100 when pulling away: show litres per hour there
+            instPer100 = if (speed >= 20) lh / speed * 100 else null,
             fuelLeftL = left,
             fuelFromSensor = sensorLeftL != null,
             rangeKm = left?.let { it / avg * 100 },

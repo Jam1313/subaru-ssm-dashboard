@@ -40,6 +40,10 @@ import kotlin.math.roundToInt
  */
 val CarModels3d = listOf("SG" to "Forester SG5", "SH" to "Forester SH")
 
+/** True when the model has white-body frames, so it can take any colour (incl. white and silver). */
+fun car3dAnyColour(ctx: Context, id: String): Boolean =
+    car3dDir(ctx, id)?.let { d -> ctx.assets.list(d)?.any { it.startsWith("white_") } } ?: false
+
 fun car3dDir(ctx: Context, id: String): String? {
     val dir = if (id == "SH") "car_sh" else "car"
     return dir.takeIf { (ctx.assets.list(it)?.any { f -> f.startsWith("car_") } ?: false) }
@@ -68,16 +72,26 @@ private class FrameSource(private val ctx: Context, private val dir: String, pri
     @Volatile var loaded = 0
         private set
 
-    fun preload() {
-        for (i in 0 until count) {
-            if (frames[i] == null) frames[i] = decode(i)
-            loaded = i + 1
+    /** Decodes every frame, nearest to [first] (the view on screen / the driving view) first. */
+    fun preload(first: Int = 0) {
+        val order = (0 until count).sortedBy { i -> minOf((i - first + count) % count, (first - i + count) % count) }
+        for ((k, i) in order.withIndex()) {
+            if (frames[i] == null) get(i)
+            loaded = k + 1
         }
     }
 
     private fun decode(i: Int): Bitmap? = runCatching {
-        ctx.assets.open("$dir/car_%03d.webp".format(i)).use { BitmapFactory.decodeStream(it) }?.let { recolor(it, paint) }
+        fun load(name: String) = ctx.assets.open("$dir/%s_%03d.webp".format(name, i)).use { BitmapFactory.decodeStream(it) }
+        when {
+            paint.id == "chameleon" -> load("car")
+            hasWhite -> tint(load("white"), load("mask"), paint)
+            paint.needsWhite -> load("car") // no white frames for this model: light colours are not possible
+            else -> load("car")?.let { recolor(it, paint) }
+        }
     }.getOrNull()
+
+    private val hasWhite = ctx.assets.list(dir)?.any { it.startsWith("white_") } ?: false
 
     /** Per-frame plate corners (front/rear), normalised 0..1, TL TR BR BL. */
     val plates: List<Map<String, FloatArray>> = runCatching {
@@ -95,10 +109,23 @@ private class FrameSource(private val ctx: Context, private val dir: String, pri
 
     fun cached(i: Int): Bitmap? = if (count == 0) null else frames[index(i)]
 
+    /** Width of the car itself in each frame, as a part of the frame width (the rear view is narrow). */
+    private val carW = FloatArray(count) { 1f }
+    fun carWidth(i: Int) = if (count == 0) 1f else carW[index(i)]
+
+    private fun measure(idx: Int, b: Bitmap) {
+        var mn = b.width; var mx = 0
+        for (x in 0 until b.width step 3) for (y in 0 until b.height step 6) {
+            if ((b.getPixel(x, y) ushr 24) > 8) { if (x < mn) mn = x; if (x > mx) mx = x }
+        }
+        if (mx > mn) carW[idx] = (mx - mn).toFloat() / b.width
+    }
+
+    @Synchronized
     fun get(i: Int): Bitmap? {
         if (count == 0) return null
         val idx = index(i)
-        return frames[idx] ?: decode(idx)?.also { frames[idx] = it }
+        return frames[idx] ?: decode(idx)?.also { frames[idx] = it; measure(idx, it) }
     }
 }
 
@@ -110,6 +137,8 @@ private class FrameSource(private val ctx: Context, private val dir: String, pri
 fun CarViewer(
     rpm: Int?, speedKmh: Int? = null, modifier: Modifier = Modifier,
     throttlePct: Float? = null, boostBar: Float? = null,
+    /** Part of the width the car itself may take (the dials sit left and right). */
+    carShare: Float = 1f,
 ) {
     val ctx = LocalContext.current
     val model by kg.forester.sg.data.Repo.car3d.collectAsState()
@@ -147,7 +176,7 @@ fun CarViewer(
     val turnNow by rememberUpdatedState(turn)
     val speed by rememberUpdatedState(speedKmh ?: 0)
     var road by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(src) { withContext(Dispatchers.Default) { src.preload() } }
+    LaunchedEffect(src) { withContext(Dispatchers.Default) { src.preload(angle.roundToInt()) } }
     LaunchedEffect(src) {
         while (true) {
             val driving = speed >= 3
@@ -205,7 +234,9 @@ fun CarViewer(
     }
     LaunchedEffect(angle.roundToInt(), src) {
         val i = angle.roundToInt()
-        val b = src.cached(i) ?: withContext(Dispatchers.IO) { src.get(i) }
+        // a decode (with re-colouring) takes longer than one rotation step: finish it even if the angle moves on,
+        // otherwise a turning car never gets a picture
+        val b = src.cached(i) ?: withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) { src.get(i) }
         if (b != null) { frame = b; frameIdx = src.index(i) }
     }
 
@@ -326,7 +357,8 @@ fun CarViewer(
         if (f != null) {
             Canvas(Modifier.fillMaxSize()) {
                 // fit the frame into the box (like ContentScale.Fit)
-                val scale = minOf(size.width / f.width, size.height / f.height) * zoom
+                // the car itself (not the frame with its empty margins) fits the room between the dials
+                val scale = minOf(size.width * carShare / (f.width * src.carWidth(frameIdx).coerceAtLeast(0.35f)), size.height / f.height) * zoom
                 val dw = f.width * scale
                 val dh = f.height * scale
                 // while driving, put the car (not its frame) on the road's centre line

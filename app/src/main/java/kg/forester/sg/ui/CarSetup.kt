@@ -1,5 +1,7 @@
 package kg.forester.sg.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
@@ -115,17 +117,36 @@ fun CarAdapterSettings() {
             T("Цвет кузова", 13.sp, C.Sub)
             Spacer(Modifier.height(6.dp))
             val paintSel by Repo.carPaint.collectAsState()
+            val anyColour = car3dAnyColour(ctx, car3d)
+            var picker by remember { mutableStateOf(false) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 CarPaints.forEach { cp ->
                     val on = paintSel == cp.id
+                    val usable = anyColour || !cp.needsWhite
                     Box(
-                        Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape).background(cp.swatch)
+                        Modifier.size(34.dp).alpha(if (usable) 1f else 0.3f).clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(cp.swatch)
                             .border(if (on) 3.dp else 1.dp, if (on) C.Violet else C.Border, androidx.compose.foundation.shape.CircleShape)
-                            .clickable { s.carPaint = cp.id },
+                            .clickable(enabled = usable) { s.carPaint = cp.id },
                     )
                 }
+                // any colour: rainbow swatch opens the picker
+                val custom = paintSel.startsWith("custom:")
+                Box(
+                    Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(androidx.compose.ui.graphics.Brush.sweepGradient(
+                            listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
+                        .border(if (custom) 3.dp else 1.dp, if (custom) C.Violet else C.Border, androidx.compose.foundation.shape.CircleShape)
+                        .clickable { picker = !picker },
+                )
             }
-            T(carPaint(paintSel).name, 11.sp, C.Sub)
+            T(carPaint(paintSel).name + if (!anyColour) " · белый и серебро есть у модели SH" else "", 11.sp, C.Sub)
+            if (picker) {
+                Spacer(Modifier.height(8.dp))
+                ColourPicker(paintSel.removePrefix("custom:").toIntOrNull(16) ?: 0x2563EB) { rgb ->
+                    s.carPaint = "custom:%06X".format(rgb and 0xFFFFFF); picker = false
+                }
+            }
             if (car3dDir(ctx, car3d) == null) {
                 Spacer(Modifier.height(4.dp))
                 T("Модель $car3d ещё готовится, пока показывается SG5.", 11.sp, C.Orange)
@@ -286,6 +307,48 @@ private fun BluetoothPicker() {
             Chip(d.name ?: d.address, chosen == d.address, {
                 chosen = d.address; s.btAddress = d.address; s.btName = d.name ?: d.address
             })
+        }
+    }
+}
+
+/** Hue / saturation / brightness sliders with a preview; [onApply] gets 0xRRGGBB. */
+@Composable
+private fun ColourPicker(start: Int, onApply: (Int) -> Unit) {
+    val hsv = remember { FloatArray(3).also { android.graphics.Color.colorToHSV(start or 0xFF000000.toInt(), it) } }
+    var h by remember { mutableStateOf(hsv[0]) }
+    var sat by remember { mutableStateOf(hsv[1]) }
+    var v by remember { mutableStateOf(hsv[2]) }
+    val rgb = android.graphics.Color.HSVToColor(floatArrayOf(h, sat, v))
+    val sliderColors = androidx.compose.material3.SliderDefaults.colors(
+        thumbColor = Color.White, activeTrackColor = Color.Transparent, inactiveTrackColor = Color.Transparent,
+    )
+    @Composable
+    fun Track(brush: androidx.compose.ui.graphics.Brush, value: Float, range: ClosedFloatingPointRange<Float>, set: (Float) -> Unit) {
+        Box(contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(brush))
+            androidx.compose.material3.Slider(value, set, valueRange = range, colors = sliderColors)
+        }
+    }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.CardHi).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        T("Оттенок", 12.sp, C.Sub)
+        Track(androidx.compose.ui.graphics.Brush.horizontalGradient(
+            (0..6).map { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, 1f, 1f))) }), h, 0f..360f) { h = it }
+        T("Насыщенность", 12.sp, C.Sub)
+        Track(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(
+            Color(android.graphics.Color.HSVToColor(floatArrayOf(h, 0f, v))), Color(android.graphics.Color.HSVToColor(floatArrayOf(h, 1f, v))))),
+            sat, 0f..1f) { sat = it }
+        T("Яркость", 12.sp, C.Sub)
+        Track(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(
+            Color.Black, Color(android.graphics.Color.HSVToColor(floatArrayOf(h, sat, 1f))))), v, 0f..1f) { v = it }
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Color(rgb)).border(1.dp, C.Border, RoundedCornerShape(10.dp)))
+            Spacer(Modifier.width(12.dp))
+            T("#%06X".format(rgb and 0xFFFFFF), 14.sp, modifier = Modifier.weight(1f))
+            ActionButton("Применить", true) { onApply(rgb) }
         }
     }
 }
