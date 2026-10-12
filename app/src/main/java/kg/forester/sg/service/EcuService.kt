@@ -323,6 +323,7 @@ class EcuService : Service() {
                 continue
             }
             Repo.pollAddresses.value = addrs.size
+            val afSensor = EcuParams.reported(init, EcuParams.AF_SENSOR)
             var failures = 0
             var cycle = 0
             tcuAddrs = null
@@ -336,7 +337,10 @@ class EcuService : Service() {
                     continue
                 }
                 failures = 0
-                val snap = EcuParams.decode(addrs, raw, now)
+                var snap = EcuParams.decode(addrs, raw, now)
+                // SSM answers any address; an A/F byte from an ECU without the wideband sensor would fake
+                // "enrichment" in the fuel calculation
+                if (!afSensor) snap = snap.copy(lambda = null)
                 Repo.live.value = snap
                 history.addLast(snap)
                 while (history.size > 240) history.removeFirst()

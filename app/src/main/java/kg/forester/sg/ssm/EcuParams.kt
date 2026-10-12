@@ -101,6 +101,12 @@ object EcuParams {
     fun optionalSupported(init: EcuInit): IntArray =
         optional.filter { (_, c) -> init.supports(c.first + 8, c.second) }.keys.toIntArray()
 
+    /** False only when the init clearly lists the capability byte and the bit is off (then the byte is junk). */
+    fun reported(init: EcuInit, addr: Int): Boolean {
+        val (i, bit) = capability[addr] ?: return true
+        return i >= init.capabilities.size || init.supports(i + 8, bit)
+    }
+
     /** The poll addresses this ECU reports as supported in its init answer. */
     fun supported(init: EcuInit): IntArray =
         pollAddresses.filter { a -> capability[a]?.let { (i, bit) -> init.supports(i + 8, bit) } ?: false }.toIntArray()

@@ -199,13 +199,17 @@ private fun ChartPanel(version: Long, modifier: Modifier) {
     val data = remember(range, version, tick) {
         val now = System.currentTimeMillis()
         val from = if (range == Range.Today) startOfDay(now) else now - range.spanMs
-        val buckets = Repo.db.buckets(from, range.stepMs)
+        val off = java.util.TimeZone.getDefault().getOffset(now).toLong()
+        val buckets = Repo.db.buckets(from, range.stepMs, off)
         val byTime = buckets.associateBy { it.timeMs }
         val values = ArrayList<Float?>()
-        var t = from / range.stepMs * range.stepMs
+        // a point needs some distance behind it (≥ 10 km/h average over the step, at most 1 km): a few metres
+        // while pulling away would read hundreds of L/100. Idle and no-data steps are gaps, not zeros.
+        val minKm = maxOf(minOf(range.stepMs / 3_600_000.0 * 10.0, 1.0), 0.02)
+        var t = (from + off) / range.stepMs * range.stepMs - off
         while (t <= now) {
             val b = byTime[t]
-            values += if (b != null && b.km > 0.02) (b.fuelL / b.km * 100).toFloat().coerceAtMost(40f) else 0f
+            values += if (b != null && b.km >= minKm) (b.fuelL / b.km * 100).toFloat().coerceAtMost(30f) else null
             t += range.stepMs
         }
         val km = buckets.sumOf { it.km }
@@ -385,7 +389,7 @@ private fun HistoryTab() {
     val days = remember(version) {
         val now = System.currentTimeMillis()
         val from = startOfDay(now) - 29 * 86_400_000L
-        Repo.db.buckets(from, 86_400_000L).filter { it.km > 0.1 || it.fuelL > 0.05 }.reversed()
+        Repo.db.buckets(from, 86_400_000L, java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()).toLong()).filter { it.km > 0.1 || it.fuelL > 0.05 }.reversed()
     }
     Panel(Modifier.fillMaxSize()) {
         PanelTitle(Lucide.FileText, "История за 30 дней")
@@ -521,7 +525,8 @@ private fun StyleTab() {
             T("Нет данных", 14.sp, C.Sub); return@Panel
         }
         val idlePct = if (t.durationS > 0) t.idleS / t.durationS * 100 else 0.0
-        val perHour = if (t.durationS > 0) 3600.0 / t.durationS else 0.0
+        // events per hour, but a short trip counts as at least 30 min: one hard stop on a 5-min run is not -48
+        val perHour = 3600.0 / maxOf(t.durationS, 1800L)
         val score = (100 - (t.hardAccel + t.hardBrake) * perHour * 4 - idlePct * 0.3).coerceIn(0.0, 100.0)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Tile(Lucide.Star, "Оценка", fmt(score, 0), "/ 100", Modifier.weight(1f))

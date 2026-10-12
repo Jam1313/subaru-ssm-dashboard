@@ -77,6 +77,8 @@ fun HomeScreen() {
 
     // long press on any card (or the pencil on the 3D block) switches to editing right here
     var edit by remember { mutableStateOf(false) }
+    var stylePick by remember { mutableStateOf<String?>(null) }
+    val styles by Repo.dialStyles.collectAsState()
     val longPress = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { edit = true }) }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -91,10 +93,18 @@ fun HomeScreen() {
                     e.rpm, e.speedKmh, Modifier.fillMaxSize(),
                     throttlePct = e.throttlePct, boostBar = e.boostBar, carShare = carShare,
                 )
-                Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f,
-                    Modifier.align(Alignment.CenterStart).padding(start = 14.dp).size(d))
-                Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null,
-                    Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(d))
+                // long press on a gauge: pick its design (NFS Underground style custom gauges)
+                Box(Modifier.align(Alignment.CenterStart).padding(start = 14.dp).size(d)
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { stylePick = "tach" }) }) {
+                    Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f, Modifier.fillMaxSize(), dialStyle(styles.first))
+                }
+                Box(Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(d)
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { stylePick = "speedo" }) }) {
+                    Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null, Modifier.fillMaxSize(), dialStyle(styles.second))
+                }
+                stylePick?.let { which ->
+                    DialStylePicker(which, Modifier.align(if (which == "tach") Alignment.CenterStart else Alignment.CenterEnd)) { stylePick = null }
+                }
                 if (!edit) Box(
                     Modifier.align(Alignment.TopEnd).padding(8.dp).size(30.dp).clip(RoundedCornerShape(9.dp))
                         .background(C.Card.copy(alpha = 0.6f)).clickable { edit = true },
@@ -200,101 +210,3 @@ private fun BarCard(
         }
     }
 }
-
-
-/**
- * Round needle gauge (tachometer / speedometer): 270° scale with numbered major ticks, an optional red
- * zone, a lit arc up to the value and the number in the middle.
- */
-@Composable
-fun Dial(
-    value: Float?, max: Float, step: Float, labelDiv: Float, unit: String, scaleNote: String?,
-    redFrom: Float?, modifier: Modifier,
-) {
-    val v by androidx.compose.animation.core.animateFloatAsState(
-        (value ?: 0f).coerceIn(0f, max), androidx.compose.animation.core.tween(240), label = "dial",
-    )
-    Box(modifier, contentAlignment = Alignment.Center) {
-        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-            val r = size.minDimension / 2f
-            val c = center
-            val start = 135f
-            val sweep = 270f
-            fun ang(x: Float) = start + sweep * (x / max)
-            fun pt(deg: Float, rr: Float): androidx.compose.ui.geometry.Offset {
-                val a = Math.toRadians(deg.toDouble())
-                return androidx.compose.ui.geometry.Offset(c.x + rr * kotlin.math.cos(a).toFloat(), c.y + rr * kotlin.math.sin(a).toFloat())
-            }
-            // glass disc so the dial reads over the road
-            drawCircle(
-                androidx.compose.ui.graphics.Brush.radialGradient(
-                    listOf(Color(0xE60B0F1C), Color(0xCC0B0F1C), Color(0x660B0F1C)), c, r,
-                ), r, c,
-            )
-            drawCircle(C.Border, r - 1f, c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
-            val arcR = r * 0.86f
-            val tl = androidx.compose.ui.geometry.Offset(c.x - arcR, c.y - arcR)
-            val sz = androidx.compose.ui.geometry.Size(arcR * 2, arcR * 2)
-            val stroke = r * 0.07f
-            drawArc(Color(0xFF1E2438), start, sweep, false, tl, sz, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-            if (redFrom != null) {
-                drawArc(C.Red.copy(alpha = 0.55f), ang(redFrom), ang(max) - ang(redFrom), false, tl, sz,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-            }
-            if (v > 0f) {
-                val hot = redFrom != null && v >= redFrom
-                drawArc(
-                    if (hot) androidx.compose.ui.graphics.Brush.sweepGradient(listOf(C.Orange, C.Red), c)
-                    else androidx.compose.ui.graphics.Brush.sweepGradient(listOf(C.Blue, C.Violet, C.Purple, C.Blue), c),
-                    start, ang(v) - start, false, tl, sz,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
-                )
-            }
-            // ticks and numbers
-            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                textAlign = android.graphics.Paint.Align.CENTER
-                textSize = r * 0.13f
-                color = android.graphics.Color.argb(200, 170, 178, 200)
-                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-            }
-            val minor = step / 2f
-            var x = 0f
-            while (x <= max + 0.01f) {
-                val major = (x / step).let { kotlin.math.abs(it - kotlin.math.round(it)) < 0.01f }
-                val a = ang(x)
-                val red = redFrom != null && x >= redFrom
-                drawLine(
-                    if (red) C.Red else if (major) Color(0xFFCBD5E1) else Color(0xFF475069),
-                    pt(a, arcR - stroke * 0.9f), pt(a, arcR - stroke * (if (major) 2.6f else 1.7f)),
-                    if (major) 2.5f else 1.4f,
-                )
-                if (major && (step * 2 > max / 8 || (x / step).roundToIntSafe() % 2 == 0)) {
-                    val p = pt(a, arcR - stroke * 3.9f)
-                    drawContext.canvas.nativeCanvas.drawText(
-                        (x / labelDiv).toInt().toString(), p.x, p.y + paint.textSize * 0.35f, paint,
-                    )
-                }
-                x += minor
-            }
-            // needle
-            val na = ang(v)
-            drawLine(Color(0x55FF4D6D), pt(na, r * 0.10f), pt(na, arcR - stroke * 0.3f), r * 0.05f,
-                cap = androidx.compose.ui.graphics.StrokeCap.Round)
-            drawLine(Color(0xFFFF4D6D), pt(na, r * 0.10f), pt(na, arcR - stroke * 0.3f), r * 0.022f,
-                cap = androidx.compose.ui.graphics.StrokeCap.Round)
-            drawCircle(Color(0xFF2A3150), r * 0.075f, c)
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 4.dp)) {
-            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth(0.5f)) {
-                val d = androidx.compose.ui.platform.LocalDensity.current
-                val sp = with(d) { (maxWidth / 3.1f).toSp() }
-                T(value?.let { "%.0f".format(it) } ?: "—", sp, weight = FontWeight.Bold, maxLines = 1,
-                    modifier = Modifier.align(Alignment.Center))
-            }
-            T(unit, 12.sp, C.Sub, maxLines = 1)
-            if (scaleNote != null) T(scaleNote, 10.sp, C.Sub.copy(alpha = 0.6f), maxLines = 1)
-        }
-    }
-}
-
-private fun Float.roundToIntSafe() = kotlin.math.round(this).toInt()

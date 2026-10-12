@@ -59,7 +59,12 @@ class Settings(ctx: Context) {
 
     /** Fuel calculation correction, learned from full-to-full refills. */
     var fuelK: Double
-        get() = p.getFloat("fuelK", 1f).toDouble().coerceIn(0.7, 1.4) // older versions could drift far off
+        get() {
+            val v = p.getFloat("fuelK", 1f).toDouble()
+            // the calibration of older versions could run far off: start over instead of sitting at a limit
+            if (v !in 0.7..1.4) { p.edit().putFloat("fuelK", 1f).apply(); return 1.0 }
+            return v
+        }
         set(v) = p.edit().putFloat("fuelK", v.toFloat()).apply()
 
     /** Real speed / ECU speed, learned from GPS. */
@@ -162,6 +167,15 @@ class Settings(ctx: Context) {
         get() = p.getInt("clusterSize", 1)
         set(v) { p.edit().putInt("clusterSize", v).apply(); Repo.clusterSize.value = v }
 
+    /** Gauge designs (see DialStyles), separately for the tachometer and the speedometer. */
+    var tachStyle: String
+        get() = p.getString("tachStyle", "neon")!!
+        set(v) { p.edit().putString("tachStyle", v).apply(); Repo.dialStyles.value = v to speedoStyle }
+
+    var speedoStyle: String
+        get() = p.getString("speedoStyle", "neon")!!
+        set(v) { p.edit().putString("speedoStyle", v).apply(); Repo.dialStyles.value = tachStyle to v }
+
     /** Generated data instead of the car, to look at the screens. */
     var demo: Boolean
         get() = p.getBoolean("demo", false)
@@ -222,6 +236,8 @@ object Repo {
     val car3d = MutableStateFlow("SG")
     val carPaint = MutableStateFlow("chameleon")
     val homeTiles = MutableStateFlow("")
+    /** tachometer style id to speedometer style id */
+    val dialStyles = MutableStateFlow("neon" to "neon")
     val clusterSize = MutableStateFlow(1)
     val carVersion = MutableStateFlow(0)
     /** How many parameters the ECU is polled for (fewer than all = some are not supported). */
@@ -236,6 +252,7 @@ object Repo {
             car3d.value = settings.car3d
             carPaint.value = settings.carPaint
             homeTiles.value = settings.homeTiles
+            dialStyles.value = settings.tachStyle to settings.speedoStyle
             clusterSize.value = settings.clusterSize
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled
         }

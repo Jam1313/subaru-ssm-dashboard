@@ -14,7 +14,8 @@ object FuelCalc {
     /**
      * Fuel flow in L/h from MAF. The ECU meters fuel as MAF / target AFR and then applies the
      * A/F correction + learning trims, so the trims are included (they matter on this car: an air
-     * leak shows up as large positive trims). [k] is learned from real refills.
+     * leak shows up as large positive trims). Outside closed loop the measured AFR is used as is.
+     * [k] is learned from real refills.
      */
     fun litersPerHour(s: EcuSnapshot, k: Double): Double {
         val rpm = s.rpm ?: return 0.0
@@ -24,10 +25,14 @@ object FuelCalc {
         if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 // deceleration fuel cut
         val measured = s.afr?.toDouble()
         val closedLoop = measured == null || measured in 13.5..16.0
-        val baseAfr = if (closedLoop) 14.7 else measured!!.coerceIn(10.0, 18.5)
-        val trims = if (closedLoop) ((s.afCorrPct ?: 0f) + (s.afLearnPct ?: 0f)) / 100.0
-        else (s.afLearnPct ?: 0f) / 100.0
-        val fuelGs = maf / baseAfr * (1 + trims.coerceIn(-0.5, 0.6)) * k
+        val fuelGs = if (closedLoop) {
+            // stoichiometric target corrected by the short + long term trims (real ones stay within ±25 %)
+            val trims = ((s.afCorrPct ?: 0f) + (s.afLearnPct ?: 0f)) / 100.0
+            maf / 14.7 * (1 + trims.coerceIn(-0.35, 0.35))
+        } else {
+            // enrichment / lean: the wideband AFR is air over the fuel actually injected, trims included
+            maf / measured!!.coerceIn(10.0, 18.5)
+        } * k
         return fuelGs * 3600.0 / GASOLINE_G_PER_L
     }
 }
@@ -51,12 +56,27 @@ class TripTracker(ctx: android.content.Context) {
     private val speedWindow = ArrayDeque<Pair<Long, Double>>()
     private var speedK = s.speedK
     private val sensorCal = FuelSensorCal(ctx)
+
+    init {
+        // the trip in memory is gone after a restart; its saved row stays as it is and a new trip starts
+        s.currentTripId = 0
+    }
     private var sensorLeftL: Double? = null
     private var lhShown = 0.0
+    private var pendingFuel = 0.0
+
+    private fun flushFuel() {
+        if (pendingFuel <= 0.0) return
+        s.usedSinceRefillL += pendingFuel
+        s.usedSinceFullL += pendingFuel
+        pendingFuel = 0.0
+    }
     private var lastSpeedKSave = 0L
 
+    @Synchronized
     fun process(e: EcuSnapshot, gps: GpsFix?) {
         val now = e.timeMs
+        tick(now) // closes the trip after 2 min with the engine off, even while the ECU keeps answering
         val dt = if (lastSampleMs == 0L) 0.0 else ((now - lastSampleMs) / 1000.0).coerceIn(0.0, 2.0)
         lastSampleMs = now
         val engineOn = (e.rpm ?: 0) > 300
@@ -99,8 +119,8 @@ class TripTracker(ctx: android.content.Context) {
                 cityL = t.cityL + if (moving && avg < 45) dFuel else 0.0,
                 hwyKm = t.hwyKm + if (moving && avg >= 75) dKm else 0.0,
                 hwyL = t.hwyL + if (moving && avg >= 75) dFuel else 0.0,
-                mixKm = t.mixKm + if (moving && avg in 45.0..75.0) dKm else 0.0,
-                mixL = t.mixL + if (moving && avg in 45.0..75.0) dFuel else 0.0,
+                mixKm = t.mixKm + if (moving && avg >= 45.0 && avg < 75.0) dKm else 0.0,
+                mixL = t.mixL + if (moving && avg >= 45.0 && avg < 75.0) dFuel else 0.0,
                 idleS = t.idleS + if (engineOn && !moving) dt else 0.0,
                 idleL = t.idleL + if (!moving) dFuel else 0.0,
                 hardAccel = t.hardAccel + hardA,
@@ -113,12 +133,11 @@ class TripTracker(ctx: android.content.Context) {
         lastSpeed = speed
 
         if (dFuel > 0) {
-            s.usedSinceRefillL += dFuel
-            s.usedSinceFullL += dFuel
+            pendingFuel += dFuel // written to the settings every 30 s, not 4 times a second (flash wear)
         }
         addToBucket(now, dFuel, dKm)
         if (e.fuelSensorV != null || e.fuelSensorOhm != null) {
-            val known = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL).coerceAtLeast(0.0) else null
+            val known = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL - pendingFuel).coerceAtLeast(0.0) else null
             sensorLeftL = sensorCal.process(e.fuelSensorV, e.fuelSensorOhm, known, speed < 1, s.tankL, now)
         }
 
@@ -129,6 +148,7 @@ class TripTracker(ctx: android.content.Context) {
     }
 
     /** Called periodically even without ECU data so trips close when the engine stops. */
+    @Synchronized
     fun tick(now: Long) {
         val t = trip ?: return
         if (now - lastEngineOnMs > 120_000) {
@@ -146,6 +166,7 @@ class TripTracker(ctx: android.content.Context) {
         }
     }
 
+    @Synchronized
     fun resetTrip() {
         trip?.let { if (it.distanceKm > 0.05) db.upsertTrip(it) }
         trip = trip?.let { Trip(startMs = System.currentTimeMillis(), endMs = System.currentTimeMillis(), distanceKm = 0.0, fuelL = 0.0) }
@@ -154,13 +175,16 @@ class TripTracker(ctx: android.content.Context) {
         publish(0.0, 0.0)
     }
 
+    @Synchronized
     fun shutdown() {
+        flushFuel()
         save(System.currentTimeMillis())
         flushBucket()
     }
 
     private fun save(now: Long) {
         lastSaveMs = now
+        flushFuel()
         val t = trip ?: return
         if (t.distanceKm < 0.05 && t.fuelL < 0.02) return
         val id = db.upsertTrip(t.copy(id = s.currentTripId))
@@ -202,7 +226,7 @@ class TripTracker(ctx: android.content.Context) {
     private fun publish(lh: Double, speed: Double) {
         // the learned fuel sender wins when the ECU has one; otherwise count from the refills (SG)
         val left = sensorLeftL
-            ?: if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL).coerceAtLeast(0.0) else null
+            ?: if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL - pendingFuel).coerceAtLeast(0.0) else null
         val (totKm, totL) = db.totals()
         val t = trip
         val avg = when {

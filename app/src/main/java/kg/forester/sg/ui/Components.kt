@@ -239,21 +239,27 @@ fun AreaChart(values: List<Float?>, maxY: Float, avg: Float?, modifier: Modifier
         }
         if (values.size < 2) return@Canvas
         val step = w / (values.size - 1)
+        // null = no data / standing: the line breaks there instead of dropping to zero
         val path = Path()
         val fill = Path()
-        var started = false
+        var open = false
+        var segStart = 0f
         var lastX = 0f
         values.forEachIndexed { i, v ->
             val x = i * step
-            val y = h - ((v ?: 0f) / maxY).coerceIn(0f, 1f) * h
-            if (!started) {
-                path.moveTo(x, y); fill.moveTo(x, h); fill.lineTo(x, y); started = true
+            if (v == null) {
+                if (open) { fill.lineTo(lastX, h); fill.lineTo(segStart, h); fill.close(); open = false }
+                return@forEachIndexed
+            }
+            val y = h - (v / maxY).coerceIn(0f, 1f) * h
+            if (!open) {
+                path.moveTo(x, y); fill.moveTo(x, y); segStart = x; open = true
             } else {
                 path.lineTo(x, y); fill.lineTo(x, y)
             }
             lastX = x
         }
-        fill.lineTo(lastX, h); fill.close()
+        if (open) { fill.lineTo(lastX, h); fill.lineTo(segStart, h); fill.close() }
         drawPath(fill, Brush.verticalGradient(listOf(C.Purple.copy(alpha = 0.55f), C.Blue.copy(alpha = 0.05f))))
         drawPath(path, C.Violet, style = Stroke(2.5f))
         if (avg != null) {

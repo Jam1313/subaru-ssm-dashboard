@@ -188,9 +188,10 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 3) {
     }
 
     /** Buckets since [fromMs], aggregated into [stepMs] slots. */
-    fun buckets(fromMs: Long, stepMs: Long): List<Bucket> =
+    /** Sums per [stepMs], aligned to local time ([offMs] = time zone offset), so days start at local midnight. */
+    fun buckets(fromMs: Long, stepMs: Long, offMs: Long = 0): List<Bucket> =
         readableDatabase.rawQuery(
-            "SELECT (time/$stepMs)*$stepMs AS t, SUM(fuel), SUM(km) FROM buckets WHERE time>=? GROUP BY t ORDER BY t",
+            "SELECT ((time+$offMs)/$stepMs)*$stepMs-$offMs AS t, SUM(fuel), SUM(km) FROM buckets WHERE time>=? GROUP BY t ORDER BY t",
             arrayOf(fromMs.toString())
         ).use { c ->
             val out = ArrayList<Bucket>()
