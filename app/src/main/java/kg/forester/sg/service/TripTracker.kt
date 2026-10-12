@@ -33,7 +33,7 @@ object FuelCalc {
 }
 
 /** Integrates samples into the current trip, buckets, fuel level and learned corrections. */
-class TripTracker {
+class TripTracker(ctx: android.content.Context) {
     private val s get() = Repo.settings
     private val db get() = Repo.db
 
@@ -50,6 +50,8 @@ class TripTracker {
 
     private val speedWindow = ArrayDeque<Pair<Long, Double>>()
     private var speedK = s.speedK
+    private val sensorCal = FuelSensorCal(ctx)
+    private var sensorLeftL: Double? = null
     private var lastSpeedKSave = 0L
 
     fun process(e: EcuSnapshot, gps: GpsFix?) {
@@ -114,6 +116,10 @@ class TripTracker {
             s.usedSinceFullL += dFuel
         }
         addToBucket(now, dFuel, dKm)
+        if (e.fuelSensorV != null || e.fuelSensorOhm != null) {
+            val known = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL).coerceAtLeast(0.0) else null
+            sensorLeftL = sensorCal.process(e.fuelSensorV, e.fuelSensorOhm, known, speed < 1, s.tankL, now)
+        }
 
         if (now - lastSaveMs > 30_000) save(now)
         publish(lh, speed)
@@ -191,7 +197,9 @@ class TripTracker {
     }
 
     private fun publish(lh: Double, speed: Double) {
-        val left = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL).coerceAtLeast(0.0) else null
+        // the learned fuel sender wins when the ECU has one; otherwise count from the refills (SG)
+        val left = sensorLeftL
+            ?: if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL).coerceAtLeast(0.0) else null
         val (totKm, totL) = db.totals()
         val t = trip
         val avg = when {
@@ -204,6 +212,7 @@ class TripTracker {
             instLh = lh,
             instPer100 = if (speed >= 5) lh / speed * 100 else null,
             fuelLeftL = left,
+            fuelFromSensor = sensorLeftL != null,
             rangeKm = left?.let { it / avg * 100 },
         )
     }

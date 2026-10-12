@@ -9,4 +9,8 @@
     <usb-device vendor-id="1659" product-id="8963" />
     <!-- CP210x -->
     <usb-device vendor-id="4292" product-id="60000" />
+    <!-- Tactrix OpenPort 2.0 and clones -->
+    <usb-device vendor-id="1027" product-id="52299" />
+    <usb-device vendor-id="1027" product-id="52300" />
+    <usb-device vendor-id="1027" product-id="52301" />
 </resources>

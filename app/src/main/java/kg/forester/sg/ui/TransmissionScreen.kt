@@ -1,5 +1,12 @@
 package kg.forester.sg.ui
 
+import androidx.compose.foundation.layout.padding
+import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -83,7 +90,7 @@ fun TransmissionScreen() {
         Row(Modifier.weight(0.55f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Tile(Lucide.Lock, "Блокировка (Lock-up)", fmtF(t?.lockUpPct, 0), "%", Modifier.weight(1f).fillMaxHeight())
             Tile(Lucide.ArrowDownUp, "Давление в линии", fmtF(t?.linePressurePct, 0), "%", Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.Waypoints, "Муфта полного привода", fmtF(t?.transferPct, 0), "%", Modifier.weight(1f).fillMaxHeight())
+            AwdTile(t?.transferPct, t?.frontWheelKmh, t?.rearWheelKmh, Modifier.weight(1f).fillMaxHeight())
             Tile(Lucide.CarFront, "Колёса перед / зад", "${t?.frontWheelKmh ?: "—"} / ${t?.rearWheelKmh ?: "—"}", "км/ч", Modifier.weight(1f).fillMaxHeight())
         }
         Row(Modifier.weight(1.2f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -127,6 +134,44 @@ private fun AtfCard(atf: Int?, modifier: Modifier) {
             )
             Spacer(Modifier.width(6.dp))
             T("130", 11.sp, C.Sub)
+        }
+    }
+}
+
+/**
+ * Transfer clutch duty plus a rough front:rear split. SSM has no split parameter; this assumes the
+ * clutch engages linearly with the duty, for the AWD layout chosen in the settings. Still to be
+ * checked against logs from a real car (transfer_pct and the wheel speeds are in the CSV).
+ */
+@Composable
+private fun AwdTile(duty: Float?, front: Int?, rear: Int?, modifier: Modifier) {
+    Repo.carVersion.collectAsState().value
+    val vtd = Repo.settings.awd == "vtd"
+    // MP-T: 0 % = front only, 100 % = locked ≈ 50:50. VTD: centre diff 45:55, the clutch locks it towards 50:50.
+    val rearShare = duty?.let { d ->
+        val e = d.coerceIn(0f, 100f) / 100f
+        (if (vtd) 55f - 5f * e else 50f * e).roundToInt()
+    }
+    val slip = front != null && rear != null && rear > 5 && front - rear > 3
+    Row(
+        modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi).padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Lucide.Waypoints, null, tint = C.Sub, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Column {
+            T("Муфта полного привода", 11.sp, C.Sub, maxLines = 1)
+            Row(verticalAlignment = Alignment.Bottom) {
+                T(fmtF(duty, 0), 20.sp, weight = FontWeight.Bold, maxLines = 1)
+                Spacer(Modifier.width(4.dp))
+                T("%", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
+                if (rearShare != null) {
+                    Spacer(Modifier.width(10.dp))
+                    T("≈ ${100 - rearShare}:$rearShare", 14.sp, C.Violet, FontWeight.SemiBold, modifier = Modifier.padding(bottom = 2.dp))
+                    T(" β", 11.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
+                }
+            }
+            if (slip) T("передние буксуют", 11.sp, C.Orange, maxLines = 1)
         }
     }
 }

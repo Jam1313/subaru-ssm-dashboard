@@ -5,5 +5,5 @@
         <item name="android:statusBarColor">@android:color/black</item>
         <item name="android:navigationBarColor">@android:color/black</item>
     </style>
-    <string name="app_name">Forester SG</string>
+    <string name="app_name">Subaru Dashboard</string>
 </resources>

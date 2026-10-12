@@ -1,0 +1,266 @@
+package kg.forester.sg.ui
+
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.Car
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Usb
+import kg.forester.sg.data.CarModels
+import kg.forester.sg.data.Repo
+import kg.forester.sg.ssm.SsmTrace
+
+private val adapters = listOf("kkl" to "KKL-кабель", "op2" to "OpenPort 2.0")
+private val gearboxes = listOf("at" to "Автомат (АКПП)", "mt" to "Механика")
+private val buses = listOf("auto" to "Авто", "kline" to "K-Line", "can" to "CAN")
+
+/** Settings tab: car model, header text, diagnostic adapter and bus, UI scale, exchange log. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CarAdapterSettings() {
+    val s = Repo.settings
+    Repo.carVersion.collectAsState().value // re-read the settings below when they change
+    val msg by Repo.linkMessage.collectAsState()
+    val init by Repo.ecuInit.collectAsState()
+    val polled by Repo.pollAddresses.collectAsState()
+    val scale by Repo.uiScale.collectAsState()
+    var adapter by remember { mutableStateOf(s.adapter) }
+    var bus by remember { mutableStateOf(s.bus) }
+    var title by remember { mutableStateOf(s.carTitle) }
+    var sub by remember { mutableStateOf(s.carSub) }
+    var trace by remember { mutableStateOf(s.traceEnabled) }
+    var gearbox by remember { mutableStateOf(s.gearbox) }
+    var demo by remember { mutableStateOf(s.demo) }
+    var awd by remember { mutableStateOf(s.awd) }
+
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            PanelTitle(Lucide.Car, "Автомобиль")
+            Spacer(Modifier.height(10.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                CarModels.all.forEach { m ->
+                    Chip(m.name, s.carModel == m.id, {
+                        s.applyModel(m)
+                        title = m.title; sub = m.sub; bus = m.bus
+                    })
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            T(CarModels.byId(s.carModel).note, 12.sp, C.Sub)
+            Spacer(Modifier.height(12.dp))
+            TextBox("Название в шапке", title) { title = it; s.carTitle = it }
+            Spacer(Modifier.height(8.dp))
+            TextBox("Подпись (год, двигатель)", sub) { sub = it; s.carSub = it }
+            Spacer(Modifier.height(14.dp))
+            T("Коробка", 15.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                gearboxes.forEach { (k, l) -> Chip(l, gearbox == k, { gearbox = k; s.gearbox = k }) }
+            }
+            if (gearbox == "at") {
+                Spacer(Modifier.height(10.dp))
+                T("Полный привод АКПП (для оценки перед:зад)", 13.sp, C.Sub)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("mpt" to "MP-T (перед, до 50:50)", "vtd" to "VTD (45:55)").forEach { (k, l) ->
+                        Chip(l, awd == k, { awd = k; s.awd = k })
+                    }
+                }
+                T("MP-T: большинство 4EAT (Forester SG, Impreza). VTD: 5EAT турбо Legacy/Outback и др.", 11.sp, C.Sub)
+            }
+            Spacer(Modifier.height(16.dp))
+            T("3D-модель на главном экране", 15.sp)
+            Spacer(Modifier.height(6.dp))
+            val car3d by Repo.car3d.collectAsState()
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CarModels3d.forEach { (k, l) -> Chip(l, car3d == k, { s.car3d = k }) }
+            }
+            Spacer(Modifier.height(10.dp))
+            T("Цвет кузова", 13.sp, C.Sub)
+            Spacer(Modifier.height(6.dp))
+            val paintSel by Repo.carPaint.collectAsState()
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                CarPaints.forEach { cp ->
+                    val on = paintSel == cp.id
+                    Box(
+                        Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape).background(cp.swatch)
+                            .border(if (on) 3.dp else 1.dp, if (on) C.Violet else C.Border, androidx.compose.foundation.shape.CircleShape)
+                            .clickable { s.carPaint = cp.id },
+                    )
+                }
+            }
+            T(carPaint(paintSel).name, 11.sp, C.Sub)
+            if (car3dDir(ctx, car3d) == null) {
+                Spacer(Modifier.height(4.dp))
+                T("Модель $car3d ещё готовится, пока показывается SG5.", 11.sp, C.Orange)
+            }
+            Spacer(Modifier.height(16.dp))
+            T("Масштаб интерфейса", 15.sp)
+            T("Если на вашей магнитоле цифры обрезаются или всё слишком крупное", 11.sp, C.Sub)
+            Spacer(Modifier.height(6.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(0 to "Авто", 80 to "80%", 90 to "90%", 100 to "100%", 110 to "110%", 120 to "120%").forEach { (v, l) ->
+                    Chip(l, scale == v, { s.uiScale = v })
+                }
+            }
+        }
+        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            PanelTitle(Lucide.Usb, "Адаптер")
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                adapters.forEach { (k, l) -> Chip(l, adapter == k, { adapter = k; s.adapter = k }) }
+            }
+            Spacer(Modifier.height(6.dp))
+            T(
+                if (adapter == "op2") "Tactrix OpenPort 2.0 или китайский клон. Умеет K-Line и CAN."
+                else "Простой USB KKL (VAG-COM 409.1, CH340/FTDI). Только K-Line.",
+                12.sp, C.Sub,
+            )
+            Spacer(Modifier.height(14.dp))
+            T("Шина", 15.sp, if (adapter == "op2") C.Text else C.Sub)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                buses.forEach { (k, l) ->
+                    Chip(l, adapter == "op2" && bus == k, { if (adapter == "op2") { bus = k; s.bus = k } })
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            T(
+                if (adapter == "op2") "«Авто»: сначала K-Line, если ЭБУ молчит, то CAN (Forester SH 2009+)."
+                else "KKL-кабель работает только по K-Line.",
+                12.sp, C.Sub,
+            )
+            Spacer(Modifier.height(14.dp))
+            InfoLine("Связь", msg)
+            InfoLine("SSM ID / ROM ID", init?.let { "${it.ssmId} / ${it.romId}" } ?: "—")
+            InfoLine("Параметров опрашивается", if (polled > 0) "$polled из 23" else "—")
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    T("Журнал обмена (для тестов)", 15.sp)
+                    T("Пишет всё, что идёт через адаптер, в ${SsmTrace.path ?: "logs/ssm_trace.txt"}. Пришлите файл, если не работает.", 11.sp, C.Sub)
+                }
+                Switch(trace, { trace = it; s.traceEnabled = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
+            }
+            Spacer(Modifier.height(8.dp))
+            ActionButton("Очистить журнал", true) { SsmTrace.clear() }
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    T("Демо-данные", 15.sp)
+                    T("Показывает придуманную поездку без машины, чтобы посмотреть экраны. Поездки и расход не записываются.", 11.sp, C.Sub)
+                }
+                Switch(demo, { demo = it; s.demo = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
+            }
+            Spacer(Modifier.height(8.dp))
+            T("Адаптер и шина применяются при следующем подключении (переподключите кабель или подождите).", 11.sp, C.Sub)
+        }
+    }
+}
+
+/** First start: ask which car and which adapter, everything else stays at the defaults. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun FirstRunSetup(onDone: () -> Unit) {
+    val s = Repo.settings
+    var model by remember { mutableStateOf(s.carModel) }
+    var adapter by remember { mutableStateOf(s.adapter) }
+    var gearbox by remember { mutableStateOf(s.gearbox) }
+    Box(
+        Modifier.fillMaxSize().background(Color(0xE6070A14))
+            .clickable(remember { MutableInteractionSource() }, null) {},
+        contentAlignment = Alignment.Center,
+    ) {
+        Panel(Modifier.widthIn(max = 640.dp).padding(16.dp).verticalScroll(rememberScrollState()), padding = 22.dp) {
+            T("Добро пожаловать", 24.sp, weight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            T("Выберите машину и адаптер. Потом это можно поменять в Настройках → «Авто и адаптер».", 13.sp, C.Sub)
+            Spacer(Modifier.height(16.dp))
+            T("Машина", 15.sp)
+            Spacer(Modifier.height(6.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                CarModels.all.forEach { m -> Chip(m.name, model == m.id, { model = m.id }) }
+            }
+            Spacer(Modifier.height(4.dp))
+            T(CarModels.byId(model).note, 12.sp, C.Sub)
+            Spacer(Modifier.height(14.dp))
+            T("Коробка", 15.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                gearboxes.forEach { (k, l) -> Chip(l, gearbox == k, { gearbox = k }) }
+            }
+            Spacer(Modifier.height(14.dp))
+            T("Адаптер", 15.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                adapters.forEach { (k, l) -> Chip(l, adapter == k, { adapter = k }) }
+            }
+            Spacer(Modifier.height(18.dp))
+            ActionButton("Готово", true) {
+                s.applyModel(CarModels.byId(model))
+                s.adapter = adapter
+                s.gearbox = gearbox
+                s.setupDone = true
+                onDone()
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoLine(k: String, v: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        T(k, 13.sp, C.Sub, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
+        T(v, 13.sp)
+    }
+}
+
+@Composable
+private fun TextBox(label: String, value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value, onValueChange = onChange, singleLine = true,
+        label = { T(label, 12.sp, C.Sub) },
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = C.Text, unfocusedTextColor = C.Text,
+            focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}

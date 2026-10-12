@@ -55,7 +55,7 @@ fun AppsScreen() {
                 modifier = Modifier.width(420.dp),
             )
             Spacer(Modifier.weight(1f))
-            Chip("Штатный лаунчер Teyes", false, { openStockLauncher(ctx) }, Lucide.LayoutGrid)
+            Chip("Штатный лаунчер", false, { openStockLauncher(ctx) }, Lucide.LayoutGrid)
         }
         Spacer(Modifier.height(12.dp))
         val list = apps.filter { query.isBlank() || it.label.contains(query, true) }
@@ -82,10 +82,22 @@ fun AppsScreen() {
     }
 }
 
-/** Opens the Teyes launcher even when our app is the default home screen. */
-fun openStockLauncher(ctx: Context) {
+/**
+ * The head unit's own launcher: any other home-screen app (Teyes' com.android.launcher8 first when present),
+ * skipping us and the system's FallbackHome.
+ */
+fun stockLauncher(ctx: Context): android.content.ComponentName? {
     val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        .setClassName("com.android.launcher8", "com.android.launcher8.Launcher")
+    val homes = ctx.packageManager.queryIntentActivities(i, 0).map { it.activityInfo }
+        .filter { it.packageName != ctx.packageName && !it.name.endsWith("FallbackHome") }
+    val pick = homes.firstOrNull { it.packageName == "com.android.launcher8" } ?: homes.firstOrNull()
+    return pick?.let { android.content.ComponentName(it.packageName, it.name) }
+}
+
+/** Opens the stock launcher even when our app is the default home screen. */
+fun openStockLauncher(ctx: Context) {
+    val c = stockLauncher(ctx) ?: return
+    val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setComponent(c)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { ctx.startActivity(i) }
 }
@@ -98,11 +110,12 @@ fun isDefaultHome(ctx: Context): Boolean {
 }
 
 /**
- * Makes this app (or the Teyes launcher) the default home screen. Needs root; a flag file lets the boot script
+ * Makes this app (or the stock launcher) the default home screen. Needs root; a flag file lets the boot script
  * re-apply it in case the firmware resets the preferred home after a reboot.
  */
 fun setDefaultHome(ctx: Context, ours: Boolean) {
-    val comp = if (ours) "${ctx.packageName}/.MainActivity" else "com.android.launcher8/.Launcher"
+    val comp = if (ours) "${ctx.packageName}/.MainActivity"
+    else stockLauncher(ctx)?.flattenToShortString() ?: "com.android.launcher8/.Launcher"
     val flag = if (ours) "touch /data/adb/forester_home" else "rm -f /data/adb/forester_home"
     val boot = "/data/adb/service.d/forester_home.sh"
     val script = """

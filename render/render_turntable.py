@@ -1,5 +1,5 @@
 """
-Blender turntable renderer for the Forester SG5 model.
+Blender turntable renderer for the Forester SG5 / SH models.
 
   Blender -b -P render_turntable.py -- --model car.glb --out frames/ [--list] [--frames 90]
       [--paint name1,name2] [--plate name] [--engine EEVEE|CYCLES] [--size 1100x620] [--still]
@@ -33,7 +33,7 @@ ap.add_argument("--still", action="store_true", help="render only frame 0 (previ
 ap.add_argument("--elev", type=float, default=12.0, help="camera elevation, degrees")
 ap.add_argument("--envelope", default="", help="xhalf,yhalf,zmin,zmax: drop meshes outside")
 ap.add_argument("--start", type=float, default=-35.0, help="first frame camera azimuth, degrees")
-ap.add_argument("--fix", default="", help="model-specific clean-up: sg")
+ap.add_argument("--fix", default="", help="model-specific clean-up: sg, sh")
 ap.add_argument("--wheelz", type=float, default=0.43, help="sg: wheel centre height in model units")
 ap.add_argument("--altfront", action="store_true", help="sg: use the alternative front end parked next to the car")
 ap.add_argument("--floor", action="store_true", help="add a shadow-catcher floor (Cycles only)")
@@ -230,8 +230,41 @@ def fix_sg_model():
         pl.scale = (0.52, 0.113, 1)
         pl.data.materials.append(blank)
 
+def fix_sh_model():
+    """Clean-up for niev's 'Subaru Forester 2009' (SH, XT) model: length along X, front at small X."""
+    # The model has no window glass, so the light cabin shows through. Make the cabin near-black instead:
+    # the windows then read as tinted, like on the SG frames.
+    dark = bpy.data.materials.new("DarkCabin")
+    dark.use_nodes = True
+    dk = dark.node_tree.nodes["Principled BSDF"]
+    dk.inputs["Base Color"].default_value = (0.006, 0.006, 0.008, 1)
+    dk.inputs["Roughness"].default_value = 0.7
+    cabin = {"Interior_1", "Interior_2", "Interior_3", "Leather_1", "Upholstery", "Carpet", "Wood_Trim",
+             "LCD_Screen", "Tinted_Glass"}
+    for o in bpy.context.scene.objects:
+        if o.type == "MESH":
+            for slot in o.material_slots:
+                if slot.material and slot.material.name in cabin:
+                    slot.material = dark
+    # blank plates (the app draws the user's plate on them using the exported corners)
+    blank = bpy.data.materials.new("PlateBlank")
+    blank.use_nodes = True
+    bb = blank.node_tree.nodes["Principled BSDF"]
+    bb.inputs["Base Color"].default_value = (0.9, 0.9, 0.9, 1)
+    bb.inputs["Roughness"].default_value = 0.5
+    # rear: flat tailgate recess at z 0.70-0.80; front: lower bumper, centre line y = 1.0625
+    for name, loc, ry in (("PlateFront", (1.528, 1.0625, 0.50), -90), ("PlateRear", (5.962, 1.0625, 0.755), 90)):
+        bpy.ops.mesh.primitive_plane_add(size=1, location=loc, rotation=(0, math.radians(ry), 0))
+        pl = bpy.context.active_object
+        pl.name = name
+        pl.scale = (0.113, 0.52, 1)
+        pl.data.materials.append(blank)
+
 if args.fix == 'sg':
     fix_sg_model()
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+elif args.fix == 'sh':
+    fix_sh_model()
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
 
 # Normalise: put the car on the ground, centred, longest axis = X.

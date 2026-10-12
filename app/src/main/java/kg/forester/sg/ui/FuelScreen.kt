@@ -142,7 +142,7 @@ private fun CurrentTab() {
                                 Icon(Lucide.Fuel, null, tint = C.Sub, modifier = Modifier.size(22.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Column {
-                                    T("Осталось топлива", 12.sp, C.Sub)
+                                    T(if (ts.fuelFromSensor) "Осталось (датчик)" else "Осталось топлива", 12.sp, C.Sub)
                                     Row(verticalAlignment = Alignment.Bottom) {
                                         T(fmt(ts.fuelLeftL, 0), 22.sp, weight = FontWeight.Bold)
                                         T(" л", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
@@ -157,7 +157,10 @@ private fun CurrentTab() {
                                     T("${(frac * 100).toInt()}%", 12.sp, C.Sub)
                                 }
                             }
-                            T("с заправки: ${fmt(Repo.settings.usedSinceRefillL)} л", 11.sp, C.Sub)
+                            val live by Repo.live.collectAsState()
+                            val sensor = live.fuelSensorV?.let { "датчик ${"%.2f".format(it)} В" }
+                                ?: live.fuelSensorOhm?.let { "датчик ${"%.0f".format(it)} Ом" }
+                            T("с заправки: ${fmt(Repo.settings.usedSinceRefillL)} л" + (sensor?.let { " · $it" } ?: ""), 11.sp, C.Sub, maxLines = 1)
                         }
                         if (trip != null && trip.per100 == null && trip.durationS > 30) {
                             Tile(Lucide.Gauge, "Средний (стоянка)", fmt(trip.fuelL / (trip.durationS / 3600.0)), "л/ч", Modifier.fillMaxWidth().weight(1f))

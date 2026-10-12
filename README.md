@@ -1,4 +1,4 @@
-# Subaru SSM Dashboard (K-Line)
+# Subaru Dashboard (SSM, K-Line / CAN)
 
 Приложение для Android-магнитол (Teyes и подобных): бортовой компьютер, приборы, расход топлива, ошибки двигателя и АКПП для Subaru с протоколом **SSM2 по K-Line** через дешёвый **USB KKL-кабель**.
 
@@ -11,6 +11,22 @@
 | ![Расход](docs/screenshots/fuel.png) | ![АКПП](docs/screenshots/transmission.png) |
 | **Аккумулятор** | **Ошибки** |
 | ![АКБ](docs/screenshots/battery.png) | ![Ошибки](docs/screenshots/dtc.png) |
+
+## 🧪 Бета 0.9 (для тестов)
+
+Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.8, данные сохраняются.
+
+Что нового и что нужно проверить:
+- Приложение называется **Subaru Dashboard** (обновление встаёт поверх Forester SG, данные сохраняются).
+- **Настройки → «Авто и адаптер»**: модель (Forester SG/SH, Impreza, Legacy…), подпись в шапке, коробка (автомат/механика), 3D-модель Forester SG5 или SH и цвет кузова, масштаб интерфейса. При первом запуске приложение само спрашивает модель, коробку и адаптер (по умолчанию SG5 + KKL).
+- **Адаптер OpenPort 2.0** (Tactrix и китайские клоны, USB `0403:CC4C`): K-Line и **CAN** (Forester SH 2009+ и другие машины, где SSM идёт по CAN). Шина: «Авто» (сначала K-Line, потом CAN), K-Line или CAN.
+- **Другие ЭБУ (например, евро SH 2008 по KKL):** если ЭБУ не отвечает на полный список параметров, приложение опрашивает только то, что ЭБУ поддерживает (по байтам возможностей), или подбирает параметры по одному.
+- **Журнал обмена**: включите в настройках, если не работает, и пришлите файл `Android/data/kg.forester.sg/files/logs/ssm_trace.txt`.
+- **Демо-данные**: придуманная поездка без машины, чтобы посмотреть экраны.
+- **Главный экран**: тахометр и спидометр вокруг 3D-машины; на ходу вид сзади, дорога и повороты по GPS, эффекты скорости, огонь и турбо из выхлопа. На стоянке машина не крутится, её можно повернуть пальцем.
+- **Телефон**: полный интерфейс как на магнитоле, горизонтально, масштаб подгоняется под экран.
+- **Уровень топлива по датчику**: если ЭБУ отдаёт датчик уровня (у SG5 его нет), приложение учится пересчитывать показание датчика в литры по заправкам и затем показывает остаток «по датчику».
+- **Оценка перед:зад** на экране АКПП (β): по проценту муфты, для MP-T или VTD; нужна проверка на живых логах (в CSV добавлены `transfer_pct` и скорости колёс).
 
 ## 📥 Скачать APK
 
@@ -141,8 +157,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - [usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android): драйверы USB-serial, MIT;
 - [Lucide](https://lucide.dev/) через [composables icons-lucide](https://github.com/composablehorizons/compose-icons): иконки, ISC.
 
-## 3D-модель
-Кадры отрендерены из модели [«Subaru Forester MK2 2002-2008»](https://sketchfab.com/3d-models/subaru-forester-mk2-2002-2008-1df01538f1954a5c87adcc4a792a365a) автора **szymonpasterczyk** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: убраны тюнинг-детали и салон мода, собраны колёса и капот, перекрашено, пустые номерные таблички.
+## 3D-модели
+Forester SH: [«Subaru Forester 2009»](https://sketchfab.com/3d-models/925112ae29514dcf89ccf2fc7020338e) автора **niev** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: перекрашено, затемнён салон, пустые номерные таблички (`render_turntable.py --fix sh`, упаковка `render/pack_frames.py`).
+
+Forester SG: кадры отрендерены из модели [«Subaru Forester MK2 2002-2008»](https://sketchfab.com/3d-models/subaru-forester-mk2-2002-2008-1df01538f1954a5c87adcc4a792a365a) автора **szymonpasterczyk** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: убраны тюнинг-детали и салон мода, собраны колёса и капот, перекрашено, пустые номерные таблички.
 
 ## Лицензия
 [GPL-3.0](LICENSE). Таблицы параметров и кодов ошибок получены из проектов под GPL.

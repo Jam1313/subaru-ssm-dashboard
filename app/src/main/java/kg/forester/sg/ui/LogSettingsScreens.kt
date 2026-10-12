@@ -132,6 +132,7 @@ fun SettingsScreen() {
     Column(Modifier.fillMaxSize()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Основные", tab == 0, { tab = 0 }, Lucide.SlidersHorizontal)
+            Chip("Авто и адаптер", tab == 3, { tab = 3 }, Lucide.Car)
             Chip("Кнопки быстрого запуска", tab == 1, { tab = 1 }, Lucide.LayoutGrid)
             Chip("Голос", tab == 2, { tab = 2 }, Lucide.Mic)
         }
@@ -140,6 +141,7 @@ fun SettingsScreen() {
             when (tab) {
                 0 -> GeneralSettings()
                 1 -> ShortcutSettings()
+                3 -> CarAdapterSettings()
                 else -> VoiceSettings()
             }
         }
@@ -195,7 +197,7 @@ private fun GeneralSettings() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     T("Главный экран магнитолы", 15.sp)
-                    T("Открывать Subaru Dashboard кнопкой «Домой» вместо лаунчера Teyes", 11.sp, C.Sub)
+                    T("Открывать Subaru Dashboard кнопкой «Домой» вместо штатного лаунчера", 11.sp, C.Sub)
                 }
                 Switch(home, {
                     setDefaultHome(ctx, it); home = isDefaultHome(ctx)
@@ -206,8 +208,7 @@ private fun GeneralSettings() {
         Panel(Modifier.weight(1f).fillMaxHeight()) {
             T("Автомобиль и ЭБУ", 16.sp)
             Spacer(Modifier.height(10.dp))
-            InfoRow("Автомобиль", "Subaru Forester SG5 2003, EJ20 turbo")
-            InfoRow("ЭБУ", "22611AG572 (Denso, SH7055)")
+            InfoRow("Автомобиль", "${s.carTitle} ${s.carSub}".replace(Regex("\\s+"), " ").trim())
             InfoRow("SSM ID", init?.ssmId ?: "—")
             InfoRow("ROM ID", init?.romId ?: "—")
             InfoRow("Связь", msg)

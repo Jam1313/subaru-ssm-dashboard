@@ -19,13 +19,24 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
+import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
+import com.hoho.android.usbserial.driver.ProbeTable
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import kg.forester.sg.MainActivity
+import kg.forester.sg.R
 import kg.forester.sg.data.GpsFix
 import kg.forester.sg.data.LinkState
 import kg.forester.sg.data.Repo
+import kg.forester.sg.ssm.EcuInit
 import kg.forester.sg.ssm.EcuParams
+import kg.forester.sg.ssm.KklTransport
+import kg.forester.sg.ssm.Op2CanTransport
+import kg.forester.sg.ssm.Op2KLineTransport
+import kg.forester.sg.ssm.OpenPort2
 import kg.forester.sg.ssm.SsmClient
+import kg.forester.sg.ssm.SsmTrace
+import kg.forester.sg.ssm.SsmTransport
+import kg.forester.sg.ssm.toHex
 import kg.forester.sg.ssm.TcuParams
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
@@ -45,6 +56,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Stock KKL chips plus the OpenPort 2.0 (a CDC-ACM device with Tactrix ids). */
+private val adapterProber = UsbSerialProber(UsbSerialProber.getDefaultProbeTable().apply {
+    OpenPort2.PIDS.forEach { addProduct(OpenPort2.VID, it, CdcAcmSerialDriver::class.java) }
+})
+
 /** Shared access to the ECU for one-off requests (DTC read/clear) between poll cycles. */
 object EcuLink {
     val mutex = Mutex()
@@ -60,7 +76,7 @@ class EcuService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
-    private val tracker by lazy { TripTracker() }
+    private val tracker by lazy { TripTracker(this) }
     private val battery by lazy { BatteryMonitor(this) }
     private val history = ArrayDeque<EcuSnapshot>()
     private val tcuHistory = ArrayDeque<TcuSnapshot>()
@@ -75,6 +91,7 @@ class EcuService : Service() {
     override fun onCreate() {
         super.onCreate()
         Repo.init(this)
+        SsmTrace.init(this)
         startInForeground()
         startGps()
         battery // restore the last battery readings for the UI right away
@@ -108,11 +125,20 @@ class EcuService : Service() {
         val usb = getSystemService(Context.USB_SERVICE) as UsbManager
         var noCableSince = System.currentTimeMillis()
         while (scope.isActive) {
+            if (Repo.settings.demo) { demoLoop(); continue }
             tracker.tick(System.currentTimeMillis())
-            val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usb).firstOrNull()
+            val wantOp2 = Repo.settings.adapter == "op2"
+            val drivers = adapterProber.findAllDrivers(usb)
+            val driver = drivers.firstOrNull { OpenPort2.matches(it.device.vendorId, it.device.productId) == wantOp2 }
             if (driver == null) {
                 Repo.link.value = LinkState.NO_CABLE
-                Repo.linkMessage.value = "Кабель KKL не найден"
+                val other = drivers.firstOrNull()
+                Repo.linkMessage.value = when {
+                    other != null && wantOp2 -> "Найден KKL-кабель, а в настройках выбран OpenPort 2.0"
+                    other != null -> "Найден OpenPort 2.0: выберите его в Настройках → Адаптер"
+                    wantOp2 -> "OpenPort 2.0 не найден"
+                    else -> "Кабель KKL не найден"
+                }
                 if (!triedHostFix && System.currentTimeMillis() - noCableSince > 8000) {
                     triedHostFix = true
                     forceUsbHostMode()
@@ -134,50 +160,117 @@ class EcuService : Service() {
                 delay(2000); continue
             }
             val port = driver.ports[0]
-            val client = try {
-                port.open(conn)
-                SsmClient(port).also { it.open() }
-            } catch (e: Exception) {
-                Repo.link.value = LinkState.ERROR
-                Repo.linkMessage.value = e.message ?: "Ошибка порта"
-                runCatching { port.close() }
-                delay(2000); continue
-            }
-            EcuLink.client = client
+            SsmTrace.enabled = Repo.settings.traceEnabled
+            SsmTrace.log("=== ${driver.javaClass.simpleName} %04X:%04X, адаптер ${Repo.settings.adapter}, шина ${Repo.settings.bus}"
+                .format(driver.device.vendorId, driver.device.productId))
+            var op2: OpenPort2? = null
             try {
-                session(client)
+                port.open(conn)
+                if (wantOp2) {
+                    op2 = OpenPort2(port).also { it.open() }
+                    SsmTrace.log("OpenPort firmware ${op2.firmware}")
+                    session { kline -> openOp2(op2, kline) }
+                } else {
+                    session { _ -> KklTransport(port).also { it.open() } }
+                }
             } catch (e: Exception) {
+                SsmTrace.log("error: $e")
                 Repo.link.value = LinkState.ERROR
                 Repo.linkMessage.value = e.message ?: "Ошибка связи"
             } finally {
+                EcuLink.client?.close()
                 EcuLink.client = null
-                client.close()
+                if (op2 != null) op2.close() else runCatching { port.close() }
                 logger?.close(); logger = null
             }
             delay(1000)
         }
     }
 
-    /** One cable session: init the ECU, then poll until the cable or ECU goes away. */
-    private suspend fun session(client: SsmClient) {
+    /** Demo data instead of a cable; trips, fuel and logs are left alone. */
+    private suspend fun demoLoop() {
+        Repo.link.value = LinkState.CONNECTED
+        Repo.linkMessage.value = "Демо-данные (без машины)"
+        while (scope.isActive && Repo.settings.demo) {
+            val now = System.currentTimeMillis()
+            val (snap, tcu) = Demo.ecu(now)
+            Repo.live.value = snap
+            history.addLast(snap)
+            while (history.size > 240) history.removeFirst()
+            Repo.history.value = history.toList()
+            if (Repo.settings.gearbox != "mt") {
+                Repo.tcu.value = tcu
+                Repo.tcuStatus.value = "АКПП: демо"
+                tcuHistory.addLast(tcu)
+                while (tcuHistory.size > 120) tcuHistory.removeFirst()
+                Repo.tcuHistory.value = tcuHistory.toList()
+            }
+            Repo.gps.value = GpsFix(
+                speedKmh = (snap.speedKmh ?: 0).toFloat(), altitudeM = 195.0, accuracyM = 5f, satellites = 9,
+                timeMs = now, bearing = if ((snap.speedKmh ?: 0) > 3) Demo.bearing(now) else null,
+            )
+            val lh = Demo.litersPerHour(snap)
+            val v = snap.speedKmh ?: 0
+            Repo.trip.value = Repo.trip.value.copy(instLh = lh, instPer100 = if (v >= 5) lh / v * 100 else null)
+            delay(250)
+        }
+        Repo.link.value = LinkState.NO_CABLE
+    }
+
+    private fun openOp2(op2: OpenPort2, kline: Boolean): SsmTransport =
+        if (kline) Op2KLineTransport(op2).also { it.open() } else Op2CanTransport(op2).also { it.open() }
+
+    /**
+     * One adapter session: find the bus the ECU answers on, init it, then poll until the cable or ECU goes away.
+     * [open] makes a transport for the K-line (true) or CAN (false).
+     */
+    private suspend fun session(open: (Boolean) -> SsmTransport) {
+        val buses = when {
+            Repo.settings.adapter != "op2" -> listOf(true) // a KKL cable has no CAN
+            Repo.settings.bus == "kline" -> listOf(true)
+            Repo.settings.bus == "can" -> listOf(false)
+            else -> listOf(true, false)
+        }
+        var busIdx = 0
+        var transport: SsmTransport? = null
+        var transportKline = true
         while (scope.isActive) {
+            val kline = buses[busIdx % buses.size]
+            if (transport == null || transportKline != kline) {
+                transport?.close()
+                transport = null
+                transport = open(kline)
+                transportKline = kline
+            }
+            val client = SsmClient(transport)
+            EcuLink.client = client
             val init = EcuLink.mutex.withLock { client.init() }
             if (init == null) {
                 Repo.link.value = LinkState.NO_ECU
-                Repo.linkMessage.value = "ЭБУ не отвечает (зажигание выключено?)"
+                Repo.linkMessage.value = "ЭБУ не отвечает (${client.transport.name}). Зажигание включено?"
+                busIdx++
                 tracker.tick(System.currentTimeMillis())
-                delay(3000)
+                delay(if (buses.size > 1 && busIdx % buses.size != 0) 300 else 3000)
                 continue
             }
             Repo.ecuInit.value = init
             Repo.link.value = LinkState.CONNECTED
-            Repo.linkMessage.value = "ROM ${init.romId}"
+            Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+            SsmTrace.log("ECU init: SSM ${init.ssmId} ROM ${init.romId} caps ${init.capabilities.toHex(" ")}")
+            val addrs = choosePollAddresses(client, init)
+            if (addrs == null) {
+                Repo.link.value = LinkState.ERROR
+                Repo.linkMessage.value = "ЭБУ ${init.romId} ответил на init, но не отдаёт параметры"
+                delay(3000)
+                continue
+            }
+            Repo.pollAddresses.value = addrs.size
             var failures = 0
             var cycle = 0
             tcuAddrs = null
             tcuNextTryMs = 0
             while (scope.isActive && failures < 5) {
-                val raw = EcuLink.mutex.withLock { client.read(EcuParams.pollAddresses) }
+                val raw = EcuLink.mutex.withLock { client.read(addrs) }
                 val now = System.currentTimeMillis()
                 if (raw == null) {
                     failures++
@@ -185,7 +278,7 @@ class EcuService : Service() {
                     continue
                 }
                 failures = 0
-                val snap = EcuParams.decode(raw, now)
+                val snap = EcuParams.decode(addrs, raw, now)
                 Repo.live.value = snap
                 history.addLast(snap)
                 while (history.size > 240) history.removeFirst()
@@ -195,7 +288,7 @@ class EcuService : Service() {
                 lastKnock = knock
                 battery.process(snap)
                 tracker.process(snap, Repo.gps.value)
-                if (++cycle % 3 == 0) pollTcu(client, now)
+                if (++cycle % 3 == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
                 if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
                     val l = logger ?: CsvLogger(this).also { logger = it; Repo.logFile.value = it.file.name }
                     l.write(snap, Repo.gps.value, Repo.trip.value.instLh, Repo.tcu.value)
@@ -208,6 +301,34 @@ class EcuService : Service() {
             Repo.linkMessage.value = "Связь с ЭБУ потеряна"
             logger?.close(); logger = null
         }
+    }
+
+    /**
+     * The SG answers the whole list at once. Other ECUs stay silent when one address in the request is
+     * unknown to them, so fall back to the addresses the init marks as supported, then probe one by one.
+     */
+    private suspend fun choosePollAddresses(client: SsmClient, init: EcuInit): IntArray? {
+        suspend fun works(a: IntArray) = a.isNotEmpty() &&
+            (1..2).any { EcuLink.mutex.withLock { client.read(a) } != null }
+
+        val base = chooseBaseAddresses(client, init, ::works) ?: return null
+        val extra = EcuParams.optionalSupported(init)
+        if (extra.isNotEmpty() && works(base + extra)) return base + extra
+        return base
+    }
+
+    private suspend fun chooseBaseAddresses(
+        client: SsmClient, init: EcuInit, works: suspend (IntArray) -> Boolean,
+    ): IntArray? {
+        val full = EcuParams.pollAddresses
+        if (works(full)) return full
+        val caps = EcuParams.supported(init)
+        SsmTrace.log("full list failed, capability list: ${caps.joinToString(" ") { "%02X".format(it) }}")
+        if (caps.size < full.size && works(caps)) return caps
+        Repo.linkMessage.value = "Подбираю параметры ЭБУ ${init.romId}…"
+        val ok = full.filter { a -> EcuLink.mutex.withLock { client.read(intArrayOf(a)) } != null }.toIntArray()
+        SsmTrace.log("probed: ${ok.joinToString(" ") { "%02X".format(it) }}")
+        return ok.takeIf { it.isNotEmpty() && works(it) }
     }
 
     /** The transmission unit answers at 0x18 on the same K-line; poll it every few ECU cycles. */
@@ -259,6 +380,7 @@ class EcuService : Service() {
                 accuracyM = if (l.hasAccuracy()) l.accuracy else 99f,
                 satellites = l.extras?.getInt("satellites") ?: 0,
                 timeMs = System.currentTimeMillis(),
+                bearing = if (l.hasBearing()) l.bearing else null,
             )
         }
 
@@ -294,7 +416,12 @@ class EcuService : Service() {
             ) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
-            startForeground(1, n, type)
+            // Android 14+ refuses some types (e.g. microphone when started at boot): keep the USB part at least.
+            try {
+                startForeground(1, n, type)
+            } catch (e: Exception) {
+                runCatching { startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
+            }
         } else {
             startForeground(1, n)
         }
@@ -315,7 +442,7 @@ class EcuService : Service() {
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
         return Notification.Builder(this, CHANNEL)
-            .setContentTitle("Forester SG")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pi)
@@ -356,7 +483,8 @@ class CsvLogger(ctx: Context) {
         w.write(
             "time,rpm,speed_kmh,coolant_c,intake_c,maf_gs,throttle_pct,battery_v,inj_pw_ms,timing_deg," +
                 "knock_deg,atm_kpa,boost_kpa,af_corr_pct,af_learn_pct,afr,wgdc_pct,fuel_lh," +
-                "gps_speed_kmh,gps_alt_m,pedal_pct,map_kpa,avcs_deg,alt_duty_pct,gear,atf_c,turbine_rpm,lockup_pct\n"
+                "gps_speed_kmh,gps_alt_m,pedal_pct,map_kpa,avcs_deg,alt_duty_pct,gear,atf_c,turbine_rpm,lockup_pct," +
+                "transfer_pct,front_wheel_kmh,rear_wheel_kmh,fuel_sensor_v,fuel_sensor_ohm\n"
         )
     }
 
@@ -371,6 +499,8 @@ class CsvLogger(ctx: Context) {
                 "%.3f".format(Locale.US, lh), f(g?.speedKmh), g?.altitudeM?.let { "%.0f".format(Locale.US, it) } ?: "",
                 f(s.pedalPct), f(s.mapKpa), f(s.avcsDeg), f(s.altDutyPct),
                 t?.gear?.toString() ?: "", t?.atfC?.toString() ?: "", t?.turbineRpm?.toString() ?: "", f(t?.lockUpPct),
+                f(t?.transferPct), t?.frontWheelKmh?.toString() ?: "", t?.rearWheelKmh?.toString() ?: "",
+                f(s.fuelSensorV), f(s.fuelSensorOhm),
             ).joinToString(",") + "\n"
         )
         if (++lines % 20 == 0) w.flush()

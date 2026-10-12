@@ -56,7 +56,7 @@ private data class Metric(val title: String, val value: String, val unit: String
  * big speed / RPM, the key readings in a grid, and the quick-launch buttons.
  */
 @Composable
-fun CompactScreen() {
+fun CompactScreen(onMenu: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     val e by Repo.live.collectAsState()
     val t by Repo.tcu.collectAsState()
@@ -75,7 +75,15 @@ fun CompactScreen() {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // header
             Row(verticalAlignment = Alignment.CenterVertically) {
-                T("FORESTER SG5", 16.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
+                if (onMenu != null) {
+                    Box(
+                        Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(C.CardHi).clickable(onClick = onMenu),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Lucide.Menu, "Меню", tint = C.Text, modifier = Modifier.size(22.dp)) }
+                    Spacer(Modifier.width(10.dp))
+                }
+                Repo.carVersion.collectAsState().value
+                T(Repo.settings.carTitle, 16.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
                 val ok = link == LinkState.CONNECTED
                 Icon(if (ok) Lucide.Usb else Lucide.Unplug, null, tint = if (ok) C.Green else C.Orange, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
@@ -137,8 +145,8 @@ fun CompactScreen() {
                 }
             }
 
-            // quick launch
-            Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // quick launch: only in the head unit's split screen, a phone has its own launcher
+            if (onMenu == null) Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 shortcuts.take(4).forEach { sc ->
                     LaunchButton(Shortcuts.icon(sc.icon), sc.label, Modifier.weight(1f)) { Shortcuts.launch(ctx, sc) }
                 }
