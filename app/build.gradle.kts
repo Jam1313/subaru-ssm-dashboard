@@ -12,8 +12,8 @@ android {
         applicationId = "kg.forester.sg"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "0.9-beta8"
+        versionCode = 17
+        versionName = "0.9-beta9"
     }
 
     // Release key lives outside the repo: SUBARU_RELEASE_STORE / _PASSWORD / _ALIAS in ~/.gradle/gradle.properties.

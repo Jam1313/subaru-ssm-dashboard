@@ -14,9 +14,14 @@
 
 ## 🧪 Бета 0.9 (для тестов)
 
-Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta7, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
+Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta8, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
 
-> **[⬇️ Скачать 0.9-beta8](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta8/subaru-ssm-dashboard-0.9-beta8.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta8) · [руководство (PDF)](docs/manual-ru.pdf)
+> **[⬇️ Скачать 0.9-beta9](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta9/subaru-ssm-dashboard-0.9-beta9.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta9) · [руководство (PDF)](docs/manual-ru.pdf)
+
+### Новое в 0.9-beta9
+
+- **GPS:** после выдачи разрешения на геолокацию виджет и мини-карта больше не пишут «нет разрешения». Теперь там «ищу спутники…», а как только пришли координаты — число спутников и точность.
+- В «Обновлении приложения» есть подсказка, что делать, если установщик пишет «конфликт пакетов» (стоит 0.8 или самостоятельная сборка).
 
 ### Новое в 0.9-beta8
 

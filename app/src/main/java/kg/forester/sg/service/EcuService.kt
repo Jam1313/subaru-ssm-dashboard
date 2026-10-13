@@ -898,7 +898,8 @@ class EcuService : Service() {
             checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ->
                 "нет разрешения на геолокацию: откройте приложение и разрешите"
             !lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> "геолокация выключена в настройках Android"
-            else -> Repo.gpsStatus.value.ifEmpty { "ищу спутники…" }
+            // keep the satellite count from GnssStatus, but never a stale "no permission" / "switched off"
+            else -> Repo.gpsStatus.value.takeIf { it.startsWith("ищу") } ?: "ищу спутники…"
         }
     }
 
