@@ -55,6 +55,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.composables.icons.lucide.BatteryCharging
+import com.composables.icons.lucide.Fuel
+import com.composables.icons.lucide.Lucide
 import kg.forester.sg.data.Repo
 import kg.forester.sg.data.Shortcuts
 import org.osmdroid.config.Configuration
@@ -166,13 +169,13 @@ val MapStyles = listOf(
 )
 
 /**
- * Settings of a mini-map card, kept in its style: "map:<design>|z=<zoom>|n=<1 if north up>" (no ';' or ':'
+ * Settings of a mini-map card, kept in its style: "map:<design>|z=<zoom>|n=<1 if north up>|b=<0 hides the fuel and battery bars of the GTA looks>" (no ';' or ':'
  * after the prefix: those separate the cards and their fields in the saved layout).
  * An empty style is the default look.
  */
-data class MapCfg(val style: String = "nfs_mw", val zoom: Double = 16.5, val northUp: Boolean = false) {
-    fun format() = "map:$style|z=$zoom|n=${if (northUp) 1 else 0}"
-    val look get() = MapStyles.firstOrNull { it.id == style } ?: MapStyles.first()
+data class MapCfg(val style: String = "nfs_mw", val zoom: Double = 16.5, val northUp: Boolean = false, val bars: Boolean = true) {
+    fun format() = "map:$style|z=$zoom|n=${if (northUp) 1 else 0}|b=${if (bars) 1 else 0}"
+    val look get() = (MapStyles.firstOrNull { it.id == style } ?: MapStyles.first()).let { if (bars) it else it.copy(bars = MapBars.NONE) }
 
     companion object {
         fun parse(s: String): MapCfg {
@@ -183,6 +186,7 @@ data class MapCfg(val style: String = "nfs_mw", val zoom: Double = 16.5, val nor
                 when {
                     p.startsWith("z=") -> p.removePrefix("z=").toDoubleOrNull()?.let { c = c.copy(zoom = it.coerceIn(13.0, 19.0)) }
                     p.startsWith("n=") -> c = c.copy(northUp = p == "n=1")
+                    p.startsWith("b=") -> c = c.copy(bars = p != "b=0")
                 }
             }
             return c
@@ -234,7 +238,7 @@ fun MiniMapCard(styleText: String, modifier: Modifier, onStyle: (String) -> Unit
     val armour = volts.batteryV?.let { ((it - 11.5f) / 3f).coerceIn(0f, 1f) }
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
         val belowBars = look.bars == MapBars.BELOW
-        val d = minOf(maxWidth, if (belowBars) maxHeight / 1.12f else maxHeight)
+        val d = minOf(maxWidth, if (belowBars) maxHeight / 1.14f else maxHeight)
         val shape: Shape = if (look.square) RoundedCornerShape(d * 0.06f) else CircleShape
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(d).clip(shape).background(look.bg), contentAlignment = Alignment.Center) {
@@ -252,11 +256,18 @@ fun MiniMapCard(styleText: String, modifier: Modifier, onStyle: (String) -> Unit
                     val turn = if (cfg.northUp) 0f else heading ?: 0f
                     drawMapFrame(look, turn, if (cfg.northUp) heading ?: 0f else 0f, fuel, armour)
                 }
+                if (look.bars == MapBars.ARC) {
+                    // what the GTA IV ring halves mean: fuel on the left, battery on the right
+                    BarIcon(Lucide.Fuel, Color(0xFF55B95A), d * 0.11f, Modifier.align(Alignment.CenterStart).padding(start = d * 0.015f))
+                    BarIcon(Lucide.BatteryCharging, Color(0xFF4FA3E0), d * 0.11f, Modifier.align(Alignment.CenterEnd).padding(end = d * 0.015f))
+                }
             }
             if (belowBars) {
                 Spacer(Modifier.height(d * 0.03f))
-                Row(Modifier.size(d, d * 0.07f), horizontalArrangement = Arrangement.spacedBy(d * 0.02f)) {
+                Row(Modifier.size(d, d * 0.09f), horizontalArrangement = Arrangement.spacedBy(d * 0.02f), verticalAlignment = Alignment.CenterVertically) {
+                    BarIcon(Lucide.Fuel, Color(0xFF55B95A), d * 0.09f)
                     HudBar(fuel, Color(0xFF55B95A), Modifier.weight(1f))
+                    BarIcon(Lucide.BatteryCharging, Color(0xFF4FA3E0), d * 0.09f)
                     HudBar(armour, Color(0xFF4FA3E0), Modifier.weight(1f))
                 }
             }
@@ -274,6 +285,14 @@ private fun fuelFraction(): Float? {
     val ts by Repo.trip.collectAsState()
     val tank = Repo.settings.tankL
     return ts.fuelLeftL?.takeIf { tank > 0 }?.let { (it / tank).toFloat().coerceIn(0f, 1f) }
+}
+
+/** Icon on a dark disc that says what a health / armour bar shows (fuel, battery). */
+@Composable
+private fun BarIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, col: Color, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    Box(modifier.size(size).clip(CircleShape).background(Color(0xE60D0F11)), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Icon(icon, null, tint = col, modifier = Modifier.size(size * 0.62f))
+    }
 }
 
 @Composable
@@ -376,6 +395,12 @@ fun MapStylePicker(current: String, onPick: (String) -> Unit, onClose: () -> Uni
                 Chip("Север вверху", cfg.northUp, { onPick(cfg.copy(northUp = true).format()) })
             }
             Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                T("Полоски топлива и АКБ (GTA IV, V):", 13.sp, C.Sub, modifier = Modifier.padding(top = 8.dp))
+                Chip("Показывать", cfg.bars, { onPick(cfg.copy(bars = true).format()) })
+                Chip("Скрыть", !cfg.bars, { onPick(cfg.copy(bars = false).format()) })
+            }
+            Spacer(Modifier.height(6.dp))
             T("По нажатию открывать:", 13.sp, C.Sub)
             Spacer(Modifier.height(4.dp))
             MapAppChooser()
@@ -392,7 +417,7 @@ fun MapStylePicker(current: String, onPick: (String) -> Unit, onClose: () -> Uni
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            MapPreview(st, Modifier.size(112.dp))
+                            MapPreview(if (cfg.bars) st else st.copy(bars = MapBars.NONE), Modifier.size(112.dp))
                             T(st.name, 12.sp, if (on) C.Text else C.Sub, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
