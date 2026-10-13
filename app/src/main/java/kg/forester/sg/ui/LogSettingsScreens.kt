@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -79,6 +80,10 @@ fun LogScreen() {
                 }
             }
             T("Старые файлы удаляются автоматически раз в час, папка не больше 200 МБ. Графики расхода хранятся 35 дней, поездки и заправки — всегда.", 12.sp, C.Sub)
+            Spacer(Modifier.height(8.dp))
+            var pick by remember { mutableStateOf(false) }
+            Chip("Что писать в лог…", false, { pick = true })
+            if (pick) LogColumnsDialog { pick = false }
             Spacer(Modifier.height(12.dp))
             T("Файлы", 15.sp)
             LazyColumn(Modifier.weight(1f)) {
@@ -516,8 +521,26 @@ private fun FeatureSettings() {
                 F("cooling", "Охлаждение", "Перегрев от 105°, резкий рост ОЖ (прокладка ГБЦ на EJ25), термостат")
                 F("atf", "Температура ATF", "Предупреждать при 110° и 120°")
                 F("service", "Напоминания о ТО", "Раз в день при поездке, если подошёл срок по пробегу или дате")
-                SettingSwitch("Голосовые предупреждения", "Голосом магнитолы, если в ней есть русский синтез речи; иначе короткий сигнал", voice) {
+                val speech by kg.forester.sg.service.Speech.status.collectAsState()
+                SettingSwitch("Голосовые предупреждения",
+                    "Встроенный русский голос: скачивается один раз (~21 МБ) при включении, дальше работает без интернета. " +
+                        "Пока его нет — голос магнитолы или короткий сигнал." + if (speech.isNotEmpty()) " Голос: $speech" else "", voice) {
                     voice = it; s.voiceAlerts = it
+                    if (it) kg.forester.sg.service.Speech.prepare(ctx)
+                }
+                if (voice) {
+                    var picked by remember { mutableStateOf(s.ttsVoice) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        kg.forester.sg.service.Speech.VOICES.forEach { (id, name) ->
+                            Chip(name, picked == id, {
+                                if (picked != id) { picked = id; s.ttsVoice = id; kg.forester.sg.service.Speech.switchVoice(ctx) }
+                            })
+                        }
+                        Chip("Прослушать", false, {
+                            if (!kg.forester.sg.service.Speech.say("Голосовые предупреждения включены. Турбина остывает, подождите тридцать секунд"))
+                                kg.forester.sg.service.Speech.prepare(ctx)
+                        })
+                    }
                 }
             }
         }
@@ -529,6 +552,8 @@ private fun FeatureSettings() {
                 F("motion", "G-метр и крен", "Перегрузки и наклон (акселерометр магнитолы, VDC или GPS)")
                 F("sensors", "Экран «Датчики»", "Все параметры ЭБУ из базы RomRaider")
                 F("health", "Экран «Здоровье»", "Мотор, ТО, шины и журнал предупреждений (сами предупреждения настраиваются слева)")
+                TcuRateSetting()
+                F("minmax", "Мин/макс за поездку на виджетах", "Под значением на карточках Главной — самое низкое и высокое за поездку")
                 F("update", "Проверять обновления", "Раз в день смотреть, нет ли новой версии на GitHub, и сообщить")
                 SettingSwitch("Давление в шинах (TPMS)", "Слушать Bluetooth-датчики давления. Разрешение и порог — в «Здоровье» → «Шины»", tpms) {
                     tpms = it; s.tpms = it
@@ -539,6 +564,79 @@ private fun FeatureSettings() {
                     rpm = it; it.toIntOrNull()?.takeIf { v -> v in 2000..9000 }?.let { v -> s.shiftRpm = v }
                 }
             }
+        }
+    }
+}
+
+/** Which columns the CSV log gets; takes effect at once (a new file is started). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun LogColumnsDialog(onClose: () -> Unit) {
+    var off by remember { mutableStateOf(Repo.settings.logOff) }
+    val groups = kg.forester.sg.service.LogColumns.all.groupBy { it.group }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Icon(Lucide.FileText, null, tint = C.Violet, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(10.dp))
+                T("Что писать в лог", 20.sp, weight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+            }
+        },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                T("Время пишется всегда. Отмеченные параметры ЭБУ с экрана «Датчики» добавляются в конец. Новый выбор начинает новый файл.", 12.sp, C.Sub)
+                groups.forEach { (g, cols) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val icon = when (g) {
+                            "Двигатель" -> Lucide.Gauge
+                            "Топливо" -> Lucide.Fuel
+                            "Зажигание и детонация" -> Lucide.Zap
+                            "Наддув" -> Lucide.Fan
+                            "GPS" -> Lucide.Satellite
+                            "АКПП" -> Lucide.Cog
+                            else -> Lucide.Droplets
+                        }
+                        androidx.compose.material3.Icon(icon, null, tint = C.Violet, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        T(g, 15.sp, weight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f))
+                        val allOn = cols.none { it.key in off }
+                        T(if (allOn) "убрать все" else "все", 12.sp, C.Violet, modifier = Modifier.clickable {
+                            off = if (allOn) off + cols.map { it.key } else off - cols.map { it.key }.toSet()
+                            Repo.settings.logOff = off
+                        })
+                    }
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        cols.forEach { c ->
+                            val on = c.key !in off
+                            Chip(c.title, on, { off = if (on) off + c.key else off - c.key; Repo.settings.logOff = off },
+                                icon = if (on) Lucide.Check else Lucide.Plus)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClose) { androidx.compose.material3.Text("Готово", color = C.Violet) } },
+        containerColor = C.Card, titleContentColor = C.Text, textContentColor = C.Text,
+    )
+}
+
+/** How often the transmission unit is read, against the engine: the K-line is slow, the engine data matter more. */
+@Composable
+private fun TcuRateSetting() {
+    val s = Repo.settings
+    var every by remember { mutableStateOf(s.tcuEvery) }
+    var atf by remember { mutableStateOf(s.tcuAtfOnly) }
+    Column {
+        T("Опрос АКПП", 15.sp)
+        T("Каждый N-й опрос двигателя. Реже — быстрее обновляются данные ЭБУ (K-Line медленная).", 11.sp, C.Sub)
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(3 to "каждый 3-й", 10 to "10-й", 30 to "30-й").forEach { (n, l) -> Chip(l, every == n, { every = n; s.tcuEvery = n }) }
+        }
+        Spacer(Modifier.height(6.dp))
+        SettingSwitch("Только температура ATF", "Читать с АКПП лишь ATF и селектор: запрос короче, двигатель опрашивается чаще", atf) {
+            atf = it; s.tcuAtfOnly = it
         }
     }
 }

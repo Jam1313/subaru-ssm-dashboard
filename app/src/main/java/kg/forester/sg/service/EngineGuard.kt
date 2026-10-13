@@ -71,6 +71,7 @@ class EngineGuard {
     private val coolant = ArrayDeque<Pair<Long, Int>>()
     private var maintenanceChecked = 0L
     private var features = -1
+    private var pendingHours = 0.0
 
     /** The RomRaider parameters the guard reads, chosen from what this ROM has (first match wins). */
     private fun chooseRoles(list: List<RrParam>) {
@@ -92,6 +93,7 @@ class EngineGuard {
 
     fun newTrip(now: Long) {
         Repo.peaks.value = Peaks(sinceMs = now)
+        Repo.tripRange.value = emptyMap()
         iamStart = null
         iamLogged = false
     }
@@ -108,6 +110,11 @@ class EngineGuard {
         lastMs = now
         val rpm = e.rpm ?: 0
         val running = rpm > 400
+        // engine hours: counted in memory, saved once a minute (flash wear)
+        if (running && !s.demo) {
+            pendingHours += dt / 3600.0
+            if (pendingHours > 1.0 / 60) { s.engineHours += pendingHours; pendingHours = 0.0 }
+        }
         if (!running) { engineOnSince = 0L; oilEst = null }
         else if (engineOnSince == 0L) engineOnSince = now
         val rr = Repo.rrValues.value
@@ -230,6 +237,29 @@ class EngineGuard {
             atfMax = maxOf(g.atfMax ?: Int.MIN_VALUE, atf ?: Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE },
         )
         updatePeaks(e, t)
+        updateRange(e, t)
+    }
+
+    /** Min / max of every home card value over the trip (like BtSSM), only while the engine runs. */
+    private fun updateRange(e: EcuSnapshot, t: TcuSnapshot?) {
+        if ((e.rpm ?: 0) < 400) return
+        val trip = Repo.trip.value
+        val now = mapOf(
+            "coolant" to e.coolantC?.toFloat(), "intake" to e.intakeC?.toFloat(), "battery" to e.batteryV,
+            "throttle" to e.throttlePct, "maf" to e.mafGs, "afr" to e.afr, "afcorr" to e.afCorrPct, "aflearn" to e.afLearnPct,
+            "timing" to e.timingDeg, "knock" to e.knockDeg, "inj" to e.injPwMs, "wgdc" to e.wastegatePct, "boost" to e.boostBar,
+            "pedal" to e.pedalPct, "avcs" to e.avcsDeg, "map" to e.mapKpa, "atm" to e.atmKpa, "alt" to e.altDutyPct,
+            "atf" to t?.atfC?.toFloat(), "fuel" to trip.instLh.toFloat(), "per100" to trip.instPer100?.toFloat(),
+            "gps" to Repo.gps.value?.speedKmh, "load" to e.loadGRev,
+        )
+        val old = Repo.tripRange.value
+        val next = HashMap(old)
+        for ((k, v) in now) {
+            if (v == null || v.isNaN()) continue
+            val r = old[k]
+            next[k] = if (r == null) v to v else minOf(r.first, v) to maxOf(r.second, v)
+        }
+        Repo.tripRange.value = next
     }
 
     /** Target boost relative to the atmosphere, whatever units this ROM's definition uses. */

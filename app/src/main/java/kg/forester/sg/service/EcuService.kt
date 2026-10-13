@@ -101,6 +101,7 @@ class EcuService : Service() {
     private val tcuHistory = ArrayDeque<TcuSnapshot>()
     private var tcuAddrs: IntArray? = null
     private var tcuNextTryMs = 0L
+    private var tcuAtfOnly = false
     private var logger: CsvLogger? = null
     private var triedHostFix = false
 
@@ -592,7 +593,7 @@ class EcuService : Service() {
                 if (!afSensor) snap = snap.copy(lambda = null)
                 ecuWatch.poll(client)
                 onSnapshot(snap, now)
-                if (++cycle % 3 == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
+                if (++cycle % Repo.settings.tcuEvery.coerceAtLeast(1) == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
             }
             SsmTrace.polling = false
             SsmTrace.log("ECU silent, polling stopped")
@@ -615,7 +616,9 @@ class EcuService : Service() {
         if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
             // the ticked parameters are extra columns: a new file when the choice changes
             val extras = Repo.rrPolled.value
-            if (logger != null && logger?.extras != extras) { logger?.close(); logger = null }
+            if (logger != null && (logger?.extras != extras || logger?.columns?.map { it.key } != LogColumns.enabled().map { it.key })) {
+                logger?.close(); logger = null
+            }
             val l = logger ?: CsvLogger(this, extras).also { logger = it; Repo.logFile.value = it.file.name }
             l.write(snap, Repo.gps.value, Repo.trip.value.instLh, Repo.tcu.value, Repo.rrValues.value)
         } else if (logger != null && (snap.rpm ?: 0) == 0) {
@@ -790,9 +793,18 @@ class EcuService : Service() {
             tcuWatch.setup(init)
             addrs = TcuParams.supported(init)
             tcuAddrs = addrs
+            tcuAtfOnly = false
             Repo.tcuStatus.value = "АКПП: ROM ${init.romId}"
         }
         if (addrs.isEmpty()) return
+        // "only ATF": the temperature and the selector, a much shorter request
+        if (Repo.settings.tcuAtfOnly != tcuAtfOnly) {
+            tcuAtfOnly = Repo.settings.tcuAtfOnly
+            addrs = TcuParams.supported(Repo.tcuInit.value ?: return).let { all ->
+                if (tcuAtfOnly) all.filter { it == TcuParams.ATF_OLD || it == TcuParams.ATF_NEW || it == TcuParams.RANGE || it == TcuParams.GEAR }.toIntArray() else all
+            }
+            tcuAddrs = addrs
+        }
         val raw = EcuLink.mutex.withLock { client.read(addrs, SsmClient.TCU) } ?: return
         tcuWatch.poll(client)
         val t = TcuParams.decode(addrs, raw, now)
@@ -1000,11 +1012,12 @@ class BootReceiver : BroadcastReceiver() {
     }
 }
 
-/** One CSV file per engine run in Android/data/kg.forester.sg/files/logs. */
+/** One CSV file per engine run in Android/data/kg.forester.sg/files/logs; columns as chosen on the «Лог» screen. */
 class CsvLogger(ctx: Context, val extras: List<RrParam> = emptyList()) {
     val file: File
     private val w: FileWriter
     private var lines = 0
+    val columns: List<LogColumn> = LogColumns.enabled()
 
     init {
         val dir = File(ctx.getExternalFilesDir(null), "logs").apply { mkdirs() }
@@ -1012,28 +1025,15 @@ class CsvLogger(ctx: Context, val extras: List<RrParam> = emptyList()) {
         file = File(dir, name)
         w = FileWriter(file)
         w.write(
-            "time,rpm,speed_kmh,coolant_c,intake_c,maf_gs,throttle_pct,battery_v,inj_pw_ms,timing_deg," +
-                "knock_deg,atm_kpa,boost_kpa,af_corr_pct,af_learn_pct,afr,wgdc_pct,fuel_lh," +
-                "gps_speed_kmh,gps_alt_m,pedal_pct,map_kpa,avcs_deg,alt_duty_pct,gear,atf_c,turbine_rpm,lockup_pct," +
-                "transfer_pct,front_wheel_kmh,rear_wheel_kmh,fuel_sensor_v,fuel_sensor_ohm" +
+            (listOf("time") + columns.map { it.key }).joinToString(",") +
                 extras.joinToString("") { p -> "," + "${p.id} ${p.nameEn} ${p.units}".trim().replace(',', ' ') } + "\n"
         )
     }
 
     fun write(s: kg.forester.sg.ssm.EcuSnapshot, g: GpsFix?, lh: Double, t: TcuSnapshot?, extra: Map<String, Double> = emptyMap()) {
-        fun f(x: Float?) = x?.let { "%.2f".format(Locale.US, it) } ?: ""
+        val row = LogRow(s, g, lh, t, Repo.guard.value)
         w.write(
-            listOf(
-                s.timeMs.toString(), s.rpm?.toString() ?: "", s.speedKmh?.toString() ?: "",
-                s.coolantC?.toString() ?: "", s.intakeC?.toString() ?: "", f(s.mafGs), f(s.throttlePct),
-                f(s.batteryV), f(s.injPwMs), f(s.timingDeg), f(s.knockDeg), f(s.atmKpa), f(s.gaugeKpa),
-                f(s.afCorrPct), f(s.afLearnPct), f(s.afr), f(s.wastegatePct),
-                "%.3f".format(Locale.US, lh), f(g?.speedKmh), g?.altitudeM?.let { "%.0f".format(Locale.US, it) } ?: "",
-                f(s.pedalPct), f(s.mapKpa), f(s.avcsDeg), f(s.altDutyPct),
-                t?.gear?.toString() ?: "", t?.atfC?.toString() ?: "", t?.turbineRpm?.toString() ?: "", f(t?.lockUpPct),
-                f(t?.transferPct), t?.frontWheelKmh?.toString() ?: "", t?.rearWheelKmh?.toString() ?: "",
-                f(s.fuelSensorV), f(s.fuelSensorOhm),
-            ).joinToString(",") + extras.joinToString("") { p ->
+            (listOf(s.timeMs.toString()) + columns.map { it.get(row) }).joinToString(",") + extras.joinToString("") { p ->
                 "," + (extra[p.id]?.let { v ->
                     if (kotlin.math.abs(v) >= 1e7) "%.6g".format(Locale.US, v)
                     else "%.4f".format(Locale.US, v).trimEnd('0').trimEnd('.')

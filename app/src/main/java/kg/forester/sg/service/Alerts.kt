@@ -28,6 +28,7 @@ object Alerts {
     @Volatile private var ttsReady = false
 
     fun init(ctx: Context) {
+        if (Repo.settings.voiceAlerts) Speech.prepare(ctx)
         if (tts != null) return
         tts = TextToSpeech(ctx.applicationContext) { status ->
             val t = tts ?: return@TextToSpeech
@@ -48,6 +49,8 @@ object Alerts {
         if (banner) current.value = a
         history.value = (listOf(a) + history.value).take(50)
         if (!speak || !Repo.settings.voiceAlerts || Repo.settings.demo) return
+        // the app's own voice first, then the head unit's TTS, then a beep
+        if (Speech.say(text)) return
         if (ttsReady) {
             runCatching { tts?.speak(text, TextToSpeech.QUEUE_ADD, null, id) }
         } else if (level != Level.INFO) {

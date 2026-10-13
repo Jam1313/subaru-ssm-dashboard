@@ -17,7 +17,12 @@ data class ServiceItem(
     val lastKm: Double = -1.0,
     val lastMs: Long = 0L,
     val custom: Boolean = false,
+    /** Engine hours interval (0 = not by hours) and the engine hours when it was last done (-1 = unknown). */
+    val hours: Int = 0,
+    val lastHours: Double = -1.0,
 ) {
+    fun hoursLeft(h: Double) = if (hours <= 0 || lastHours < 0) null else lastHours + hours - h
+
     /** Kilometres left (negative = overdue), null without an odometer or a "last done". */
     fun kmLeft(odo: Double?) = if (odo == null || lastKm < 0 || km <= 0) null else lastKm + km - odo
 
@@ -27,10 +32,12 @@ data class ServiceItem(
     fun used(odo: Double?, now: Long): Float? {
         val byKm = kmLeft(odo)?.let { 1f - (it / km).toFloat() }
         val byTime = daysLeft(now)?.let { 1f - it / (months * 30.44f) }
-        return listOfNotNull(byKm, byTime).maxOrNull()?.coerceAtLeast(0f)
+        val byHours = hoursLeft(Maintenance.hours())?.let { 1f - (it / hours).toFloat() }
+        return listOfNotNull(byKm, byTime, byHours).maxOrNull()?.coerceAtLeast(0f)
     }
 
-    fun due(odo: Double?, now: Long) = (kmLeft(odo)?.let { it <= 500 } ?: false) || (daysLeft(now)?.let { it <= 14 } ?: false)
+    fun due(odo: Double?, now: Long) = (kmLeft(odo)?.let { it <= 500 } ?: false) || (daysLeft(now)?.let { it <= 14 } ?: false) ||
+        (hoursLeft(Maintenance.hours())?.let { it <= 15 } ?: false)
 }
 
 /**
@@ -41,7 +48,8 @@ object Maintenance {
     private fun defaults(): List<ServiceItem> {
         val mt = Repo.settings.gearbox == "mt"
         return listOf(
-            ServiceItem("oil", "Масло и фильтр двигателя", 7500, 6, "Турбо и город — лучше 5000–7000 км. EJ любит масло 5W-30/5W-40 и проверку уровня между заменами."),
+            ServiceItem("oil", "Масло и фильтр двигателя", 7500, 6, "Турбо и город — лучше 5000–7000 км. EJ любит масло 5W-30/5W-40 и проверку уровня между заменами. " +
+                "В пробках и на прогревах километров мало, а мотор работает: поэтому ещё и по моточасам (250 ч ≈ 7500 км со средней 30 км/ч).", hours = 250),
             ServiceItem("belt", "Ремень ГРМ, ролики, помпа", 100_000, 72, "На EJ20/EJ25 ремень. При обрыве на DOHC моторах гнёт клапаны. На FB/FA (Forester SJ/SK) цепь — этот пункт можно выключить."),
             ServiceItem("plugs", "Свечи зажигания", 30_000, 36, "Иридиевые на атмо — до 60 000 км. На EJ для замены часто снимают АКБ/воздуховод: оппозит."),
             ServiceItem("air", "Воздушный фильтр", 30_000, 24),
@@ -63,6 +71,7 @@ object Maintenance {
         fun merge(d: ServiceItem, o: JSONObject?) = if (o == null) d else d.copy(
             name = o.optString("name", d.name), km = o.optInt("km", d.km), months = o.optInt("months", d.months),
             on = o.optBoolean("on", d.on), lastKm = o.optDouble("lastKm", d.lastKm), lastMs = o.optLong("lastMs", d.lastMs),
+            hours = o.optInt("hours", d.hours), lastHours = o.optDouble("lastHours", d.lastHours),
         )
         val base = defaults().map { merge(it, byId[it.id]) }
         val custom = byId.values.filter { it.optBoolean("custom") }.map {
@@ -75,7 +84,8 @@ object Maintenance {
         val arr = JSONArray()
         list.forEach {
             arr.put(JSONObject().put("id", it.id).put("name", it.name).put("km", it.km).put("months", it.months)
-                .put("on", it.on).put("lastKm", it.lastKm).put("lastMs", it.lastMs).put("custom", it.custom))
+                .put("on", it.on).put("lastKm", it.lastKm).put("lastMs", it.lastMs).put("custom", it.custom)
+                .put("hours", it.hours).put("lastHours", it.lastHours))
         }
         Repo.settings.maintenance = arr.toString()
         Repo.maintenanceVersion.value++
@@ -100,8 +110,16 @@ object Maintenance {
         Repo.maintenanceVersion.value++
     }
 
-    /** "Сделано сейчас": today's date and odometer. */
-    fun markDone(item: ServiceItem) = update(item.copy(lastKm = odometer() ?: item.lastKm, lastMs = System.currentTimeMillis()))
+    /** Engine hours now (counted by the app while the engine runs, the user can set the starting value). */
+    fun hours(): Double = Repo.settings.engineHours
+
+    fun setHours(h: Double) {
+        Repo.settings.engineHours = h
+        Repo.maintenanceVersion.value++
+    }
+
+    /** "Сделано сейчас": today's date, odometer and engine hours. */
+    fun markDone(item: ServiceItem) = update(item.copy(lastKm = odometer() ?: item.lastKm, lastMs = System.currentTimeMillis(), lastHours = hours()))
 
     /** The most urgent due job as a sentence, for the daily reminder. */
     fun dueText(): String? {
@@ -111,10 +129,13 @@ object Maintenance {
             .maxByOrNull { it.used(odo, now) ?: 0f } ?: return null
         val km = due.kmLeft(odo)?.roundToInt()
         val days = due.daysLeft(now)
+        val h = due.hoursLeft(hours())?.roundToInt()
         val left = when {
             km != null && km < 0 -> "просрочено на ${-km} км"
             days != null && days < 0 -> "просрочено на ${-days} дн."
+            h != null && h < 0 -> "просрочено на ${-h} моточасов"
             km != null && km <= 500 -> "осталось $km км"
+            h != null && h <= 15 -> "осталось $h моточасов"
             days != null -> "осталось $days дн."
             else -> ""
         }

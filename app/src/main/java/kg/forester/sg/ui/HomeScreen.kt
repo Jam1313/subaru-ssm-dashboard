@@ -255,6 +255,13 @@ private fun BarCard(
                 if (warn) C.Orange else Color.White,
             )
             if (extra != null) T(extra, 11.sp, C.Sub, maxLines = 1)
+            else if (!tight && Repo.settings.feature("minmax")) {
+                // the trip's lowest and highest, as in BtSSM
+                Repo.tripRange.collectAsState().value[info.substringAfter('.')]?.let { (lo, hi) ->
+                    // the range is updated after the card's value: include the value so "max" is never below it
+                    T("мин ${format.format(minOf(lo, value ?: lo))} · макс ${format.format(maxOf(hi, value ?: hi))}", 10.sp, C.Sub, maxLines = 1)
+                }
+            }
             Spacer(Modifier.height(if (tight) 4.dp else 6.dp))
             ProgressBar(value?.let { (it - min) / (max - min) } ?: 0f, color, Modifier.fillMaxWidth(), if (tight) 5.dp else 6.dp)
         }

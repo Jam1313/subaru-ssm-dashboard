@@ -12,8 +12,10 @@ android {
         applicationId = "kg.forester.sg"
         minSdk = 26
         targetSdk = 34
-        versionCode = 17
-        versionName = "0.9-beta9"
+        versionCode = 18
+        versionName = "0.9-beta10"
+        // head units and phones are ARM; the x86 copies of the native speech libraries only made the APK bigger
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     // Release key lives outside the repo: SUBARU_RELEASE_STORE / _PASSWORD / _ALIAS in ~/.gradle/gradle.properties.
@@ -61,4 +63,8 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.osmdroid:osmdroid-android:6.1.20")
+    // offline speech synthesis for the warnings (k2-fsa sherpa-onnx, Apache-2.0; ARM-only copy of the v1.13.8 AAR)
+    implementation(files("libs/sherpa-onnx-1.13.8-arm.aar"))
+    // unpacking the downloaded voice (.tar.bz2)
+    implementation("org.apache.commons:commons-compress:1.21")
 }

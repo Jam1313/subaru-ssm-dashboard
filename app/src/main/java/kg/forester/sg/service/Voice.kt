@@ -191,10 +191,15 @@ object Voice {
             "весь экран" in c || "на весь" in c -> { say("Весь экран"); Shortcuts.exitSplit(app) }
             "громче" in c -> volume(+2)
             "тише" in c -> volume(-2)
-            "следующ" in c || "дальше" in c || "далее" in c -> { Fyt.next(); say("Следующий") }
-            "предыдущ" in c || "назад" in c -> { Fyt.prev(); say("Предыдущий") }
+            // the head unit's own player / radio / BT get FYT commands; anything else playing (Yandex Music,
+            // Spotify, VK…) gets the standard media keys, which go to the app that plays now
+            "следующ" in c || "дальше" in c || "далее" in c -> { if (fytPlaying()) Fyt.next() else mediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, ""); say("Следующий") }
+            "предыдущ" in c || "назад" in c -> { if (fytPlaying()) Fyt.prev() else mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, ""); say("Предыдущий") }
             "пауза" in c || "стоп" in c -> { if (Fyt.music.value.playing) Fyt.playPause() else mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE, ""); say("Пауза") }
-            "играй" in c || "продолж" in c || "включи музыку" in c -> { if (!Fyt.music.value.playing) Fyt.playPause(); say("Играю") }
+            "играй" in c || "продолж" in c || "включи музыку" in c -> {
+                if (otherAppPlaying() || !Fyt.present(app)) mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "") else if (!Fyt.music.value.playing) Fyt.playPause()
+                say("Играю")
+            }
             "радио" in c -> { Fyt.ensureRadio(); go(VoiceTarget.MEDIA, "Радио") }
             "расход" in c -> go(VoiceTarget.FUEL, "Расход")
             "коробк" in c || "акпп" in c -> go(VoiceTarget.GEARBOX, "АКПП")
@@ -234,6 +239,17 @@ object Voice {
         }
         say(if (steps > 0) "Громче" else "Тише")
     }
+
+    /** The head unit's own music, radio or Bluetooth audio is what plays now. */
+    private fun fytPlaying(): Boolean {
+        if (!Fyt.present(app)) return false
+        val androidMusic = (app.getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive
+        // FYT radio plays past Android's audio: it counts only while no app plays music
+        return Fyt.music.value.playing || (Fyt.appId.value == 1 && !androidMusic)
+    }
+
+    /** Some other app holds the music stream (Fyt's player is silent). */
+    private fun otherAppPlaying() = (app.getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive && !Fyt.music.value.playing
 
     private fun mediaKey(code: Int, label: String) {
         val am = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager

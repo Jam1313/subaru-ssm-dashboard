@@ -344,6 +344,7 @@ fun ServiceCard(info: String, m: Modifier) {
                 val days = next.daysLeft(now)
                 T(next.name, 13.sp, maxLines = 2)
                 T(listOfNotNull(km?.let { if (it < 0) "просрочено ${-it} км" else "через $it км" },
+                    next.hoursLeft(Maintenance.hours())?.roundToInt()?.let { if (it < 0) "просрочено ${-it} м·ч" else "$it м·ч" },
                     days?.let { if (it < 0) "${-it} дн. назад" else "$it дн." }).joinToString(" · "), 12.sp,
                     if (next.due(odo, now)) C.Orange else C.Sub, maxLines = 1)
             }

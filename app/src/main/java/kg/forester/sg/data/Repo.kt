@@ -164,6 +164,26 @@ class Settings(ctx: Context) {
     fun feature(id: String) = p.getBoolean("f_$id", true)
     fun setFeature(id: String, on: Boolean) { p.edit().putBoolean("f_$id", on).apply(); Repo.featureVersion.value++ }
 
+    /** The transmission unit is read every N-th engine poll (3 = as before; more = faster engine data). */
+    var tcuEvery: Int
+        get() = p.getInt("tcuEvery", 3)
+        set(v) = p.edit().putInt("tcuEvery", v).apply()
+
+    /** Read only the ATF temperature (and gear selector) from the transmission unit. */
+    var tcuAtfOnly: Boolean
+        get() = p.getBoolean("tcuAtfOnly", false)
+        set(v) { p.edit().putBoolean("tcuAtfOnly", v).apply(); Repo.watchVersion.value++ }
+
+    /** CSV log columns switched off (keys of LogColumns); everything else is written. */
+    var logOff: Set<String>
+        get() = p.getString("logOff", "")!!.split(',').filter { it.isNotBlank() }.toSet()
+        set(v) = p.edit().putString("logOff", v.joinToString(",")).apply()
+
+    /** Built-in voice for the spoken warnings: "irina" (female, default), "dmitri", "denis". */
+    var ttsVoice: String
+        get() = p.getString("ttsVoice", "irina")!!
+        set(v) = p.edit().putString("ttsVoice", v).apply()
+
     /** Last automatic look for a newer release. */
     var lastUpdateCheckMs: Long
         get() = p.getLong("updCheck", 0L)
@@ -194,6 +214,11 @@ class Settings(ctx: Context) {
     var odoBaseTripsKm: Double
         get() = p.getFloat("odoBaseTrips", 0f).toDouble()
         set(v) = p.edit().putFloat("odoBaseTrips", v.toFloat()).apply()
+
+    /** Engine running hours the app has counted (plus what the user set), for oil changes by hours. */
+    var engineHours: Double
+        get() = p.getFloat("engineHours", 0f).toDouble()
+        set(v) = p.edit().putFloat("engineHours", v.toFloat()).apply()
 
     /** Maintenance items as JSON (see Maintenance). */
     var maintenance: String
@@ -428,6 +453,8 @@ object Repo {
     val perf = MutableStateFlow(kg.forester.sg.service.PerfState())
     val tyres = MutableStateFlow<Map<String, kg.forester.sg.service.TyreReading>>(emptyMap())
     val shift = MutableStateFlow(false)
+    /** Lowest and highest value of each home card since the trip started, by card id. */
+    val tripRange = MutableStateFlow<Map<String, Pair<Float, Float>>>(emptyMap())
     val maintenanceVersion = MutableStateFlow(0)
     val featureVersion = MutableStateFlow(0)
     /** The ECU answers only standard OBD-II (no SSM): basic parameters, no transmission data. */

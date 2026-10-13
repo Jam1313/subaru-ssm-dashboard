@@ -14,9 +14,26 @@
 
 ## 🧪 Бета 0.9 (для тестов)
 
-Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta8, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
+Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta9, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
 
-> **[⬇️ Скачать 0.9-beta9](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta9/subaru-ssm-dashboard-0.9-beta9.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta9) · [руководство (PDF)](docs/manual-ru.pdf)
+> **[⬇️ Скачать 0.9-beta10](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta10/subaru-ssm-dashboard-0.9-beta10.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta10) · [руководство (PDF)](docs/manual-ru.pdf)
+
+### Новое в 0.9-beta10
+
+- **Встроенный голос для предупреждений.** Голос не зависит от магнитолы и работает без интернета.
+  - Русский синтез речи встроен в приложение; голос скачивается один раз, около 21 МБ.
+  - По умолчанию женский голос «Ирина», можно выбрать «Дмитрий» или «Денис».
+  - Музыка на время фразы приглушается, как при подсказках навигатора.
+  - Настройки → «Функции» → «Голосовые предупреждения», там же «Прослушать».
+- **Мин/макс за поездку** под значением на каждой карточке Главной, как в BtSSM. Выключается в «Функциях».
+- **Выбор колонок CSV-лога.** «Лог» → «Что писать в лог…»: например, параметры АКПП можно убрать.
+- **Новые колонки лога:**
+  - нагрузка г/об, загрузка форсунок;
+  - IAM, FBKC (откат) и FLKC (обучение), целевой наддув;
+  - координаты GPS.
+- **Опрос АКПП:** каждый 3-й, 10-й или 30-й опрос двигателя, или только температура ATF. Данные ЭБУ обновляются чаще.
+- **ТО по моточасам.** Приложение само считает моточасы. У масла интервал 7500 км, 6 месяцев или 250 моточасов, что наступит раньше, с напоминанием.
+- **Голосовые команды для Яндекс Музыки и других плееров:** «следующий», «предыдущий», «пауза» и «играй» работают с тем приложением, которое сейчас играет.
 
 ### Новое в 0.9-beta9
 
@@ -303,6 +320,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Благодарности и источники данных
 - [RomRaider](https://www.romraider.com/): логгер-определения SSM v370 (параметры, переключатели, расширенные параметры по ROM ID, коды ошибок), GPL. Исходный файл и генератор лежат в `tools/romraider/`, русские названия в `tools/romraider/ru/`;
 - [FreeSSM](https://github.com/Comer352L/FreeSSM): таблицы параметров и ошибок ЭБУ и АКПП, таблица температуры ATF, GPL-3.0;
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): офлайн-синтез речи, Apache-2.0;
+- голоса [Piper](https://huggingface.co/rhasspy/piper-voices): «Ирина» (обучен на голосе Irina проекта [RHVoice](https://github.com/RHVoice/RHVoice), CC BY-SA 4.0 / GPL-3.0), «Дмитрий» и «Денис» (CC0); скачиваются в приложении, в репозитории их нет;
 - [usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android): драйверы USB-serial, MIT;
 - [Lucide](https://lucide.dev/) через [composables icons-lucide](https://github.com/composablehorizons/compose-icons): иконки, ISC.
 

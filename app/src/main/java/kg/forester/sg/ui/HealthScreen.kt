@@ -128,8 +128,12 @@ private fun EngineTab() {
                 "• термостат: 20 минут езды, а ОЖ ниже 72°;\n" +
                 "• ATF выше 110° / 120°; турботаймер после нагрузки; ТО по пробегу и сроку; давление в шинах.", 11.sp, C.Sub)
             Spacer(Modifier.height(10.dp))
-            SwitchRow("Голосовые предупреждения", "Голосом магнитолы, если в ней есть русский синтез речи; иначе короткий сигнал", voice) {
+            val ctx = LocalContext.current
+            val speech by kg.forester.sg.service.Speech.status.collectAsState()
+            SwitchRow("Голосовые предупреждения", "Встроенный русский голос (скачивается один раз, ~21 МБ)" +
+                if (speech.isNotEmpty()) ". Голос: $speech" else "", voice) {
                 voice = it; Repo.settings.voiceAlerts = it
+                if (it) kg.forester.sg.service.Speech.prepare(ctx)
             }
         }
     }
@@ -162,6 +166,14 @@ private fun ServiceTab() {
             NumberField("Пробег по одометру, км", odoText) { odoText = it }
             Spacer(Modifier.height(8.dp))
             ActionButton("Сохранить пробег", odoText.toDoubleOrNull() != null) { odoText.toDoubleOrNull()?.let { Maintenance.setOdometer(it) } }
+            Spacer(Modifier.height(14.dp))
+            var hoursText by remember { mutableStateOf("%.0f".format(Maintenance.hours())) }
+            T("Моточасы: ${"%.1f".format(Maintenance.hours())} ч — приложение считает их само, пока работает двигатель. " +
+                "Если знаете точнее (с прошлого ТО), поправьте.", 12.sp, C.Sub)
+            Spacer(Modifier.height(6.dp))
+            NumberField("Моточасы", hoursText) { hoursText = it }
+            Spacer(Modifier.height(6.dp))
+            ActionButton("Сохранить моточасы", hoursText.toDoubleOrNull() != null) { hoursText.toDoubleOrNull()?.let { Maintenance.setHours(it) } }
             Spacer(Modifier.height(16.dp))
             T("Нажмите на пункт, чтобы указать, когда его делали, и поменять интервал. «Сделано» — сегодня на текущем пробеге.", 11.sp, C.Sub)
             Spacer(Modifier.height(8.dp))
@@ -185,6 +197,7 @@ private fun ServiceTab() {
                         Column(Modifier.weight(1f)) {
                             T(it.name + if (!it.on) " (выключено)" else "", 14.sp, if (it.on) C.Text else C.Sub)
                             T("каждые ${"%,d".format(it.km).replace(',', ' ')} км / ${it.months} мес." +
+                                (if (it.hours > 0) " / ${it.hours} м·ч" else "") +
                                 (if (it.lastMs > 0) " · последний раз ${fmt.format(Date(it.lastMs))}" else "") +
                                 (if (it.lastKm >= 0) " на ${it.lastKm.roundToInt()} км" else ""), 11.sp, C.Sub, maxLines = 1)
                             Spacer(Modifier.height(4.dp))
@@ -197,6 +210,7 @@ private fun ServiceTab() {
                                 else -> listOfNotNull(
                                     km?.let { k -> if (k < 0) "просрочено на ${-k} км" else "осталось $k км" },
                                     days?.let { d -> if (d < 0) "просрочено на ${-d} дн." else "$d дн." },
+                                    it.hoursLeft(Maintenance.hours())?.roundToInt()?.let { h -> if (h < 0) "просрочено на ${-h} м·ч" else "$h м·ч" },
                                 ).joinToString(" · ")
                             }, 11.sp, if (due) C.Orange else C.Sub)
                         }
@@ -221,6 +235,8 @@ private fun ServiceDialog(item: ServiceItem, onClose: () -> Unit) {
     var months by remember { mutableStateOf(item.months.toString()) }
     var lastKm by remember { mutableStateOf(if (item.lastKm >= 0) item.lastKm.roundToInt().toString() else "") }
     var lastDate by remember { mutableStateOf(if (item.lastMs > 0) fmt.format(Date(item.lastMs)) else "") }
+    var hours by remember { mutableStateOf(if (item.hours > 0) item.hours.toString() else "") }
+    var lastHours by remember { mutableStateOf(if (item.lastHours >= 0) "%.0f".format(item.lastHours) else "") }
     var on by remember { mutableStateOf(item.on) }
     AlertDialog(
         onDismissRequest = onClose,
@@ -231,7 +247,9 @@ private fun ServiceDialog(item: ServiceItem, onClose: () -> Unit) {
                 if (item.custom) androidx.compose.material3.OutlinedTextField(name, { name = it }, label = { Text("Название") }, singleLine = true)
                 NumberField("Интервал, км", km) { km = it }
                 NumberField("Интервал, месяцев", months) { months = it }
+                NumberField("Интервал, моточасы (пусто — не считать)", hours) { hours = it }
                 NumberField("Когда делали: пробег, км", lastKm) { lastKm = it }
+                NumberField("Когда делали: моточасы", lastHours) { lastHours = it }
                 androidx.compose.material3.OutlinedTextField(lastDate, { lastDate = it }, label = { Text("Когда делали: дата (дд.мм.гггг)") }, singleLine = true)
                 SwitchRow("Следить за этим пунктом", "", on) { on = it }
             }
@@ -243,6 +261,7 @@ private fun ServiceDialog(item: ServiceItem, onClose: () -> Unit) {
                     name = name.ifBlank { item.name.ifBlank { "Свой пункт" } },
                     km = km.toIntOrNull() ?: item.km, months = months.toIntOrNull() ?: item.months,
                     lastKm = lastKm.toDoubleOrNull() ?: -1.0, lastMs = if (lastDate.isBlank()) 0L else ms, on = on,
+                    hours = hours.toIntOrNull() ?: 0, lastHours = lastHours.toDoubleOrNull() ?: -1.0,
                 ))
                 onClose()
             }) { Text("Сохранить") }
@@ -253,6 +272,7 @@ private fun ServiceDialog(item: ServiceItem, onClose: () -> Unit) {
                 TextButton(onClose) { Text("Отмена") }
             }
         },
+        containerColor = C.Card, titleContentColor = C.Text, textContentColor = C.Text,
     )
 }
 
