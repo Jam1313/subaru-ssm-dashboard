@@ -132,7 +132,8 @@ fun CarAdapterSettings() {
             Spacer(Modifier.height(6.dp))
             val car3d by Repo.car3d.collectAsState()
             val ctx = androidx.compose.ui.platform.LocalContext.current
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // many models now: wrap onto several lines instead of running off the panel
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 CarModels3d.forEach { (k, l) -> Chip(l, car3d == k, { s.car3d = k }) }
             }
             Spacer(Modifier.height(10.dp))
@@ -162,7 +163,7 @@ fun CarAdapterSettings() {
                         .clickable { picker = !picker },
                 )
             }
-            T(carPaint(paintSel).name + if (!anyColour) " · белый и серебро есть у модели SH" else "", 11.sp, C.Sub)
+            T(carPaint(paintSel).name + if (!anyColour) " · у этой модели нет белого и серебра — выберите другую 3D-модель" else "", 11.sp, C.Sub)
             if (picker) {
                 Spacer(Modifier.height(8.dp))
                 ColourPicker(paintSel.removePrefix("custom:").toIntOrNull(16) ?: 0x2563EB) { rgb ->

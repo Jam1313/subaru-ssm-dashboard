@@ -69,7 +69,7 @@ val DriveCards: CardNames = linkedMapOf(
     "throttleMotor" to ("Привод дросселя" to Lucide.Cog),
     "wgdc" to ("Wastegate" to Lucide.Wind),
     "pressure" to ("Абс. давление" to Lucide.Gauge),
-)
+) + ExtraCards
 
 private val DriveEdit = BoardEdit(
     DriveBoard,
@@ -80,6 +80,7 @@ private val DriveEdit = BoardEdit(
 /** Row heights: gauges 0.9, charts 1.2, small tiles 0.55; a row with a needle gauge gets 1.3 so the dial is readable. */
 private fun driveRowWeight(t: TileCfg) = when {
     t.id.startsWith("chart") -> 1.2f
+    t.id in kg.forester.sg.data.EXTRA_CARDS -> 0.9f
     t.style.isNotEmpty() -> 1.3f
     t.id in setOf("avcs", "injDuty", "maf", "throttleMotor", "wgdc", "pressure") -> 0.55f
     else -> 0.9f
@@ -139,6 +140,7 @@ fun DriveScreen() {
             "throttleMotor" -> Small(Lucide.Cog, "Привод дросселя", e.throttleMotorPct, -100f, 100f, "%", "%.0f")
             "wgdc" -> Small(Lucide.Wind, "Wastegate", e.wastegatePct, 0f, 100f, "%", "%.0f")
             "pressure" -> Tile(Lucide.Gauge, "Абс. давление", "${fmtF(e.mapKpa, 0)} / ${fmtF(e.atmKpa, 0)}", "кПа", m, info)
+            else -> ExtraCard(t.id, info, m)
         }
     }
 }

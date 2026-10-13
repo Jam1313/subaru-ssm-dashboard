@@ -152,6 +152,81 @@ class Settings(ctx: Context) {
         get() = p.getString("watch", "")!!.split(',').filter { it.isNotBlank() }.toSet()
         set(v) { p.edit().putString("watch", v.joinToString(",")).apply(); Repo.watchVersion.value++ }
 
+    private fun str(k: String, d: String) = p.getString(k, d)!!
+    private fun putStr(k: String, v: String) = p.edit().putString(k, v).apply()
+
+    /**
+     * Optional features, all on by default and switched in Настройки → «Функции»: "knock" (IAM/knock warnings),
+     * "turbo" (turbo timer), "warmup", "cooling" (overheating, thermostat, coolant spike), "atf", "service"
+     * (maintenance reminders), "perf" (acceleration/laps, «Замеры» screen), "motion" (G-meter, tilt),
+     * "sensors" and "health" (those screens in the menu).
+     */
+    fun feature(id: String) = p.getBoolean("f_$id", true)
+    fun setFeature(id: String, on: Boolean) { p.edit().putBoolean("f_$id", on).apply(); Repo.featureVersion.value++ }
+
+    /** Spoken warnings (IAM, overheating, maintenance…); without a Russian voice on the unit it is a beep. */
+    var voiceAlerts: Boolean
+        get() = p.getBoolean("voiceAlerts", true)
+        set(v) = p.edit().putBoolean("voiceAlerts", v).apply()
+
+    /** Shift light: the screen edges flash from [shiftRpm]. */
+    var shiftLight: Boolean
+        get() = p.getBoolean("shiftLight", false)
+        set(v) = p.edit().putBoolean("shiftLight", v).apply()
+    var shiftRpm: Int
+        get() = p.getInt("shiftRpm", 6300)
+        set(v) = p.edit().putInt("shiftRpm", v).apply()
+
+    /** Car with driver and fuel, kg: for the "dyno" power estimate. */
+    var massKg: Int
+        get() = p.getInt("massKg", 1550)
+        set(v) = p.edit().putInt("massKg", v).apply()
+
+    /** Odometer the user typed in, and the app's own trip total at that moment (km). */
+    var odoBaseKm: Double
+        get() = p.getFloat("odoBase", -1f).toDouble()
+        set(v) = p.edit().putFloat("odoBase", v.toFloat()).apply()
+    var odoBaseTripsKm: Double
+        get() = p.getFloat("odoBaseTrips", 0f).toDouble()
+        set(v) = p.edit().putFloat("odoBaseTrips", v.toFloat()).apply()
+
+    /** Maintenance items as JSON (see Maintenance). */
+    var maintenance: String
+        get() = str("maintenance", "")
+        set(v) = putStr("maintenance", v)
+
+    /** IAM readings worth keeping (start of each drive), JSON list. */
+    var iamLog: String
+        get() = str("iamLog", "[]")
+        set(v) = putStr("iamLog", v)
+
+    /** Acceleration runs, JSON list (newest first). */
+    var perfRuns: String
+        get() = str("perfRuns", "[]")
+        set(v) = putStr("perfRuns", v)
+
+    /** Lap timer start/finish line "lat,lon", "" = not set. */
+    var lapLine: String
+        get() = str("lapLine", "")
+        set(v) = putStr("lapLine", v)
+
+    /** Bluetooth tyre pressure sensors. */
+    var tpms: Boolean
+        get() = p.getBoolean("tpms", false)
+        set(v) = p.edit().putBoolean("tpms", v).apply()
+    var tpmsMinBar: Float
+        get() = p.getFloat("tpmsMin", 1.8f)
+        set(v) = p.edit().putFloat("tpmsMin", v).apply()
+    /** Sensor address → wheel (FL, FR, RL, RR) where the user moved one, JSON object. */
+    var tpmsWheels: String
+        get() = str("tpmsWheels", "{}")
+        set(v) = putStr("tpmsWheels", v)
+
+    /** Head unit tilt sensor zero: gravity at rest "x,y,z", "" = not calibrated. */
+    var tiltZero: String
+        get() = str("tiltZero", "")
+        set(v) = putStr("tiltZero", v)
+
     /** What a USB adapter turned out to be in "Auto": ELM327 speed, 0 = KKL, null = not asked yet. */
     fun usbKind(id: String): Int? = if (p.contains("usb:$id")) p.getInt("usb:$id", 0) else null
     fun setUsbKind(id: String, baud: Int) = p.edit().putInt("usb:$id", baud).apply()
@@ -266,7 +341,14 @@ class Settings(ctx: Context) {
         carTitle = m.title
         carSub = m.sub
         bus = m.bus
-        if (m.id == "SG" || m.id == "SH") car3d = m.id
+        // the 3D car closest to the chosen model (the SH default is the atmo EJ25: no bonnet scoop)
+        car3d = when (m.id) {
+            "SG" -> "SG"
+            "SH" -> "SHNA"
+            "GD" -> "GG"
+            "BL", "BH" -> "BM"
+            else -> "SK"
+        }
     }
 
     /** Raw adapter exchange log for testers (logs/ssm_trace.txt). */
@@ -331,6 +413,16 @@ object Repo {
     /** Ticked parameters that are being read now (the rest are not supported or answered nothing). */
     val rrPolled = MutableStateFlow<List<kg.forester.sg.ssm.RrParam>>(emptyList())
     val watchVersion = MutableStateFlow(0)
+    /** RomRaider parameters the app itself needs (IAM, knock corrections, target boost, VDC G sensor…). */
+    val internalWatch = MutableStateFlow<Set<String>>(emptySet())
+    val guard = MutableStateFlow(kg.forester.sg.service.GuardState())
+    val peaks = MutableStateFlow(kg.forester.sg.service.Peaks())
+    val motion = MutableStateFlow(kg.forester.sg.service.MotionState())
+    val perf = MutableStateFlow(kg.forester.sg.service.PerfState())
+    val tyres = MutableStateFlow<Map<String, kg.forester.sg.service.TyreReading>>(emptyMap())
+    val shift = MutableStateFlow(false)
+    val maintenanceVersion = MutableStateFlow(0)
+    val featureVersion = MutableStateFlow(0)
     /** The ECU answers only standard OBD-II (no SSM): basic parameters, no transmission data. */
     val obdMode = MutableStateFlow(false)
     /** What the automatic adapter search found, e.g. "USB 1A86:7523 → KKL". */

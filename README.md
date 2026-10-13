@@ -14,9 +14,61 @@
 
 ## 🧪 Бета 0.9 (для тестов)
 
-Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta5, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
+Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta6, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
 
-> **[⬇️ Скачать 0.9-beta6](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta6/subaru-ssm-dashboard-0.9-beta6.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta6) · [руководство (PDF)](docs/manual-ru.pdf)
+> **[⬇️ Скачать 0.9-beta7](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta7/subaru-ssm-dashboard-0.9-beta7.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta7) · [руководство (PDF)](docs/manual-ru.pdf)
+
+### Новое в 0.9-beta7
+
+Всё новое выключается в **Настройки → «Функции»**, если кому-то не нужно.
+
+| Замеры разгона | G-метр и крен на выбранной 3D-модели |
+|---|---|
+| ![Замеры](docs/screenshots/perf-runs.png) | ![G-метр](docs/screenshots/gmeter-tilt.png) |
+| **Турботаймер** | **Настройки → «Функции»** |
+| ![Турботаймер](docs/screenshots/turbo-timer.png) | ![Функции](docs/screenshots/settings-features.png) |
+
+![3D-модели](docs/screenshots/models-3d.png)
+
+- **3D-модели.** Добавлены Forester SK, Legacy BM9, WRX STI 2018 и GRC, Impreza Wagon GG и STI GV, 22B, купе GC.
+  - Добавлены атмо-версии Forester SG5 и SH без воздухозаборника на капоте.
+  - SG5 переделана: тонированные стёкла, ровная посадка, штатный бампер, любой цвет кузова.
+  - Машина на ходу не крутится пальцем, а при возврате на Главную сразу стоит задом.
+
+- **Защита мотора:**
+  - IAM и коррекции по детонации FBKC/FLKC по базе RomRaider, с предупреждением о плохом бензине;
+  - история IAM по поездкам, рядом последняя заправка;
+  - перегрев ОЖ;
+  - резкий рост температуры ОЖ на прогретом моторе: на EJ25 это признак прокладки ГБЦ или воздуха в системе;
+  - термостат: время прогрева, «не прогревается»;
+  - ATF выше 110 и 120°.
+- **Турботаймер и прогрев.** После нагрузки приложение подсказывает, сколько подождать на холостых, а на холодном масле — «не выше 3000». Температура масла берётся из ЭБУ, а если её там нет, оценивается.
+- **Предупреждения** баннером поверх любого экрана и голосом (русский синтез речи магнитолы, без него — сигнал). Есть журнал предупреждений.
+- **Экран «Замеры»:**
+  - разгон 0–60, 0–100, 0–150, 0–200, 201 и 402 м с конечной скоростью;
+  - на ходу 60–100, 80–120, 100–200;
+  - «диностенд»: мощность и момент на колёсах по оборотам, по массе и ускорению;
+  - секундомер кругов по GPS;
+  - G-метр и крен/тангаж.
+- **G-метр и крен.** Источник выбирается сам:
+  - акселерометр магнитолы, если он есть, с обнулением на ровном месте;
+  - датчик VDC (SH и новее);
+  - GPS и скорость.
+  
+  Уклон дороги считается по высоте GPS.
+- **Экран «Здоровье»:** мотор, план ТО, шины, журнал предупреждений.
+  - План ТО под EJ: масло, ремень ГРМ, свечи, фильтры, ATF, редуктор, антифриз, тормозная жидкость.
+  - Пробег считается от введённого одометра плюс поездки. Напоминание раз в день.
+- **Давление в шинах** от недорогих Bluetooth-датчиков TPMS (TPMS1…TPMS4): предупреждения о низком давлении и медленной утечке.
+- **Лампа переключения передач** с настраиваемым порогом.
+- **Новые карточки** для Главной и «Динамики»:
+  - G-метр, крен, IAM и детонация, наддув «цель / факт», пики поездки, разгон, турбина и масло, шины, ближайшее ТО;
+  - «Датчик 1…6» — любой параметр, отмеченный на экране «Датчики».
+- **Исправления:**
+  - поле номера на 3D-модели открывало цифровую клавиатуру;
+  - в учёт поездок и расход больше не попадают явно ошибочные данные (обороты выше 10 000, скорость выше 300 км/ч);
+  - параметры, которых ЭБУ не поддерживает, больше не показывают мусор (на EJ253 было «коррекция детонации 63,5°»);
+  - турботаймер показывается крупно вверху по центру и только у турбо-машин.
 
 ### Новое в 0.9-beta6
 
@@ -241,7 +293,24 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## 3D-модели
 Forester SH: [«Subaru Forester 2009»](https://sketchfab.com/3d-models/925112ae29514dcf89ccf2fc7020338e) автора **niev** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: перекрашено, затемнён салон, пустые номерные таблички (`render_turntable.py --fix sh`, упаковка `render/pack_frames.py`).
 
-Forester SG: кадры отрендерены из модели [«Subaru Forester MK2 2002-2008»](https://sketchfab.com/3d-models/subaru-forester-mk2-2002-2008-1df01538f1954a5c87adcc4a792a365a) автора **szymonpasterczyk** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: убраны тюнинг-детали и салон мода, собраны колёса и капот, перекрашено, пустые номерные таблички.
+Forester SH (атмо): та же модель [«Subaru Forester 2009»](https://sketchfab.com/3d-models/925112ae29514dcf89ccf2fc7020338e) автора **niev** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: как у SH, плюс убран воздухозаборник на капоте (атмо-версия) (`render_turntable.py --fix shna`).
+
+Forester SG: кадры отрендерены из модели [«Subaru Forester MK2 2002-2008»](https://sketchfab.com/3d-models/subaru-forester-mk2-2002-2008-1df01538f1954a5c87adcc4a792a365a) автора **szymonpasterczyk** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: убраны тюнинг-детали и салон мода, вместо тюнингового бампера поставлен штатный передний бампер из комплекта модели, капот выровнен по кузову, колёса собраны на штатных ступицах в размере стоковых шин (машина стоит ровно, на заводской высоте), добавлены тонированные стёкла (в модели их нет), затемнена внутренняя сторона кузова, перекрашено, пустые номерные таблички (`render_turntable.py --fix sg`).
+
+Forester SG5 (атмо): та же модель [«Subaru Forester MK2 2002-2008»](https://sketchfab.com/3d-models/subaru-forester-mk2-2002-2008-1df01538f1954a5c87adcc4a792a365a) автора **szymonpasterczyk** (Sketchfab), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: как у SG, плюс убран воздухозаборник на капоте (атмо-версия) (`render_turntable.py --fix sgna`).
+
+Остальные модели отрендерены так же, как SH (кадры с краской «хамелеон», белый кузов и маска кузова, поэтому доступен любой цвет): `render/render_models.sh` → `render_turntable.py --fix <id>` → `render/pack_frames.py`. У всех приведены масштаб (метры) и ориентация, номерные знаки заменены пустыми табличками, стёкла заменены тонированными; кузов перекрашивается целиком, поэтому заводские ливреи и наклейки, нарисованные на текстуре кузова, пропадают.
+
+- Forester SK 2020: [«2020 Subaru Forester»](https://sketchfab.com/3d-models/2020-subaru-forester-611ae23685c14134b5a4f3decde248e9) автора **tonielpro520**, лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: модель в дюймах приведена к метрам, филиппинские номера заменены пустыми табличками, хрому и стёклам фар возвращён блеск (в файле все материалы матовые).
+- WRX STI GRC: [«subaru wrx sti grc»](https://sketchfab.com/3d-models/subaru-wrx-sti-grc-560b949e9d5b4642ad9debbe89fa1b43) автора **amogusstrikesback2**, лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: убраны «лучи» фар и плоскости свечения фонарей, антенна на крыше, гоночная ливрея заменена краской; передней таблички нет (у оригинала её нет).
+- Legacy 2.5GT tS (BM9): [«2010 Subaru Legacy 2.5GT tS (BM9)»](https://sketchfab.com/3d-models/2010-subaru-legacy-25gt-ts-bm9-ac37399c27e64c7c940dad5aca0a567c) автора **ilvskf**, лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: затемнён салон, добавлены пустые номерные таблички.
+- WRX STI 2018 (VA): [«2018 Subaru WRX STi»](https://sketchfab.com/3d-models/2018-subaru-wrx-sti-211e549af05c449a932b977dda0b0654) автора **OUTPISTON**, лицензия [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Изменения: убрана служебная сфера окружения, применена скелетная деформация, затемнён салон, задняя табличка Subaru заменена пустой, добавлена передняя.
+- Impreza WRX Wagon (GG): [«Subaru WRX Wagon (GG)»](https://sketchfab.com/3d-models/subaru-wrx-wagon-gg-fa2c8e1d265443e982b90f964c2b3e02) автора **ilvskf**, лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Изменения: добавлены пустые номерные таблички.
+- Impreza WRX STI (GV): [«subaru impreza wrx sti special edition»](https://sketchfab.com/3d-models/subaru-impreza-wrx-sti-special-edition-52e2cdb39ce9410ca7b9c291f0bb53b9) автора **amogusstrikesback2**, лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Это седан 2011–2014 (GV) с широким обвесом. Изменения: убраны «лучи» фар, наклейки и рисунок-ливрея (перекрашиваются двери, задние крылья, крышка багажника и крыша; обвес, бамперы и карбоновый капот остаются чёрными), добавлена передняя табличка.
+- Impreza 22B STi: [«1998 Subaru Impreza 22B STi»](https://sketchfab.com/3d-models/1998-subaru-impreza-22b-sti-c61e9130c0124374a53d2eb37ca5dcc9) автора **VTX**, лицензия [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Изменения: модель в масштабе 1:100 приведена к метрам, добавлены пустые номерные таблички.
+- Impreza Coupe WRX Type R (GC): [«Subaru Impreza Coupe WRX Type R STi»](https://sketchfab.com/3d-models/subaru-impreza-coupe-wrx-type-r-sti-757ef77568f54339aa524d3b03437890) автора **vecarz**, лицензия [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Изменения: японские номера заменены пустыми табличками, непрозрачная плёнка на лобовом стекле заменена тонированным стеклом.
+
+Кадры моделей WRX STI 2018 (VA), Impreza 22B STi и Impreza Coupe WRX Type R (GC) (папки `app/src/main/assets/car_va`, `car_22b`, `car_gc`) — производные работы от моделей под CC BY-NC-SA 4.0 и распространяются под той же лицензией [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/): только некоммерческое использование, с указанием авторов и на тех же условиях. На них не распространяется лицензия GPL кода приложения.
 
 ## Лицензия
 [GPL-3.0](LICENSE). Таблицы параметров и кодов ошибок получены из проектов под GPL.

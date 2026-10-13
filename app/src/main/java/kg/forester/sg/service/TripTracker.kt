@@ -77,6 +77,8 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
     @Synchronized
     fun process(e: EcuSnapshot, gps: GpsFix?) {
         val now = e.timeMs
+        // a garbled answer (bad line, an address this ECU maps elsewhere) must not end up in the trip and fuel totals
+        if ((e.rpm ?: 0) > 10_000 || (e.speedKmh ?: 0) > 300 || (e.mafGs ?: 0f) > 500f) return
         tick(now) // closes the trip after 2 min with the engine off, even while the ECU keeps answering
         val dt = if (lastSampleMs == 0L) 0.0 else ((now - lastSampleMs) / 1000.0).coerceIn(0.0, 2.0)
         lastSampleMs = now

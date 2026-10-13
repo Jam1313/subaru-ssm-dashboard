@@ -98,6 +98,9 @@ class Board(
     }
 }
 
+/** Engine guard, performance and sensor cards (see ui/ExtraCards.kt), offered on the home and "Динамика" boards. */
+val EXTRA_CARDS = listOf("gmeter", "incline", "iam", "btarget", "peaks", "run", "turbo", "tyres", "service") + (1..6).map { "s$it" }
+
 object HomeLayout {
     const val COLUMNS = 5
 
@@ -110,7 +113,7 @@ object HomeLayout {
             "inj", "wgdc", "fuel", "boost", "gps",
         ).map { TileCfg(it, true) } + listOf(
             "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range", "tach", "speedo", "car3d", "minimap",
-        ).map { TileCfg(it, false) },
+        ).map { TileCfg(it, false) } + EXTRA_CARDS.map { TileCfg(it, false) },
         freeOnly = setOf("car3d"),
     )
 
@@ -137,7 +140,7 @@ val DriveBoard = Board(
         TileCfg("throttleMotor", true, 2), TileCfg("wgdc", true, 2), TileCfg("pressure", true, 2),
         TileCfg("rpm", false, 2), TileCfg("chartRpm", false, 6), TileCfg("chartTrims", false, 6),
         TileCfg("chartMaf", false, 6),
-    ),
+    ) + EXTRA_CARDS.map { TileCfg(it, false, if (it == "gmeter" || it == "peaks") 4 else 3) },
 )
 
 /** "АКПП": selector 3 + ATF 4 + torque converter 5 columns, the proportions of the fixed layout. */

@@ -66,7 +66,7 @@ val HomeTileInfo: Map<String, Pair<String, androidx.compose.ui.graphics.vector.I
     "speedo" to ("Спидометр" to Lucide.Gauge),
     "car3d" to ("3D-машина" to Lucide.Car),
     "minimap" to ("Мини-карта" to Lucide.Map),
-)
+) + ExtraCards
 
 @Composable
 fun HomeScreen() {
@@ -165,6 +165,7 @@ private fun HomeTile(
     gps: kg.forester.sg.data.GpsFix?, tcu: kg.forester.sg.ssm.TcuSnapshot?, m: Modifier,
 ) {
     val (title, icon) = HomeTileInfo[id] ?: return
+    if (id in ExtraCards) { ExtraCard(id, "home.$id", m); return }
     when (id) {
         "minimap" -> MiniMapCard(st, m) { HomeEdit.setStyle("minimap", it) }
         "car3d" -> Panel(m, padding = 0.dp) {

@@ -138,6 +138,7 @@ fun SettingsScreen() {
             Chip("Авто и адаптер", tab == 3, { tab = 3 }, Lucide.Car)
             Chip("Кнопки быстрого запуска", tab == 1, { tab = 1 }, Lucide.LayoutGrid)
             Chip("Голос", tab == 2, { tab = 2 }, Lucide.Mic)
+            Chip("Функции", tab == 4, { tab = 4 }, Lucide.ToggleRight)
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f)) {
@@ -145,6 +146,7 @@ fun SettingsScreen() {
                 0 -> GeneralSettings()
                 1 -> ShortcutSettings()
                 3 -> CarAdapterSettings()
+                4 -> FeatureSettings()
                 else -> VoiceSettings()
             }
         }
@@ -375,11 +377,13 @@ private fun InfoRow(k: String, v: String) {
 }
 
 @Composable
-private fun Field(label: String, value: String, onChange: (String) -> Unit) {
+private fun Field(label: String, value: String, text: Boolean = false, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true,
         label = { T(label, 12.sp, C.Sub) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        // numbers by default; the plate needs letters (capitals, as on a real plate)
+        keyboardOptions = if (text) KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters)
+        else KeyboardOptions(keyboardType = KeyboardType.Decimal),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = C.Text, unfocusedTextColor = C.Text,
             focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
@@ -412,7 +416,7 @@ private fun PlateSettings() {
         )
     }
     Spacer(Modifier.height(6.dp))
-    Field("Текст номера", text) { text = it }
+    Field("Текст номера", text, text = true) { text = it }
     T("Номер с флагом или регионом можно загрузить картинкой (фото или скан своего номера).", 11.sp, C.Sub)
     Spacer(Modifier.height(6.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -420,4 +424,53 @@ private fun PlateSettings() {
         Box(Modifier.weight(1f)) { ActionButton("Загрузить картинку", true) { picker.launch("image/*") } }
     }
     if (msg.isNotEmpty()) T(msg, 12.sp, C.Green)
+}
+
+/** Every optional feature can be switched off by whoever does not need it. */
+@Composable
+private fun FeatureSettings() {
+    val s = Repo.settings
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Repo.featureVersion.collectAsState().value
+    @Composable
+    fun F(id: String, title: String, sub: String) = SettingSwitch(title, sub, s.feature(id)) { s.setFeature(id, it) }
+    var shift by remember { mutableStateOf(s.shiftLight) }
+    var rpm by remember { mutableStateOf(s.shiftRpm.toString()) }
+    var voice by remember { mutableStateOf(s.voiceAlerts) }
+    var tpms by remember { mutableStateOf(s.tpms) }
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+            PanelTitle(Lucide.HeartPulse, "Защита мотора и предупреждения")
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                F("knock", "IAM и детонация", "Следить за IAM, FBKC, FLKC (читаются дополнительно, если есть в прошивке) и предупреждать о плохом бензине")
+                F("turbo", "Турботаймер", "Сколько подождать на холостых перед выключением после нагрузки (только турбо)")
+                F("warmup", "Прогрев", "Предупреждать, если крутить выше 3600 об/мин на холодном масле")
+                F("cooling", "Охлаждение", "Перегрев от 105°, резкий рост ОЖ (прокладка ГБЦ на EJ25), термостат")
+                F("atf", "Температура ATF", "Предупреждать при 110° и 120°")
+                F("service", "Напоминания о ТО", "Раз в день при поездке, если подошёл срок по пробегу или дате")
+                SettingSwitch("Голосовые предупреждения", "Голосом магнитолы, если в ней есть русский синтез речи; иначе короткий сигнал", voice) {
+                    voice = it; s.voiceAlerts = it
+                }
+            }
+        }
+        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+            PanelTitle(Lucide.Timer, "Замеры, датчики, экраны")
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                F("perf", "Замеры разгона и круги", "Экран «Замеры»: разгон, диностенд, секундомер кругов")
+                F("motion", "G-метр и крен", "Перегрузки и наклон (акселерометр магнитолы, VDC или GPS)")
+                F("sensors", "Экран «Датчики»", "Все параметры ЭБУ из базы RomRaider")
+                F("health", "Экран «Здоровье»", "Мотор, ТО, шины и журнал предупреждений (сами предупреждения настраиваются слева)")
+                SettingSwitch("Давление в шинах (TPMS)", "Слушать Bluetooth-датчики давления. Разрешение и порог — в «Здоровье» → «Шины»", tpms) {
+                    tpms = it; s.tpms = it
+                    if (it) kg.forester.sg.service.Tpms.start(ctx) else kg.forester.sg.service.Tpms.stop(ctx)
+                }
+                SettingSwitch("Лампа переключения передач", "Края экрана мигают, когда обороты выше порога", shift) { shift = it; s.shiftLight = it }
+                if (shift) NumberField("Порог, об/мин (EJ20 турбо ~6300, EJ25 атмо ~5800)", rpm) {
+                    rpm = it; it.toIntOrNull()?.takeIf { v -> v in 2000..9000 }?.let { v -> s.shiftRpm = v }
+                }
+            }
+        }
+    }
 }

@@ -1,5 +1,6 @@
 package kg.forester.sg
 
+import kg.forester.sg.ui.DriverOverlays
 import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -76,6 +77,8 @@ enum class Screen(val title: String, val icon: ImageVector) {
     Battery("АКБ", Lucide.BatteryCharging),
     Dtc("Ошибки", Lucide.TriangleAlert),
     Sensors("Датчики", Lucide.ListChecks),
+    Perf("Замеры", Lucide.Timer),
+    Health("Здоровье", Lucide.HeartPulse),
     Log("Лог", Lucide.FileText),
     Apps("Приложения", Lucide.LayoutGrid),
     Settings("Настройки", Lucide.SlidersHorizontal),
@@ -270,6 +273,7 @@ fun App() {
                     android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             }
             kg.forester.sg.ui.VoiceToast(Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
+            DriverOverlays()
             return@BoxWithConstraints
         }
         val navPos by Repo.navPosition.collectAsState()
@@ -284,6 +288,8 @@ fun App() {
                     Screen.Battery -> kg.forester.sg.ui.BatteryScreen()
                     Screen.Dtc -> DtcScreen()
                     Screen.Sensors -> kg.forester.sg.ui.SensorsScreen()
+                    Screen.Perf -> kg.forester.sg.ui.PerfScreen()
+                    Screen.Health -> kg.forester.sg.ui.HealthScreen()
                     Screen.Log -> LogScreen()
                     Screen.Apps -> kg.forester.sg.ui.AppsScreen()
                     Screen.Settings -> SettingsScreen()
@@ -313,6 +319,7 @@ fun App() {
             }
         }
         kg.forester.sg.ui.VoiceToast(Modifier.align(Alignment.TopCenter).padding(top = 14.dp))
+        DriverOverlays()
     }
 }
 
@@ -320,6 +327,7 @@ fun App() {
 @Composable
 private fun visibleScreens(): List<Screen> {
     Repo.carVersion.collectAsState().value
+    Repo.featureVersion.collectAsState().value
     val ctx = androidx.compose.ui.platform.LocalContext.current
     // Media talks to the FYT system service: only on FYT head units (Teyes etc.), not on phones or other units
     val fyt = remember { kg.forester.sg.service.Fyt.present(ctx) }
@@ -327,6 +335,10 @@ private fun visibleScreens(): List<Screen> {
     if (Repo.settings.gearbox == "mt") list = list - Screen.Gearbox
     if (!fyt) list = list - Screen.Media
     if (isPhone(ctx)) list = list - Screen.Apps // the app launcher is for head units
+    val s = Repo.settings
+    if (!s.feature("sensors")) list = list - Screen.Sensors
+    if (!s.feature("perf")) list = list - Screen.Perf
+    if (!s.feature("health")) list = list - Screen.Health
     return list
 }
 

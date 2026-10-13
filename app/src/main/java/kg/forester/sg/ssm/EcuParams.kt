@@ -109,14 +109,22 @@ object EcuParams {
         return i >= init.capabilities.size || init.supports(i + 8, bit)
     }
 
+    /**
+     * Addresses in [addrs] the init clearly marks as not supported: SSM answers them anyway with junk (an EJ253
+     * showed "knock correction +63.5°"), so their values are dropped.
+     */
+    fun unsupported(init: EcuInit, addrs: IntArray): Set<Int> = addrs.filter { !reported(init, it) }.toSet()
+
     /** The poll addresses this ECU reports as supported in its init answer. */
     fun supported(init: EcuInit): IntArray =
         pollAddresses.filter { a -> capability[a]?.let { (i, bit) -> init.supports(i + 8, bit) } ?: false }.toIntArray()
 
     /** Decodes a read of [addrs]; parameters the ECU was not asked for stay null. */
-    fun decode(addrs: IntArray, raw: ByteArray, now: Long): EcuSnapshot {
+    fun decode(addrs: IntArray, raw: ByteArray, now: Long, skip: Set<Int> = emptySet()): EcuSnapshot {
         val v = HashMap<Int, Int>(addrs.size)
-        addrs.forEachIndexed { i, a -> if (i < raw.size) v[a] = raw[i].toInt() and 0xFF }
+        addrs.forEachIndexed { i, a -> if (i < raw.size && a !in skip) v[a] = raw[i].toInt() and 0xFF }
+        // knock correction 0xFF (+63.5°) is what an ECU without the parameter sends back
+        if (v[KNOCK] == 0xFF) v.remove(KNOCK)
         fun g(a: Int) = v[a]
         fun pair(h: Int, l: Int) = g(h)?.let { hi -> g(l)?.let { lo -> (hi shl 8) or lo } }
         return EcuSnapshot(

@@ -38,15 +38,63 @@ import kotlin.math.roundToInt
  * 3D models available for the home screen: assets/<dir>/car_NNN.webp (+ plates.json, meta.json).
  * meta.json may set driveFrame (straight rear view), carX (car centre in that frame) and the exhaust spot.
  */
-val CarModels3d = listOf("SG" to "Forester SG5", "SH" to "Forester SH")
+val CarModels3d = listOf(
+    "SG" to "Forester SG5",
+    "SGNA" to "Forester SG5 (атмо)",
+    "SH" to "Forester SH",
+    "SHNA" to "Forester SH (атмо)",
+    "SK" to "Forester SK 2020",
+    "GRC" to "WRX STI GRC",
+    "BM" to "Legacy 2.5GT tS (BM9)",
+    "VA" to "WRX STI 2018 (VA)",
+    "GG" to "Impreza WRX Wagon (GG)",
+    "GV" to "Impreza WRX STI (GV)",
+    "22B" to "Impreza 22B STi",
+    "GC" to "Impreza Coupe WRX Type R (GC)",
+)
 
 /** True when the model has white-body frames, so it can take any colour (incl. white and silver). */
 fun car3dAnyColour(ctx: Context, id: String): Boolean =
     car3dDir(ctx, id)?.let { d -> ctx.assets.list(d)?.any { it.startsWith("white_") } } ?: false
 
+/** Asset folder of a 3D model: "car" for the SG5, "car_<id>" for the others (car_sh, car_sk, car_22b, ...). */
 fun car3dDir(ctx: Context, id: String): String? {
-    val dir = if (id == "SH") "car_sh" else "car"
+    val dir = if (id == "SG" || CarModels3d.none { it.first == id }) "car" else "car_" + id.lowercase()
     return dir.takeIf { (ctx.assets.list(it)?.any { f -> f.startsWith("car_") } ?: false) }
+}
+
+/**
+ * One still of the chosen 3D car in its paint, cropped to the car: the straight rear view, or ([side]) the side
+ * view with the nose to the left. For the tilt card; decodes one frame, call it off the main thread.
+ */
+fun carStill(ctx: Context, model: String, paintId: String, side: Boolean): Bitmap? {
+    val src = FrameSource(ctx.applicationContext, car3dDir(ctx, model) ?: "car", carPaint(paintId))
+    if (src.count == 0) return null
+    val b = src.get(if (side) src.driveFrame - src.count / 4 else src.driveFrame) ?: return null
+    var x0 = b.width; var y0 = b.height; var x1 = 0; var y1 = 0
+    for (y in 0 until b.height step 2) for (x in 0 until b.width step 2) {
+        if ((b.getPixel(x, y) ushr 24) > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+    }
+    if (x1 <= x0 || y1 <= y0) return b
+    return Bitmap.createBitmap(b, x0, y0, (x1 - x0 + 2).coerceAtMost(b.width - x0), (y1 - y0 + 2).coerceAtMost(b.height - y0))
+}
+
+/**
+ * The decoded frames of the car on screen, kept while the app runs: going to another screen and back does
+ * not decode them again (that took a few seconds). Only the last model/paint is kept (~1.3 MB per frame).
+ */
+private object CarFrames {
+    private var key = ""
+    private var src: FrameSource? = null
+    /** Where the car was turned to, in frames. */
+    var angle: Float? = null
+
+    @Synchronized
+    fun source(ctx: Context, model: String, paint: String): FrameSource {
+        val k = "$model|$paint"
+        src?.takeIf { key == k }?.let { return it }
+        return FrameSource(ctx.applicationContext, car3dDir(ctx, model) ?: "car", carPaint(paint)).also { src = it; key = k }
+    }
 }
 
 /** Pre-rendered 360° turntable frames in assets/car/car_NNN.webp. */
@@ -145,11 +193,12 @@ fun CarViewer(
     val ctx = LocalContext.current
     val model by kg.forester.sg.data.Repo.car3d.collectAsState()
     val paintId by kg.forester.sg.data.Repo.carPaint.collectAsState()
-    val src = remember(model, paintId) {
-        FrameSource(ctx.applicationContext, car3dDir(ctx, model) ?: "car", carPaint(paintId))
-    }
-    var angle by remember { mutableFloatStateOf(0f) } // in frames
-    var lastTouch by remember { mutableLongStateOf(0L) }
+    val src = remember(model, paintId) { CarFrames.source(ctx, model, paintId) }
+    // back on the home screen the car is where it was; on the move straight away in the rear view, no spin
+    var angle by remember(src) {
+        mutableFloatStateOf(if ((speedKmh ?: 0) >= 3) src.driveFrame.toFloat() else CarFrames.angle ?: 0f)
+    } // in frames
+    LaunchedEffect(angle) { CarFrames.angle = angle }
     var frame by remember { mutableStateOf<Bitmap?>(null) }
     var frameIdx by remember { mutableStateOf(0) }
     val plate by kg.forester.sg.data.Plate.bitmap.collectAsState()
@@ -157,7 +206,7 @@ fun CarViewer(
 
     // Parked: the car stands still, a finger turns it. Driving: turn to the straight rear view (like the Teyes
     // launcher), let the road and speed streaks run, follow GPS turns, the camera lag behind on a pull and the
-    // exhaust spit flames. A finger on the car always wins for a few seconds.
+    // exhaust spit flames. Only a parked car can be turned by hand.
     // Turn rate from the GPS course (°/s, + = right), only on the move where the course is reliable.
     val gps by kg.forester.sg.data.Repo.gps.collectAsState()
     var yaw by remember { mutableFloatStateOf(0f) }
@@ -184,7 +233,7 @@ fun CarViewer(
             val driving = speed >= 3
             delay(35)
             // parked: the car stays where it is (turn it with a finger); driving: chase view, eased into turns
-            if (!driving || System.currentTimeMillis() - lastTouch <= 4000) continue
+            if (!driving) continue
             val n = src.count.coerceAtLeast(1)
             val cur = angle.roundToInt()
             // in a right turn the nose swings right and the chase view sees the car's right flank:
@@ -255,7 +304,8 @@ fun CarViewer(
     Box(
         modifier.pointerInput(Unit) {
             detectHorizontalDragGestures { _, drag ->
-                lastTouch = System.currentTimeMillis()
+                // on the move the car always shows its rear (road, exhaust flames): no turning it by hand
+                if (speed >= 3) return@detectHorizontalDragGestures
                 angle -= drag / 9f
             }
         },

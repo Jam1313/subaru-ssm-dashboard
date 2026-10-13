@@ -94,7 +94,8 @@ class EcuService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
     private val knock by lazy { KnockWatch(this) }
-    private val tracker by lazy { TripTracker(this) { knock.reset(it) } }
+    private val guard = EngineGuard()
+    private val tracker by lazy { TripTracker(this) { knock.reset(it); guard.newTrip(it) } }
     private val battery by lazy { BatteryMonitor(this) }
     private val history = ArrayDeque<EcuSnapshot>()
     private val tcuHistory = ArrayDeque<TcuSnapshot>()
@@ -109,6 +110,9 @@ class EcuService : Service() {
         super.onCreate()
         Repo.init(this)
         SsmTrace.init(this)
+        Alerts.init(this)
+        Motion.start(this)
+        Tpms.start(this)
         startInForeground()
         startGps()
         battery // restore the last battery readings for the UI right away
@@ -293,6 +297,7 @@ class EcuService : Service() {
             while (history.size > 240) history.removeFirst()
             Repo.history.value = history.toList()
             knock.process(snap, record = false)
+            extras(snap, now)
             if (Repo.settings.gearbox != "mt") {
                 Repo.tcu.value = tcu
                 Repo.tcuStatus.value = "АКПП: демо"
@@ -541,6 +546,8 @@ class EcuService : Service() {
             ecuWatch.setup(init)
             tcuWatch.clear()
             val afSensor = EcuParams.reported(init, EcuParams.AF_SENSOR)
+            val skip = EcuParams.unsupported(init, addrs)
+            if (skip.isNotEmpty()) SsmTrace.log("not supported by this ECU, ignored: ${skip.joinToString(" ") { "%02X".format(it) }}")
             var failures = 0
             var cycle = 0
             tcuAddrs = null
@@ -555,7 +562,7 @@ class EcuService : Service() {
                     continue
                 }
                 failures = 0
-                var snap = EcuParams.decode(addrs, raw, now)
+                var snap = EcuParams.decode(addrs, raw, now, skip)
                 // SSM answers any address; an A/F byte from an ECU without the wideband sensor would fake
                 // "enrichment" in the fuel calculation
                 if (!afSensor) snap = snap.copy(lambda = null)
@@ -580,6 +587,7 @@ class EcuService : Service() {
         battery.process(snap)
         tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
         knock.process(snap)
+        extras(snap, now)
         if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
             // the ticked parameters are extra columns: a new file when the choice changes
             val extras = Repo.rrPolled.value
@@ -590,6 +598,14 @@ class EcuService : Service() {
             logger?.close(); logger = null
         }
         updateNotification()
+    }
+
+    /** Engine guard, G-meter, acceleration timer: everything that only reads the samples. */
+    private fun extras(snap: EcuSnapshot, now: Long) {
+        runCatching { guard.process(snap, Repo.tcu.value, now) }.onFailure { SsmTrace.log("guard: $it") }
+        val s = Repo.settings
+        if (s.feature("motion")) runCatching { Motion.process(snap, Repo.gps.value, now) }
+        if (s.feature("perf")) runCatching { Perf.process(snap, Repo.gps.value, now) }.onFailure { SsmTrace.log("perf: $it") }
     }
 
     /** Standard OBD-II polling until the ECU goes silent. Returns false if the ECU did not answer at all. */
@@ -671,10 +687,13 @@ class EcuService : Service() {
             publishWatch()
         }
 
+        private var internal: Set<String> = emptySet()
+
         suspend fun poll(client: SsmClient) {
-            if (version != Repo.watchVersion.value) {
+            if (version != Repo.watchVersion.value || internal != Repo.internalWatch.value) {
                 version = Repo.watchVersion.value
-                val ids = Repo.settings.watchIds
+                internal = Repo.internalWatch.value
+                val ids = Repo.settings.watchIds + internal
                 params = avail.filter { it.id in ids }
                 addrs = RomRaider.readList(params, all)
                 fails = 0
