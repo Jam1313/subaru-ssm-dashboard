@@ -14,9 +14,13 @@
 
 ## 🧪 Бета 0.9 (для тестов)
 
-Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1 и beta2, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
+Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta3, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
 
-> **[⬇️ Скачать 0.9-beta3](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta3/subaru-ssm-dashboard-0.9-beta3.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta3) · [руководство (PDF)](docs/manual-ru.pdf)
+> **[⬇️ Скачать 0.9-beta4](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta4/subaru-ssm-dashboard-0.9-beta4.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta4) · [руководство (PDF)](docs/manual-ru.pdf)
+
+### Новое в 0.9-beta4
+
+- Поддержка кабеля **Tactrix OpenPort 1.3** (M/S/U): раньше приложение его не видело. Работает как KKL-кабель по K-Line.
 
 ### Новое в 0.9-beta3
 
