@@ -305,6 +305,7 @@ class EcuService : Service() {
             else -> listOf(true, false)
         }
         var busIdx = 0
+        var lineMode = 0
         var transport: SsmTransport? = null
         var transportKline = true
         while (scope.isActive) {
@@ -321,8 +322,15 @@ class EcuService : Service() {
             if (init == null) {
                 Repo.link.value = LinkState.NO_ECU
                 Repo.linkMessage.value = "ЭБУ не отвечает (${client.transport.name}). Зажигание включено?"
-                busIdx++
                 tracker.tick(System.currentTimeMillis())
+                val modes = transport.lineModes
+                if (modes > 1) {
+                    // a cable with a chip inside may want other DTR/RTS levels; once round all, wait as usual
+                    transport.setLineMode(++lineMode)
+                    delay(if (lineMode % modes != 0) 300 else 3000)
+                    continue
+                }
+                busIdx++
                 delay(if (buses.size > 1 && busIdx % buses.size != 0) 300 else 3000)
                 continue
             }

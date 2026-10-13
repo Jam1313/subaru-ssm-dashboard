@@ -14,9 +14,13 @@
 
 ## 🧪 Бета 0.9 (для тестов)
 
-Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta3, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
+Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta4, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
 
-> **[⬇️ Скачать 0.9-beta4](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta4/subaru-ssm-dashboard-0.9-beta4.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta4) · [руководство (PDF)](docs/manual-ru.pdf)
+> **[⬇️ Скачать 0.9-beta5](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta5/subaru-ssm-dashboard-0.9-beta5.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta5) · [руководство (PDF)](docs/manual-ru.pdf)
+
+### Новое в 0.9-beta5
+
+- KKL-кабели со своим чипом внутри (например, VAG K+CAN Commander) пропускают K-Line только при определённых уровнях линий DTR/RTS. Если ЭБУ молчит, приложение теперь по очереди пробует все четыре варианта. Вариант, который сработал, виден в строке связи и в журнале обмена.
 
 ### Новое в 0.9-beta4
 

@@ -27,6 +27,12 @@ interface SsmTransport {
     val isCan: Boolean
     /** Addresses per read request (an ELM327 fits only one into its single frame). */
     val maxReadAddrs: Int get() = 64
+    /**
+     * States of the cable's control lines worth trying when the ECU stays silent: KKL cables with a chip
+     * inside (VAG K+CAN Commander and the like) only pass the K-line through with DTR/RTS set their way.
+     */
+    val lineModes: Int get() = 1
+    fun setLineMode(i: Int) {}
     fun exchange(dest: Int, body: ByteArray): ByteArray?
     fun close()
 }
@@ -118,16 +124,30 @@ object OpenPort13 {
 
 /**
  * Plain USB KKL cable (CH340/FTDI/PL2303/CP210x) or OpenPort 1.3: the K-line is the serial port itself, 4800 8N1.
- * The OpenPort 1.3 gets RTS cleared, as RomRaider does with it.
+ * DTR and RTS start on (RTS off for the OpenPort 1.3, as RomRaider does); the other combinations are tried
+ * while the ECU stays silent, both off being what Windows programs leave them at.
  */
 class KklTransport(private val port: UsbSerialPort, private val openPort13: Boolean = false) : KLineTransport() {
-    override val name = if (openPort13) "OpenPort 1.3, K-Line" else "KKL, K-Line"
+    private val modes = if (openPort13) listOf(true to false, true to true, false to false, false to true)
+    else listOf(true to true, false to false, true to false, false to true)
+    private var mode = 0
+    override val name: String
+        get() = (if (openPort13) "OpenPort 1.3, K-Line" else "KKL, K-Line") +
+            if (mode == 0) "" else modes[mode].let { (d, r) -> ", DTR ${if (d) 1 else 0} RTS ${if (r) 1 else 0}" }
+    override val lineModes get() = modes.size
     private var io: SerialInputOutputManager? = null
+
+    override fun setLineMode(i: Int) {
+        mode = i.mod(modes.size)
+        val (d, r) = modes[mode]
+        runCatching { port.dtr = d }
+        runCatching { port.rts = r }
+        SsmTrace.log("lines: DTR ${if (d) 1 else 0} RTS ${if (r) 1 else 0}")
+    }
 
     fun open() {
         port.setParameters(4800, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-        runCatching { port.dtr = true }
-        runCatching { port.rts = !openPort13 }
+        setLineMode(0)
         io = SerialInputOutputManager(port, object : SerialInputOutputManager.Listener {
             override fun onNewData(data: ByteArray) = onBytes(data)
             override fun onRunError(e: Exception) {
