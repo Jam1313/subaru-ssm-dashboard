@@ -124,6 +124,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        EcuService.start(this)
+    }
+
+    // with background work off, the service (polling, logging) stops once the app leaves the screen
+    override fun onStop() {
+        super.onStop()
+        if (!Repo.settings.backgroundWork && !isChangingConfigurations) {
+            stopService(android.content.Intent(this, EcuService::class.java))
+        }
+    }
+
     private fun hideSystemBars() {
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())

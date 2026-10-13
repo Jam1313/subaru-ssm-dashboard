@@ -21,6 +21,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
 import com.composables.icons.lucide.ImagePlus
+import com.composables.icons.lucide.Palette
+import com.composables.icons.lucide.Pencil
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -267,9 +273,11 @@ private val PhotoStyle = DialStyle(
 )
 
 /** Style by id; "photo:<file>" is the user-picture look with that picture. */
-fun dialStyle(id: String) =
-    if (id.startsWith("photo:")) PhotoStyle.copy(id = id, image = id.removePrefix("photo:"))
-    else DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()
+fun dialStyle(id: String): DialStyle = when {
+    id.startsWith("photo:") -> PhotoStyle.copy(id = id, image = id.removePrefix("photo:"))
+    id.startsWith("custom:") -> kg.forester.sg.data.CustomGauges.byStyleId(id)?.toStyle() ?: DialStyles.first()
+    else -> DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()
+}
 
 private val SegmentFont = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(kg.forester.sg.R.font.dseg7_bold_italic))
 
@@ -678,6 +686,7 @@ fun DialStylePicker(which: String, modifier: Modifier, onClose: () -> Unit) {
 }
 
 private const val PICK = "pick"
+private const val CREATE = "create"
 
 /** Opens the gallery for a gauge picture; the result is applied by GaugeImages.onPicked (see MainActivity). */
 val LocalPickGaugeImage = androidx.compose.runtime.staticCompositionLocalOf<(target: String) -> Unit> { {} }
@@ -692,6 +701,10 @@ fun StylePicker(
     preview: @Composable (DialStyle, Modifier) -> Unit, onPick: (String) -> Unit, onClose: () -> Unit,
 ) {
     val pickPicture = LocalPickGaugeImage.current
+    var designing by remember { mutableStateOf<kg.forester.sg.data.CustomGauge?>(null) }
+    designing?.let { d ->
+        GaugeDesigner(d, onSaved = { onPick(it.styleId); designing = null; onClose() }, onClose = { designing = null })
+    }
     // a dialog, not a Popup: a popup anchored near the top of the screen gets shifted on screen while its touch
     // area stays put, so taps landed on the wrong design
     androidx.compose.ui.window.Dialog(
@@ -707,19 +720,30 @@ fun StylePicker(
         ) {
             T(title, 16.sp, weight = FontWeight.SemiBold)
             androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
-            // "" = the card's plain look, PICK = choose a picture; a picture already in use is offered too
+            // "" = the card's plain look, then the designs, the user's own ones, a picture already in use,
+            // CREATE = new own design, PICK = choose a picture
             val options: List<String> = (if (plain != null) listOf("") else emptyList()) + DialStyles.map { it.id } +
-                listOfNotNull(current.takeIf { it.startsWith("photo:") }) + PICK
+                kg.forester.sg.data.CustomGauges.list.map { it.styleId } +
+                listOfNotNull(current.takeIf { it.startsWith("photo:") }) + CREATE + PICK
             options.chunked(5).forEach { row ->
                 androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                     row.forEach { id ->
-                        val st = if (id.isEmpty() || id == PICK) null else dialStyle(id)
+                        val st = if (id.isEmpty() || id == PICK || id == CREATE) null else dialStyle(id)
+                        val own = kg.forester.sg.data.CustomGauges.byStyleId(id)
                         val on = id == current
                         Column(
                             Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
                                 .background(if (on) C.Purple.copy(alpha = 0.25f) else Color.Transparent)
                                 .border(if (on) 2.dp else 1.dp, if (on) C.Purple else C.Border, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                                .clickable { if (id == PICK) pickPicture(target) else onPick(id); onClose() }
+                                .clickable {
+                                    when (id) {
+                                        PICK -> { pickPicture(target); onClose() }
+                                        CREATE -> designing = kg.forester.sg.data.CustomGauges.newDraft(
+                                            current.takeIf { c -> DialStyles.any { it.id == c } } ?: "neon",
+                                        )
+                                        else -> { onPick(id); onClose() }
+                                    }
+                                }
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
@@ -732,13 +756,22 @@ fun StylePicker(
                                     id == PICK -> androidx.compose.material3.Icon(
                                         com.composables.icons.lucide.Lucide.ImagePlus, null, tint = C.Violet, modifier = Modifier.size(40.dp),
                                     )
+                                    id == CREATE -> androidx.compose.material3.Icon(
+                                        com.composables.icons.lucide.Lucide.Palette, null, tint = C.Violet, modifier = Modifier.size(40.dp),
+                                    )
                                     else -> T("— — —", 22.sp, C.Violet, FontWeight.Bold)
                                 }
                             }
-                            T(
-                                when { id == PICK -> "Своя картинка…"; st != null -> st.name; else -> plain ?: "" },
-                                12.sp, if (on) C.Text else C.Sub, maxLines = 1,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                T(
+                                    when { id == PICK -> "Своя картинка…"; id == CREATE -> "Свой дизайн…"; st != null -> st.name; else -> plain ?: "" },
+                                    12.sp, if (on) C.Text else C.Sub, maxLines = 1, modifier = Modifier.widthIn(max = 96.dp),
+                                )
+                                if (own != null) androidx.compose.material3.Icon(
+                                    com.composables.icons.lucide.Lucide.Pencil, "Изменить", tint = C.Violet,
+                                    modifier = Modifier.padding(start = 4.dp).size(16.dp).clickable { designing = own },
+                                )
+                            }
                         }
                     }
                 }

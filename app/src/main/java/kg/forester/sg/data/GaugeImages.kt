@@ -38,7 +38,7 @@ object GaugeImages {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("gauge_images", Context.MODE_PRIVATE)
 
     /**
-     * Where the next picked picture goes: "tach", "speedo" or "<layout key>/<card id>". Kept in the prefs, not in
+     * Where the next picked picture goes: "tach", "speedo", "custom:<id>" (own design) or "<layout key>/<card id>". Kept in the prefs, not in
      * the picker dialog, because the dialog (or the whole activity) may be gone when the gallery returns.
      */
     fun setTarget(ctx: Context, target: String) = prefs(ctx).edit().putString("target", target).apply()
@@ -47,10 +47,13 @@ object GaugeImages {
     fun onPicked(ctx: Context, uri: Uri?) {
         val target = prefs(ctx).getString("target", null) ?: return
         prefs(ctx).edit().remove("target").apply()
-        val style = "photo:" + (uri?.let { import(ctx, it) } ?: return)
-        when (target) {
-            "tach" -> Repo.settings.tachStyle = style
-            "speedo" -> Repo.settings.speedoStyle = style
+        val name = uri?.let { import(ctx, it) } ?: return
+        val style = "photo:$name"
+        when {
+            target == "tach" -> Repo.settings.tachStyle = style
+            target == "speedo" -> Repo.settings.speedoStyle = style
+            target.startsWith("custom:") ->
+                CustomGauges.byStyleId(target)?.let { CustomGauges.save(it.copy(image = name)) }
             else -> {
                 val key = target.substringBefore('/')
                 val id = target.substringAfter('/')

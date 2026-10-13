@@ -185,6 +185,21 @@ class Settings(ctx: Context) {
         get() = p.getString("homeTiles", "")!!
         set(v) { p.edit().putString("homeTiles", v).apply(); Repo.homeTiles.value = v }
 
+    /** Keep polling, fuel counting and logging when the app is not on screen (the service outlives the UI). */
+    var backgroundWork: Boolean
+        get() = p.getBoolean("backgroundWork", true)
+        set(v) { p.edit().putBoolean("backgroundWork", v).apply() }
+
+    /** Start the service when the head unit / phone starts or wakes up (ACC on). */
+    var autostartService: Boolean
+        get() = p.getBoolean("autostartService", true)
+        set(v) { p.edit().putBoolean("autostartService", v).apply() }
+
+    /** Also bring the app on screen then (needs "display over other apps" on Android 10+). */
+    var autostartApp: Boolean
+        get() = p.getBoolean("autostartApp", false)
+        set(v) { p.edit().putBoolean("autostartApp", v).apply() }
+
     /** Layout of any editable screen (see Board), by its settings key. */
     fun board(key: String) = p.getString(key, "")!!
     fun setBoard(key: String, v: String) { p.edit().putString(key, v).apply(); Repo.boardFlow(key).value = v }
@@ -291,6 +306,7 @@ object Repo {
             dialStyles.value = settings.tachStyle to settings.speedoStyle
             clusterSize.value = settings.clusterSize
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled
+            CustomGauges.init(ctx)
         }
     }
 

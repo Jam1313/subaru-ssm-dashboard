@@ -525,9 +525,22 @@ class EcuService : Service() {
     }
 }
 
+/**
+ * Autostart: a real boot, a "quick boot", or ACC on after the FYT/Teyes head unit slept (those units mostly
+ * sleep instead of shutting down, so BOOT_COMPLETED alone is not enough). Which ACC broadcast a given firmware
+ * sends varies, so several known ones are listed in the manifest.
+ */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) EcuService.start(context)
+        Repo.init(context)
+        val s = Repo.settings
+        if (s.autostartService || s.autostartApp) EcuService.start(context)
+        if (s.autostartApp) {
+            // allowed from the background only with "display over other apps" (Android 10+); without it this is a no-op
+            runCatching {
+                context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
     }
 }
 

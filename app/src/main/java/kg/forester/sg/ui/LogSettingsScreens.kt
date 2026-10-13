@@ -220,6 +220,8 @@ private fun GeneralSettings() {
                     setDefaultHome(ctx, it); home = isDefaultHome(ctx)
                 }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
             }
+            Spacer(Modifier.height(14.dp))
+            BackgroundSettings()
         }
         Spacer(Modifier.width(12.dp))
         Panel(Modifier.weight(1f).fillMaxHeight()) {
@@ -234,10 +236,76 @@ private fun GeneralSettings() {
             Spacer(Modifier.height(14.dp))
             T(
                 "Расход считается по MAF с учётом топливных коррекций. Коэффициент уточняется автоматически " +
-                    "при заправках до полного бака. Уровень топлива ЭБУ не передаёт — остаток считается от последней заправки.",
+                    "при заправках до полного бака. Если ЭБУ не передаёт уровень топлива, остаток считается от последней заправки.",
                 13.sp, C.Sub,
             )
         }
+    }
+}
+
+/** Background work and autostart, with the system permissions they depend on. */
+@Composable
+private fun BackgroundSettings() {
+    val s = Repo.settings
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var bg by remember { mutableStateOf(s.backgroundWork) }
+    var auto by remember { mutableStateOf(s.autostartService) }
+    var app by remember { mutableStateOf(s.autostartApp) }
+    // re-read the system permissions when coming back from the system settings screens
+    var resumed by remember { mutableStateOf(0) }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) resumed++ }
+        owner.lifecycle.addObserver(o)
+        onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    val overlay = remember(resumed) { android.provider.Settings.canDrawOverlays(ctx) }
+    val unrestricted = remember(resumed) {
+        ctx.getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(ctx.packageName)
+    }
+
+    T("Фон и автозапуск", 15.sp)
+    Spacer(Modifier.height(6.dp))
+    SettingSwitch("Работать в фоне", "Опрос ЭБУ, расход, поездки и логи продолжаются, когда приложение свёрнуто или открыто другое", bg) {
+        bg = it; s.backgroundWork = it
+    }
+    SettingSwitch("Запускать при включении", "Служба стартует при включении магнитолы или телефона и после сна (ACC)", auto) {
+        auto = it; s.autostartService = it
+    }
+    SettingSwitch("Открывать приложение при включении", "Показывать приборы сразу после включения", app) {
+        app = it; s.autostartApp = it
+    }
+    if (app && !overlay) {
+        T("Для автооткрытия Android требует разрешение «Поверх других приложений».", 12.sp, C.Orange)
+        Spacer(Modifier.height(4.dp))
+        Chip("Разрешить", false, {
+            ctx.startActivity(
+                android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${ctx.packageName}"))
+            )
+        })
+        Spacer(Modifier.height(8.dp))
+    }
+    if (bg && !unrestricted) {
+        T("Система может останавливать приложение в фоне для экономии батареи (актуально для телефонов).", 12.sp, C.Sub)
+        Spacer(Modifier.height(4.dp))
+        Chip("Не ограничивать", false, {
+            runCatching {
+                ctx.startActivity(
+                    android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:${ctx.packageName}"))
+                )
+            }
+        })
+    }
+}
+
+@Composable
+private fun SettingSwitch(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            T(title, 14.sp)
+            T(sub, 11.sp, C.Sub)
+        }
+        Switch(on, onChange, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
     }
 }
 
