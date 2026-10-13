@@ -165,21 +165,24 @@ fun GaugeDesigner(start: CustomGauge, onSaved: (CustomGauge) -> Unit, onClose: (
                     }
                 }
                 Label("Фон")
+                Swatches(g.face) { g = g.copy(face = it, image = null) }
+                Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Swatches(g.face) { g = g.copy(face = it, image = null) }
-                    Spacer(Modifier.width(8.dp))
-                    Chip("Картинка…", g.image != null, {
+                    Chip("Своя картинка…", g.image != null, {
                         // the picture goes to the stored copy, so store the draft first
                         CustomGauges.save(g)
                         pickPicture(g.styleId)
                     }, Lucide.ImagePlus)
+                    if (g.image != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Chip("Убрать картинку", false, { g = g.copy(image = null) })
+                    }
                 }
                 Label("Шкала и цифры")
                 Swatches(g.scale) { g = g.copy(scale = it) }
                 Label("Подсветка шкалы")
+                Swatches(g.accent) { g = g.copy(accent = it) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Swatches(g.accent) { g = g.copy(accent = it) }
-                    Spacer(Modifier.width(12.dp))
                     T("Свечение", 13.sp, C.Sub)
                     Spacer(Modifier.width(6.dp))
                     Switch(g.glow ?: (g.toStyle().glow != null), { g = g.copy(glow = it) },
