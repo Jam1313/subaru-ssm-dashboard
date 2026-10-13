@@ -28,13 +28,28 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kg.forester.sg.data.KnockStats
 import kg.forester.sg.data.Repo
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun DriveScreen() {
     val e by Repo.live.collectAsState()
     val h by Repo.history.collectAsState()
-    val knocks by Repo.knockEvents.collectAsState()
+    val knock by Repo.knock.collectAsState()
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.weight(0.9f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -42,7 +57,7 @@ fun DriveScreen() {
             MiniGauge(Lucide.Disc, "Дроссель", e.throttlePct, 0f, 100f, "%", "%.0f", Modifier.weight(1f))
             MiniGauge(Lucide.Fan, "Наддув", e.boostBar, 0f, 1.2f, "бар", "%.2f", Modifier.weight(1f), sub = e.vacuumKpa?.takeIf { it > 1f }?.let { "разрежение %.0f кПа".format(it) })
             MiniGauge(Lucide.Activity, "Нагрузка", e.loadGRev, 0f, 2.5f, "г/об", "%.2f", Modifier.weight(1f))
-            KnockCard(knocks, e.knockDeg, Modifier.weight(1f))
+            KnockCard(knock, e.knockDeg, Modifier.weight(1f))
         }
         Row(Modifier.weight(1.2f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ChartCard(
@@ -140,14 +155,15 @@ fun FitValue(text: String, unit: String, maxSp: Float, modifier: Modifier, color
     }
 }
 
-/** Knock counter; pulses red while the ECU is pulling timing. */
+/** Timing pulls this trip; pulses red while the ECU is pulling timing, tap for the list. */
 @Composable
-private fun KnockCard(count: Int, knockDeg: Float?, modifier: Modifier) {
+private fun KnockCard(stats: KnockStats, knockDeg: Float?, modifier: Modifier) {
     val active = (knockDeg ?: 0f) < 0f
+    var open by remember { mutableStateOf(false) }
     val pulse by rememberInfiniteTransition(label = "knock").animateFloat(
         0.35f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse), label = "pulse",
     )
-    Panel(modifier.fillMaxHeight(), padding = 12.dp) {
+    Panel(modifier.fillMaxHeight().clip(Rounded).clickable { open = true }, padding = 12.dp) {
         T("Детонация", 13.sp, C.Sub)
         Spacer(Modifier.weight(1f))
         T(
@@ -156,6 +172,57 @@ private fun KnockCard(count: Int, knockDeg: Float?, modifier: Modifier) {
             Modifier.alpha(if (active) pulse else 1f),
         )
         Spacer(Modifier.height(4.dp))
-        T("Случаев за сеанс: $count", 12.sp, C.Sub)
+        T(
+            stats.maxPullDeg?.let { "За поездку: ${stats.count} · макс %.1f°".format(it) } ?: "За поездку: не было",
+            12.sp, C.Sub, maxLines = 1,
+        )
     }
+    if (open) KnockDialog(stats) { open = false }
+}
+
+@Composable
+private fun KnockDialog(stats: KnockStats, onClose: () -> Unit) {
+    val time = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = C.CardHi,
+        title = { T("Откаты зажигания за поездку", 18.sp, weight = FontWeight.SemiBold) },
+        text = {
+            Column {
+                T(
+                    "Это не отдельные стуки, а случаи, когда ЭБУ по сигналу датчика детонации убирал угол зажигания. " +
+                        "Считаются откаты от ${"%.0f".format(-KnockStats.START_DEG)}° и глубже; случай длится, пока коррекция не вернётся к нулю.",
+                    13.sp, C.Sub,
+                )
+                Spacer(Modifier.height(10.dp))
+                if (stats.events.isEmpty()) T("С начала поездки откатов не было.", 14.sp)
+                LazyColumn(Modifier.heightIn(max = 300.dp)) {
+                    items(stats.events.asReversed()) { ev ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            T(time.format(Date(ev.startMs)), 13.sp, C.Sub, modifier = Modifier.width(70.dp))
+                            T("%.1f°".format(ev.maxPullDeg), 15.sp, if (ev.maxPullDeg <= -3f) C.Red else C.Orange, FontWeight.Bold, Modifier.width(60.dp))
+                            T(
+                                listOfNotNull(
+                                    ev.rpm?.let { "$it об/мин" },
+                                    ev.loadGRev?.let { "%.2f г/об".format(it) },
+                                    ev.throttlePct?.let { "дроссель %.0f%%".format(it) },
+                                    ev.speedKmh?.let { "$it км/ч" },
+                                    if (ev.active) "идёт сейчас" else "%.1f с".format(ev.durationMs / 1000f),
+                                ).joinToString(" · "),
+                                13.sp, maxLines = 2, modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                T(
+                    "Редкие откаты на 1–2° под нагрузкой — обычная работа ЭБУ (плохой бензин, жара, кочки дают ложную детонацию). " +
+                        "Стоит разобраться, если откаты глубже 3°, частые или идут на прогретом моторе при ровной езде. " +
+                        "Все случаи пишутся в logs/knock.csv.",
+                    12.sp, C.Sub,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClose) { Text("Закрыть") } },
+    )
 }

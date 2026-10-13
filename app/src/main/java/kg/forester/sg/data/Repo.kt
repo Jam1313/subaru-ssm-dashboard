@@ -253,7 +253,7 @@ object Repo {
     val tcuHistory = MutableStateFlow<List<TcuSnapshot>>(emptyList())
     val tcuStatus = MutableStateFlow("АКПП: ожидание")
     val battery = MutableStateFlow(BatteryState())
-    val knockEvents = MutableStateFlow(0)
+    val knock = MutableStateFlow(KnockStats())
     val navPosition = MutableStateFlow("left")
     val uiScale = MutableStateFlow(0)
     val car3d = MutableStateFlow("SG")

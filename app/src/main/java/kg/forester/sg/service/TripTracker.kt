@@ -38,7 +38,8 @@ object FuelCalc {
 }
 
 /** Integrates samples into the current trip, buckets, fuel level and learned corrections. */
-class TripTracker(ctx: android.content.Context) {
+/** [onNewTrip] gets the start time of every new trip. */
+class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) -> Unit = {}) {
     private val s get() = Repo.settings
     private val db get() = Repo.db
 
@@ -95,7 +96,10 @@ class TripTracker(ctx: android.content.Context) {
 
         if (engineOn) {
             lastEngineOnMs = now
-            if (trip == null) trip = Trip(startMs = now, endMs = now, distanceKm = 0.0, fuelL = 0.0)
+            if (trip == null) {
+                trip = Trip(startMs = now, endMs = now, distanceKm = 0.0, fuelL = 0.0)
+                onNewTrip(now)
+            }
         }
 
         var t = trip
@@ -171,6 +175,7 @@ class TripTracker(ctx: android.content.Context) {
         trip?.let { if (it.distanceKm > 0.05) db.upsertTrip(it) }
         trip = trip?.let { Trip(startMs = System.currentTimeMillis(), endMs = System.currentTimeMillis(), distanceKm = 0.0, fuelL = 0.0) }
         s.currentTripId = 0
+        onNewTrip(System.currentTimeMillis())
         Repo.touch()
         publish(0.0, 0.0)
     }

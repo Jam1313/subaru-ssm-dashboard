@@ -79,13 +79,13 @@ class EcuService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
-    private val tracker by lazy { TripTracker(this) }
+    private val knock by lazy { KnockWatch(this) }
+    private val tracker by lazy { TripTracker(this) { knock.reset(it) } }
     private val battery by lazy { BatteryMonitor(this) }
     private val history = ArrayDeque<EcuSnapshot>()
     private val tcuHistory = ArrayDeque<TcuSnapshot>()
     private var tcuAddrs: IntArray? = null
     private var tcuNextTryMs = 0L
-    private var lastKnock = 0f
     private var logger: CsvLogger? = null
     private var triedHostFix = false
 
@@ -195,6 +195,7 @@ class EcuService : Service() {
     private suspend fun demoLoop() {
         Repo.link.value = LinkState.CONNECTED
         Repo.linkMessage.value = "Демо-данные (без машины)"
+        knock.reset(System.currentTimeMillis(), record = false)
         while (scope.isActive && Repo.settings.demo) {
             val now = System.currentTimeMillis()
             val (snap, tcu) = Demo.ecu(now)
@@ -202,6 +203,7 @@ class EcuService : Service() {
             history.addLast(snap)
             while (history.size > 240) history.removeFirst()
             Repo.history.value = history.toList()
+            knock.process(snap, record = false)
             if (Repo.settings.gearbox != "mt") {
                 Repo.tcu.value = tcu
                 Repo.tcuStatus.value = "АКПП: демо"
@@ -345,11 +347,9 @@ class EcuService : Service() {
                 history.addLast(snap)
                 while (history.size > 240) history.removeFirst()
                 Repo.history.value = history.toList()
-                val knock = snap.knockDeg ?: 0f
-                if (knock < 0f && lastKnock >= 0f) Repo.knockEvents.value++
-                lastKnock = knock
                 battery.process(snap)
-                tracker.process(snap, Repo.gps.value)
+                tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
+                knock.process(snap)
                 if (++cycle % 3 == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
                 if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
                     val l = logger ?: CsvLogger(this).also { logger = it; Repo.logFile.value = it.file.name }
