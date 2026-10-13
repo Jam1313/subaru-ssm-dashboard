@@ -62,6 +62,9 @@ val HomeTileInfo: Map<String, Pair<String, androidx.compose.ui.graphics.vector.I
     "atf" to ("Темп. ATF" to Lucide.ThermometerSun),
     "per100" to ("Расход, л/100" to Lucide.Fuel),
     "range" to ("Запас хода" to Lucide.Milestone),
+    "tach" to ("Тахометр" to Lucide.Gauge),
+    "speedo" to ("Спидометр" to Lucide.Gauge),
+    "car3d" to ("3D-машина" to Lucide.Car),
 )
 
 @Composable
@@ -72,7 +75,11 @@ fun HomeScreen() {
     val tcu by Repo.tcu.collectAsState()
     val layout by Repo.homeTiles.collectAsState()
     val clusterSize by Repo.clusterSize.collectAsState()
-    val rows = remember(layout) { kg.forester.sg.data.HomeLayout.rows(kg.forester.sg.data.HomeLayout.parse(layout)) }
+    val cards = remember(layout) { kg.forester.sg.data.HomeLayout.parse(layout) }
+    val rows = remember(layout) { kg.forester.sg.data.HomeLayout.rows(cards) }
+    // a tachometer / speedometer added as its own card leaves the 3D block
+    val tachCard = cards.any { it.id == "tach" && it.on }
+    val speedoCard = cards.any { it.id == "speedo" && it.on }
     val clusterW = kg.forester.sg.data.HomeLayout.clusterWeight(clusterSize)
 
     // long press on any card (or the pencil on the 3D block) switches to editing right here
@@ -93,11 +100,11 @@ fun HomeScreen() {
                     throttlePct = e.throttlePct, boostBar = e.boostBar, carShare = carShare,
                 )
                 // long press on a gauge: pick its design (NFS Underground style custom gauges)
-                Box(Modifier.align(Alignment.CenterStart).padding(start = 14.dp).size(d)
+                if (!tachCard) Box(Modifier.align(Alignment.CenterStart).padding(start = 14.dp).size(d)
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { stylePick = "tach" }) }) {
                     Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f, Modifier.fillMaxSize(), dialStyle(styles.first))
                 }
-                Box(Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(d)
+                if (!speedoCard) Box(Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(d)
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { stylePick = "speedo" }) }) {
                     Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null, Modifier.fillMaxSize(), dialStyle(styles.second))
                 }
@@ -117,17 +124,12 @@ fun HomeScreen() {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (edit) HomeEditBar { edit = false }
         if (kg.forester.sg.data.HomeLayout.board.isFree(layout)) {
-            // free layout: the 3D block stays in its place as a background, the cards can go anywhere, over it too
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                Column(Modifier.fillMaxSize()) {
-                    if (clusterW > 0f) cluster(Modifier.weight(clusterW).fillMaxWidth())
-                    Spacer(Modifier.weight(3f))
-                }
-                FreeArea(
-                    HomeEdit, kg.forester.sg.data.HomeLayout.parse(layout).filter { it.on }, edit, HomeTileInfo, longPress,
-                    Modifier.fillMaxSize(), backgroundPress = false,
-                ) { t, m -> HomeTile(t.id, t.style, e, ts, gps, tcu, m) }
-            }
+            // free layout: the 3D car, the tachometer and the speedometer are cards like the others, anything can
+            // go anywhere and over anything
+            FreeArea(
+                HomeEdit, kg.forester.sg.data.HomeLayout.parse(layout).filter { it.on }, edit, HomeTileInfo, longPress,
+                Modifier.weight(1f).fillMaxWidth(),
+            ) { t, m -> HomeTile(t.id, t.style, e, ts, gps, tcu, m) }
             return@Column
         }
         if (clusterW > 0f) cluster(Modifier.weight(clusterW).fillMaxWidth())
@@ -161,6 +163,20 @@ private fun HomeTile(
 ) {
     val (title, icon) = HomeTileInfo[id] ?: return
     when (id) {
+        "car3d" -> Panel(m, padding = 0.dp) {
+            CarViewer(e.rpm, e.speedKmh, Modifier.fillMaxSize(), throttlePct = e.throttlePct, boostBar = e.boostBar, carShare = 1f)
+        }
+        "tach", "speedo" -> {
+            val styles by Repo.dialStyles.collectAsState()
+            androidx.compose.foundation.layout.BoxWithConstraints(m, contentAlignment = Alignment.Center) {
+                val d = minOf(maxWidth, maxHeight)
+                // "" = the design picked for this gauge in the 3D block
+                if (id == "tach") Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f, Modifier.size(d),
+                    dialStyle(st.ifEmpty { styles.first }))
+                else Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null, Modifier.size(d),
+                    dialStyle(st.ifEmpty { styles.second }))
+            }
+        }
         "coolant" -> BarCard(st, "home.$id", icon, title, e.coolantC?.toFloat(), 40f, 110f, "°C", "%.0f", m, warnAbove = 102f)
         "intake" -> BarCard(st, "home.$id", icon, title, e.intakeC?.toFloat(), -20f, 70f, "°C", "%.0f", m, warnAbove = 55f)
         "battery" -> BarCard(st, "home.$id", icon, title, e.batteryV, 10f, 15f, "В", "%.1f", m, warnBelow = 12f)

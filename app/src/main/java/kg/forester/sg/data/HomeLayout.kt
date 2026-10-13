@@ -30,6 +30,8 @@ class Board(
     val maxSpan: Int,
     val stretch: Boolean,
     val defaults: List<TileCfg>,
+    /** Cards that exist only in the free layout (the home 3D block is a fixed band in the grid). */
+    val freeOnly: Set<String> = emptySet(),
 ) {
     fun isFree(s: String) = s.startsWith(FREE)
 
@@ -87,7 +89,7 @@ class Board(
     fun rows(list: List<TileCfg>): List<List<TileCfg>> {
         val rows = mutableListOf<MutableList<TileCfg>>()
         var used = columns
-        list.filter { it.on }.forEach { t ->
+        list.filter { it.on && it.id !in freeOnly }.forEach { t ->
             if (used + t.span > columns) { rows += mutableListOf<TileCfg>(); used = 0 }
             rows.last() += t
             used += t.span
@@ -107,8 +109,9 @@ object HomeLayout {
             "afr", "afcorr", "aflearn", "timing", "knock",
             "inj", "wgdc", "fuel", "boost", "gps",
         ).map { TileCfg(it, true) } + listOf(
-            "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range",
+            "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range", "tach", "speedo", "car3d",
         ).map { TileCfg(it, false) },
+        freeOnly = setOf("car3d"),
     )
 
     fun parse(s: String) = board.parse(s)

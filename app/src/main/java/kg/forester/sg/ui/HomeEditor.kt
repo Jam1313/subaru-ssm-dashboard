@@ -74,6 +74,9 @@ class BoardEdit(
     private val rowWeight: (TileCfg) -> Float = { 1f },
     /** Top and height of the grid's part of the free area (the home grid sits below the 3D block). */
     private val gridBand: () -> Pair<Float, Float> = { 0f to 1f },
+    /** Screen-specific changes when switching to the free layout and back (home: split the 3D block). */
+    private val toFree: (List<TileCfg>) -> List<TileCfg> = { it },
+    private val toGrid: (List<TileCfg>) -> List<TileCfg> = { it },
     private val onReset: () -> Unit = {},
 ) {
     private val raw get() = Repo.boardFlow(board.key).value
@@ -82,7 +85,10 @@ class BoardEdit(
     private fun save(l: List<TileCfg>, free: Boolean = isFree()) = Repo.settings.setBoard(board.key, board.format(l, free))
 
     /** Free layout on/off; the cards keep the places they had in the grid. */
-    fun setFree(on: Boolean) = save(if (on) board.withFreeRects(list(), rowWeight, gridBand()) else list(), on)
+    fun setFree(on: Boolean) {
+        if (on == isFree()) return
+        save(if (on) toFree(board.withFreeRects(list(), rowWeight, gridBand())) else toGrid(list()), on)
+    }
 
     /** Puts [id] at [r], on top of the other cards. */
     fun place(id: String, r: FreeRect) {
@@ -132,12 +138,34 @@ class BoardEdit(
     fun reset() { Repo.settings.setBoard(board.key, ""); onReset() }
 }
 
+private val ClusterParts = setOf("car3d", "tach", "speedo")
+
 val HomeEdit = BoardEdit(
-    HomeLayout.board, HomeLayout.board.defaults.map { it.id }.toSet(),
+    HomeLayout.board, HomeLayout.board.defaults.map { it.id }.toSet() - "car3d",
     gridBand = {
         val c = HomeLayout.clusterWeight(Repo.clusterSize.value)
         c / (c + 3f) to 3f / (c + 3f)
     },
+    // the 3D block becomes three cards (car, tachometer, speedometer) in the places they had in the band
+    toFree = { list ->
+        val c = HomeLayout.clusterWeight(Repo.clusterSize.value)
+        val band = c / (c + 3f)
+        if (band == 0f) list else {
+            val dh = (band - 0.04f).coerceAtLeast(0.05f)
+            val dw = dh / 2f // the area is about twice as wide as it is tall
+            val y = (band - dh) / 2f
+            val out = list.map {
+                when (it.id) {
+                    "car3d" -> it.copy(on = true, free = FreeRect(0f, 0f, 1f, band))
+                    "tach" -> if (it.on) it else it.copy(on = true, free = FreeRect(0.012f, y, dw, dh))
+                    "speedo" -> if (it.on) it else it.copy(on = true, free = FreeRect(1f - 0.012f - dw, y, dw, dh))
+                    else -> it
+                }
+            }
+            out.filter { it.id == "car3d" } + out.filter { it.id != "car3d" } // the car at the bottom
+        }
+    },
+    toGrid = { list -> list.map { if (it.id in ClusterParts) it.copy(on = false) else it } },
 ) { Repo.settings.clusterSize = 1 }
 
 /** Card names and icons for the "add" menu, by card id. */
@@ -147,7 +175,9 @@ typealias CardNames = Map<String, Pair<String, ImageVector>>
 @Composable
 fun HomeEditBar(onDone: () -> Unit) {
     val cluster by Repo.clusterSize.collectAsState()
-    BoardEditBar(HomeEdit, HomeTileInfo, onDone) {
+    val free = HomeLayout.board.isFree(Repo.homeTiles.collectAsState().value)
+    BoardEditBar(HomeEdit, if (free) HomeTileInfo else HomeTileInfo - "car3d", onDone) {
+        if (free) return@BoardEditBar // the 3D block is a card there, sized by dragging
         T("3D:", 14.sp, C.Sub)
         listOf(0 to "Скрыть", 1 to "Обычный", 2 to "Большой", 3 to "Макс.").forEach { (v, l) ->
             Chip(l, cluster == v, { Repo.settings.clusterSize = v })
