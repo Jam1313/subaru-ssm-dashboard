@@ -65,6 +65,7 @@ val HomeTileInfo: Map<String, Pair<String, androidx.compose.ui.graphics.vector.I
     "tach" to ("Тахометр" to Lucide.Gauge),
     "speedo" to ("Спидометр" to Lucide.Gauge),
     "car3d" to ("3D-машина" to Lucide.Car),
+    "minimap" to ("Мини-карта" to Lucide.Map),
 )
 
 @Composable
@@ -127,7 +128,9 @@ fun HomeScreen() {
             // free layout: the 3D car, the tachometer and the speedometer are cards like the others, anything can
             // go anywhere and over anything
             FreeArea(
-                HomeEdit, kg.forester.sg.data.HomeLayout.parse(layout).filter { it.on }, edit, HomeTileInfo, longPress,
+                // the 3D car is the backdrop: always under the other cards
+                HomeEdit, kg.forester.sg.data.HomeLayout.parse(layout).filter { it.on }.sortedBy { if (it.id == "car3d") 0 else 1 },
+                edit, HomeTileInfo, longPress,
                 Modifier.weight(1f).fillMaxWidth(),
             ) { t, m -> HomeTile(t.id, t.style, e, ts, gps, tcu, m) }
             return@Column
@@ -163,8 +166,12 @@ private fun HomeTile(
 ) {
     val (title, icon) = HomeTileInfo[id] ?: return
     when (id) {
+        "minimap" -> MiniMapCard(st, m) { HomeEdit.setStyle("minimap", it) }
         "car3d" -> Panel(m, padding = 0.dp) {
-            CarViewer(e.rpm, e.speedKmh, Modifier.fillMaxSize(), throttlePct = e.throttlePct, boostBar = e.boostBar, carShare = 1f)
+            CarViewer(
+                e.rpm, e.speedKmh, Modifier.fillMaxSize(), throttlePct = e.throttlePct, boostBar = e.boostBar, carShare = 1f,
+                carScale = carScaleOf(st),
+            )
         }
         "tach", "speedo" -> {
             val styles by Repo.dialStyles.collectAsState()
@@ -251,3 +258,6 @@ private fun BarCard(
         }
     }
 }
+
+/** Size of the car in the 3D card, kept in its style as "scale:0.6" (1 = as large as fits). */
+fun carScaleOf(style: String) = style.removePrefix("scale:").toFloatOrNull()?.coerceIn(0.3f, 1f) ?: 1f

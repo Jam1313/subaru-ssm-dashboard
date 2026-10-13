@@ -480,4 +480,14 @@ val PresetDialStyles: List<DialStyle> = listOf(
         value = Color(0xFF1F1A14), unit = Color(0xFF4A3F33), needle = Color(0xFF1F1A14), hub = Color(0xFF1F1A14),
         ticks = TickShape.TRIANGLE, pattern = FacePattern.CAT, patternColor = Color(0xFFF29A38), needleWidth = 0.03f,
     ),
+    // NFS Most Wanted HUD: smoky glass face, white scale, orange bar over the top, green nitrous bar at the lower left
+    DialStyle(
+        "rockport", "Рокпорт",
+        face = listOf(Color(0xB3202226), Color(0xB31A1C20), Color(0xCC111214)), rim = Color(0xFF8A8F99), track = Color(0x00000000),
+        arc = null, red = Color(0xFFE11D2E),
+        tickMajor = Color.White, tickMinor = Color(0xCCFFFFFF), numbers = Color.White,
+        value = Color(0xFF1B1608), unit = Color.White, needle = Color(0xFFF1F1F1), hub = Color(0xFF2A2C31), needleWidth = 0.025f,
+        rings = listOf(Triple(182f, 128f, Color(0xFFF59E0B)), Triple(112f, 52f, Color(0xFF8BD82B))),
+        readout = Readout(Color(0xFFC9A35A), Color(0xFF1B1608), Color(0x2A1B1608), Color(0xFF6B5A2A)),
+    ),
 )

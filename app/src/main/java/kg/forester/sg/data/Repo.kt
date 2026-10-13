@@ -17,6 +17,8 @@ data class GpsFix(
     val timeMs: Long,
     /** Course over ground, degrees clockwise from north; null when GPS has none (standing still). */
     val bearing: Float? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
 )
 
 data class BatteryState(
@@ -199,6 +201,20 @@ class Settings(ctx: Context) {
     var autostartApp: Boolean
         get() = p.getBoolean("autostartApp", false)
         set(v) { p.edit().putBoolean("autostartApp", v).apply() }
+
+    /** App the mini-map opens on a tap: a package, or "" for the "Навигатор" shortcut. */
+    var mapApp: String
+        get() = p.getString("mapApp", "")!!
+        set(v) { p.edit().putString("mapApp", v).apply() }
+
+    /** Daily backup into Download/SubaruDashboard (see Backup). */
+    var autoBackup: Boolean
+        get() = p.getBoolean("autoBackup", true)
+        set(v) { p.edit().putBoolean("autoBackup", v).apply() }
+
+    var lastAutoBackupMs: Long
+        get() = p.getLong("lastAutoBackupMs", 0L)
+        set(v) { p.edit().putLong("lastAutoBackupMs", v).apply() }
 
     /** Layout of any editable screen (see Board), by its settings key. */
     fun board(key: String) = p.getString(key, "")!!

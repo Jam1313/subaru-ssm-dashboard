@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
 import com.composables.icons.lucide.ImagePlus
@@ -92,6 +93,11 @@ data class DialStyle(
     val image: String? = null,         // user picture under the face (see GaugeImages)
     val tickLow: Color? = null,        // ticks and numbers fade from this colour at the start to tickMajor at the end
     val segments: Boolean = false,     // LED blocks lit up to the value instead of an arc (coloured along [arc])
+    /**
+     * Bars outside the face at fixed places: start angle (0 = 3 o'clock, clockwise), sweep, colour (Most Wanted).
+     * They are live: the first fills with the engine speed, the second with the fuel left in the tank.
+     */
+    val rings: List<Triple<Float, Float, Color>> = emptyList(),
 )
 
 private val WarmLcd = Readout(Color(0xFFB9A46A), Color(0xFF1B1608), Color(0x2A1B1608), Color(0xFF6B5A2A))
@@ -296,8 +302,9 @@ fun Dial(
     val text = value?.let { format.format(it) } ?: "—"
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val photo = remember(style.image) { style.image?.let { kg.forester.sg.data.GaugeImages.bitmap(ctx, it)?.asImageBitmap() } }
+    val ringFill = if (style.rings.isEmpty()) emptyList() else ringValues()
     Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style, photo) }
+        Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill) }
         val ro = style.readout
         if (ro != null) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -322,6 +329,15 @@ fun Dial(
             }
         }
     }
+}
+
+/** Live values for the outer bars of a design: engine speed of 7000 rpm, fuel left of the tank (null = unknown). */
+@Composable
+private fun ringValues(): List<Float?> {
+    val e by kg.forester.sg.data.Repo.live.collectAsState()
+    val ts by kg.forester.sg.data.Repo.trip.collectAsState()
+    val tank = kg.forester.sg.data.Repo.settings.tankL
+    return listOf(e.rpm?.let { it / 7000f }, ts.fuelLeftL?.takeIf { tank > 0 }?.let { (it / tank).toFloat() })
 }
 
 /** LCD / framed digital number of [width]; unlit "8"s sit behind a segment read-out. */
@@ -353,8 +369,9 @@ private fun ReadoutBox(text: String, ro: Readout, width: androidx.compose.ui.uni
 private fun DrawScope.drawDial(
     v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle,
     photo: androidx.compose.ui.graphics.ImageBitmap? = null,
+    ringFill: List<Float?> = emptyList(),
 ) {
-    val r = size.minDimension / 2f * (if (st.outer != null) 0.9f else 1f)
+    val r = size.minDimension / 2f * (if (st.outer != null || st.rings.isNotEmpty()) 0.9f else 1f)
     val c = center
     val sweep = st.sweep
     val start = 90f + (360f - sweep) / 2f
@@ -373,6 +390,14 @@ private fun DrawScope.drawDial(
         val mid = start + sweep / 2f
         drawArc(left, start + 4f, mid - start - 6f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
         drawArc(right, mid + 2f, start + sweep - mid - 6f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
+    }
+    st.rings.forEachIndexed { i, (a0, sw, col) ->
+        val or = r * 1.06f
+        val tl = Offset(c.x - or, c.y - or)
+        val sz = Size(or * 2, or * 2)
+        val f = ringFill.getOrNull(i)?.coerceIn(0f, 1f)
+        drawArc(col.copy(alpha = if (f == null) 0.35f else 0.22f), a0, sw, false, tl, sz, style = Stroke(r * 0.07f, cap = StrokeCap.Round))
+        if (f != null && f > 0.005f) drawArc(col, a0, sw * f, false, tl, sz, style = Stroke(r * 0.07f, cap = StrokeCap.Round))
     }
     // face
     if (!st.minimal) {

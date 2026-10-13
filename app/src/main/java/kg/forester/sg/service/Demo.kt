@@ -2,6 +2,7 @@ package kg.forester.sg.service
 
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -93,6 +94,23 @@ object Demo {
         val t = (nowMs / 1000.0) % 90
         val wiggle = if (t in 26.0..60.0) 40 * sin((t - 26) / 3.5) else 0.0
         return ((90 + wiggle) % 360).toFloat()
+    }
+
+    // demo drive starts in the centre of Bishkek and follows the demo speed and course
+    private var lat = 42.8746
+    private var lon = 74.6122
+    private var lastPosMs = 0L
+
+    fun position(nowMs: Long, speedKmh: Float, bearing: Float?): Pair<Double, Double> {
+        val dt = if (lastPosMs == 0L) 0.0 else ((nowMs - lastPosMs) / 1000.0).coerceAtMost(2.0)
+        lastPosMs = nowMs
+        if (bearing != null) {
+            val m = speedKmh / 3.6 * dt
+            val a = Math.toRadians(bearing.toDouble())
+            lat += m * cos(a) / 111_320.0
+            lon += m * sin(a) / (111_320.0 * cos(Math.toRadians(lat)))
+        }
+        return lat to lon
     }
 
     /** Instant consumption for the demo, same formula as the real one. */

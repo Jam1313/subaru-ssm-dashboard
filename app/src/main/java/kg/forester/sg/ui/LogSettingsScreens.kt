@@ -222,6 +222,13 @@ private fun GeneralSettings() {
             }
             Spacer(Modifier.height(14.dp))
             BackgroundSettings()
+            Spacer(Modifier.height(14.dp))
+            T("Мини-карта открывает", 15.sp)
+            T("Приложение, которое запускается по нажатию на мини-карту", 11.sp, C.Sub)
+            Spacer(Modifier.height(6.dp))
+            MapAppChooser()
+            Spacer(Modifier.height(14.dp))
+            BackupSettings()
         }
         Spacer(Modifier.width(12.dp))
         Panel(Modifier.weight(1f).fillMaxHeight()) {
@@ -240,6 +247,56 @@ private fun GeneralSettings() {
                 13.sp, C.Sub,
             )
         }
+    }
+}
+
+/** Manual backup to a file the user picks, restore from one, and the daily automatic copy. */
+@Composable
+private fun BackupSettings() {
+    val s = Repo.settings
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var auto by remember { mutableStateOf(s.autoBackup) }
+    var msg by remember { mutableStateOf("") }
+    var restoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val save = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        msg = runCatching {
+            ctx.contentResolver.openOutputStream(uri)!!.use { kg.forester.sg.data.Backup.write(ctx, it) }
+            "Копия сохранена"
+        }.getOrElse { "Не удалось сохранить: ${it.message}" }
+    }
+    val open = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri -> restoreUri = uri }
+
+    T("Резервная копия", 15.sp)
+    T("Поездки, заправки, калибровка, раскладки экранов, свои дизайны и настройки в одном файле.", 11.sp, C.Sub)
+    Spacer(Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Chip("Сохранить копию…", false, { save.launch(kg.forester.sg.data.Backup.suggestedName()) })
+        Chip("Восстановить из файла…", false, { open.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) })
+    }
+    if (msg.isNotEmpty()) T(msg, 12.sp, C.Green)
+    SettingSwitch("Автокопия раз в сутки", "В папку Download/SubaruDashboard, хранятся последние 7. Последняя: ${kg.forester.sg.data.Backup.lastAutoText()}", auto) {
+        auto = it; s.autoBackup = it
+    }
+    restoreUri?.let { uri ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { restoreUri = null },
+            title = { androidx.compose.material3.Text("Восстановить из копии?") },
+            text = { androidx.compose.material3.Text("Текущие поездки, заправки и настройки заменятся данными из файла. Приложение перезапустится.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton({
+                    restoreUri = null
+                    msg = runCatching {
+                        ctx.contentResolver.openInputStream(uri)!!.use { kg.forester.sg.data.Backup.restore(ctx, it) } ?: ""
+                    }.getOrElse { "Не удалось восстановить: ${it.message}" }
+                }) { androidx.compose.material3.Text("Восстановить") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton({ restoreUri = null }) { androidx.compose.material3.Text("Отмена") } },
+        )
     }
 }
 

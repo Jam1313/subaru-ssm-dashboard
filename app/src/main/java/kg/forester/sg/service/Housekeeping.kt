@@ -24,6 +24,7 @@ object Housekeeping {
         runCatching { trimCsv(ctx, "battery.csv", 5000) }
         runCatching { trimCsv(ctx, "knock.csv", 2000) }
         runCatching { Repo.db.compact(now - 2 * DAY, now - 35 * DAY) }
+        runCatching { kg.forester.sg.data.Backup.autoBackupIfDue(ctx) }
     }
 
     private fun cleanLogs(ctx: Context, now: Long, currentLog: String?) {

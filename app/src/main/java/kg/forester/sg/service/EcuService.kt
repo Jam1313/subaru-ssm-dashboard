@@ -211,13 +211,18 @@ class EcuService : Service() {
                 while (tcuHistory.size > 120) tcuHistory.removeFirst()
                 Repo.tcuHistory.value = tcuHistory.toList()
             }
+            val bearing = if ((snap.speedKmh ?: 0) > 3) Demo.bearing(now) else null
+            val (lat, lon) = Demo.position(now, (snap.speedKmh ?: 0).toFloat(), bearing)
             Repo.gps.value = GpsFix(
                 speedKmh = (snap.speedKmh ?: 0).toFloat(), altitudeM = 195.0, accuracyM = 5f, satellites = 9,
-                timeMs = now, bearing = if ((snap.speedKmh ?: 0) > 3) Demo.bearing(now) else null,
+                timeMs = now, bearing = bearing, lat = lat, lon = lon,
             )
             val lh = Demo.litersPerHour(snap)
             val v = snap.speedKmh ?: 0
-            Repo.trip.value = Repo.trip.value.copy(instLh = lh, instPer100 = if (v >= 5) lh / v * 100 else null)
+            val tank = Repo.settings.tankL.takeIf { it > 0 } ?: 60.0
+            Repo.trip.value = Repo.trip.value.copy(
+                instLh = lh, instPer100 = if (v >= 5) lh / v * 100 else null, fuelLeftL = tank * 0.62,
+            )
             delay(250)
         }
         Repo.link.value = LinkState.NO_CABLE
@@ -443,6 +448,7 @@ class EcuService : Service() {
                 satellites = l.extras?.getInt("satellites") ?: 0,
                 timeMs = System.currentTimeMillis(),
                 bearing = if (l.hasBearing()) l.bearing else null,
+                lat = l.latitude, lon = l.longitude,
             )
         }
 

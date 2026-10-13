@@ -48,6 +48,9 @@ import com.composables.icons.lucide.LayoutGrid
 import com.composables.icons.lucide.Move
 import com.composables.icons.lucide.Scaling
 import com.composables.icons.lucide.Layers
+import com.composables.icons.lucide.ZoomIn
+import com.composables.icons.lucide.Palette
+import com.composables.icons.lucide.ZoomOut
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.key
@@ -98,7 +101,7 @@ class BoardEdit(
         save(l)
     }
 
-    /** Draws [id] on top of the others in the free layout. */
+    /** Draws [id] on top of the others in the free layout (the home 3D card always stays at the bottom). */
     fun toFront(id: String) {
         val l = list().toMutableList()
         val i = l.indexOfFirst { it.id == id }
@@ -141,7 +144,7 @@ class BoardEdit(
 private val ClusterParts = setOf("car3d", "tach", "speedo")
 
 val HomeEdit = BoardEdit(
-    HomeLayout.board, HomeLayout.board.defaults.map { it.id }.toSet() - "car3d",
+    HomeLayout.board, HomeLayout.board.defaults.map { it.id }.toSet() - "car3d" - "minimap",
     gridBand = {
         val c = HomeLayout.clusterWeight(Repo.clusterSize.value)
         c / (c + 3f) to 3f / (c + 3f)
@@ -248,7 +251,9 @@ fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", 
     )
     BoxWithConstraints(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
         val gauge = cfg.id in edit.gaugeable
-        val count = (if (gauge) 1 else 0) + if (free) 2 else 5
+        val car = cfg.id == "car3d" // the 3D card: car size instead of a gauge design
+        val map = cfg.id == "minimap" // the map card: map design
+        val count = (if (gauge || map) 1 else 0) + (if (car) 2 else 0) + if (free) 2 else 5
         val narrow = maxWidth < 260.dp || maxHeight < 44.dp
         val gap = if (narrow) 3.dp else 5.dp
         val btn = minOf(32.dp, (maxWidth - 8.dp - gap * (count - 1)) / count, maxHeight - 6.dp)
@@ -267,10 +272,17 @@ fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", 
                 EditButton(Lucide.ChevronRight, btn) { edit.move(cfg.id, 1) }
             }
             if (gauge) EditButton(Lucide.Gauge, btn, tint = if (cfg.style.isEmpty()) C.Text else C.Violet) { picking = true }
+            if (map) EditButton(Lucide.Palette, btn, tint = C.Violet) { picking = true }
+            if (car) {
+                val s = carScaleOf(cfg.style)
+                EditButton(Lucide.ZoomOut, btn, s > 0.31f) { edit.setStyle(cfg.id, "scale:%.1f".format(java.util.Locale.US, s - 0.1f)) }
+                EditButton(Lucide.ZoomIn, btn, s < 0.99f) { edit.setStyle(cfg.id, "scale:%.1f".format(java.util.Locale.US, s + 0.1f)) }
+            }
             EditButton(Lucide.X, btn, tint = C.Red) { edit.hide(cfg.id) }
         }
     }
-    if (picking) StylePicker(
+    if (picking && cfg.id == "minimap") MapStylePicker(cfg.style, { edit.setStyle(cfg.id, it) }, { picking = false })
+    else if (picking) StylePicker(
         "Вид: $title", cfg.style, "Обычный", Modifier, target = "${edit.board.key}/${cfg.id}",
         preview = { st, m -> Dial(62f, 100f, 20f, 1f, "", null, 80f, m, st) },
         onPick = { edit.setStyle(cfg.id, it) },

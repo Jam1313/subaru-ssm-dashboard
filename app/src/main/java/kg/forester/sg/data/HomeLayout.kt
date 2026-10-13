@@ -109,7 +109,7 @@ object HomeLayout {
             "afr", "afcorr", "aflearn", "timing", "knock",
             "inj", "wgdc", "fuel", "boost", "gps",
         ).map { TileCfg(it, true) } + listOf(
-            "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range", "tach", "speedo", "car3d",
+            "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range", "tach", "speedo", "car3d", "minimap",
         ).map { TileCfg(it, false) },
         freeOnly = setOf("car3d"),
     )

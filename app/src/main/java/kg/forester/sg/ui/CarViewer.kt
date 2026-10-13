@@ -139,6 +139,8 @@ fun CarViewer(
     throttlePct: Float? = null, boostBar: Float? = null,
     /** Part of the width the car itself may take (the dials sit left and right). */
     carShare: Float = 1f,
+    /** Car size relative to the largest that fits; a smaller car sits lower, on the road. */
+    carScale: Float = 1f,
 ) {
     val ctx = LocalContext.current
     val model by kg.forester.sg.data.Repo.car3d.collectAsState()
@@ -358,12 +360,12 @@ fun CarViewer(
             Canvas(Modifier.fillMaxSize()) {
                 // fit the frame into the box (like ContentScale.Fit)
                 // the car itself (not the frame with its empty margins) fits the room between the dials
-                val scale = minOf(size.width * carShare / (f.width * src.carWidth(frameIdx).coerceAtLeast(0.35f)), size.height / f.height) * zoom
+                val scale = minOf(size.width * carShare / (f.width * src.carWidth(frameIdx).coerceAtLeast(0.35f)), size.height / f.height) * zoom * carScale
                 val dw = f.width * scale
                 val dh = f.height * scale
                 // while driving, put the car (not its frame) on the road's centre line
                 val ox = (size.width - dw) / 2 + (0.5f - src.carX) * dw * roadAlpha
-                val oy = (size.height - dh) / 2 + (1f - zoom) * size.height * 0.25f
+                val oy = (size.height - dh) / 2 + (1f - zoom) * size.height * 0.25f + (1f - carScale) * size.height * 0.32f
                 drawIntoCanvas { cnv ->
                     val nc = cnv.nativeCanvas
                     val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG)
