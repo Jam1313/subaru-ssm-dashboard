@@ -12,10 +12,12 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Tracks battery health from ECU voltage:
- *  - resting: ignition on, engine not running (before cranking)
- *  - cranking: minimum voltage in the last seconds before the engine catches
- *  - charging: alternator output once the engine has been running for a while (idle counts)
+ * Tracks battery health from ECU voltage, the way a battery / alternator check is done with a voltmeter:
+ *  - resting: ignition on, engine not running (before cranking), with how long the car stood (surface charge
+ *    is gone after ~2 h, only then the voltage tells the state of charge);
+ *  - cranking: minimum voltage while the starter turns, how long it turned, how fast, the air temperature
+ *    (a cold start is compared with cold starts) and how many seconds the voltage needs to be back at 13.2 V;
+ *  - charging: alternator output at idle and at 1800–3500 rpm, with the lowest and highest of the drive.
  * The last value of each kind is restored from the event log on start.
  */
 class BatteryMonitor(private val ctx: Context) {
@@ -32,6 +34,16 @@ class BatteryMonitor(private val ctx: Context) {
     private var voltSum = 0.0
     private var voltN = 0
     private var voltSlot = 0L
+    private val idleSamples = ArrayList<Float>()
+    private val revSamples = ArrayList<Float>()
+    private var chargeMin = Float.NaN
+    private var chargeMax = Float.NaN
+    private var lastAltDuty = 0f
+    /** A start whose record waits for the voltage to recover (or a minute to pass). */
+    private var pendingCrank: BatteryEvent? = null
+    private var restingSinceMs = 0L
+    /** Voltage of the last 30 s with the engine running, for the alternator warnings. */
+    private val window30 = ArrayDeque<Pair<Long, Float>>()
 
     init {
         restoreFromLog()
@@ -55,25 +67,44 @@ class BatteryMonitor(private val ctx: Context) {
         voltSlot = slot
         voltSum += v; voltN++
 
+        if (!running && wasRunning) {
+            Repo.settings.lastEngineOffMs = now
+            logCharging(now)
+            finishCrank(now, -1f)
+        }
         if (rpm == 0) {
             lastStoppedMs = now
+            if (restingSamples.isEmpty()) restingSinceMs = now
             restingSamples.add(v)
             if (restingSamples.size > 40) restingSamples.removeAt(0)
-            // after ~5 s of steady ignition-on readings publish the resting voltage
-            if (restingSamples.size >= 20) {
+            // after ~5 s of steady ignition-on readings publish the resting voltage (OBD-II reads the voltage
+            // only every few polls, so count time as well as samples)
+            if (restingSamples.size >= 20 || (restingSamples.size >= 5 && now - restingSinceMs >= 5000)) {
                 val med = restingSamples.sorted()[restingSamples.size / 2]
                 Repo.battery.value = Repo.battery.value.copy(restingV = med, restingTimeMs = now)
+                val off = Repo.settings.lastEngineOffMs
+                val parkedH = if (off > 0 && now > off) (now - off) / 3_600_000f else null
+                Repo.battery.value = Repo.battery.value.copy(restingParkedH = parkedH)
                 if (!restingLogged) {
                     restingLogged = true
-                    event(now, "resting", med.toDouble(), 0.0)
+                    // a flat battery: below 12.2 V after standing long enough for the surface charge to go
+                    if (Repo.settings.feature("battAlert") && med < 12.2f && (parkedH == null || parkedH >= 2f)) {
+                        Alerts.raise("battLow", "Аккумулятор разряжен: %.1f В, около %d %%".format(med, socPct(med)), Alerts.Level.WARN, 6 * 3_600_000L)
+                    }
+                    event(now, "resting", med.toDouble(), 0.0, info(
+                        "parked_h" to parkedH?.toDouble(), "soc_pct" to socPct(med).toDouble(),
+                        "intake_c" to s.intakeC?.toDouble(), "coolant_c" to s.coolantC?.toDouble(),
+                    ))
                 }
             }
         }
 
         if (running && !wasRunning) {
             runningSinceMs = now
+            window30.clear()
             chargeSamples.clear()
             chargeLogged = false
+            idleSamples.clear(); revSamples.clear(); chargeMin = Float.NaN; chargeMax = Float.NaN
             // A real start: the engine was stopped within the last 10 s. The ECU can report 0 rpm while
             // the starter turns, so take the minimum over the last few seconds of samples.
             if (now - lastStoppedMs < 10_000) {
@@ -82,15 +113,43 @@ class BatteryMonitor(private val ctx: Context) {
                 if (minV != null) {
                     val crankStart = window.firstOrNull { it.v < (restingSamples.lastOrNull() ?: minV) - 0.3f }?.t
                     val dur = if (crankStart != null) now - crankStart else 0L
-                    Repo.battery.value = Repo.battery.value.copy(crankMinV = minV, crankTimeMs = now, crankMs = dur)
-                    event(now, "crank", minV.toDouble(), dur.toDouble())
+                    // cranking speed: the ECU's rpm while the starter turns (0 on some ECUs: then unknown)
+                    val crankRpm = window.map { it.rpm }.filter { it in 50..499 }.takeIf { it.isNotEmpty() }?.average()?.toInt()
+                    Repo.battery.value = Repo.battery.value.copy(
+                        crankMinV = minV, crankTimeMs = now, crankMs = dur, crankRecoveryS = null,
+                        crankTempC = s.intakeC, crankRpm = crankRpm,
+                    )
+                    pendingCrank = BatteryEvent(now, "crank", minV.toDouble(), dur.toDouble(), info(
+                        "intake_c" to s.intakeC?.toDouble(), "coolant_c" to s.coolantC?.toDouble(), "crank_rpm" to crankRpm?.toDouble(),
+                    ))
                 }
             }
             restingSamples.clear()
             restingLogged = false
         }
 
+        // recovery after the start: how soon the alternator brings the voltage back to 13.2 V
+        pendingCrank?.let { c ->
+            if (running && v >= 13.2f) finishCrank(now, (now - c.timeMs) / 1000f)
+            else if (now - c.timeMs > 60_000) finishCrank(now, -1f)
+        }
+
         if (running && now - runningSinceMs > 30_000) {
+            window30.addLast(now to v)
+            while (window30.isNotEmpty() && now - window30.first().first > 30_000) window30.removeFirst()
+            if (Repo.settings.feature("altAlert") && window30.size >= 5 && now - runningSinceMs > 60_000) {
+                val avg = window30.map { it.second }.average().toFloat()
+                if (avg < 13.0f) Alerts.raise("altLow", "Генератор не заряжает: %.2f В на работающем моторе — ремень, генератор, клеммы".format(avg),
+                    Alerts.Level.DANGER, 30 * 60_000L)
+                else if (avg > 15.0f) Alerts.raise("altHigh", "Перезаряд: %.2f В — неисправен регулятор генератора".format(avg),
+                    Alerts.Level.DANGER, 30 * 60_000L)
+            }
+            if (rpm < 1000) idleSamples.add(v) else if (rpm in 1800..3500) revSamples.add(v)
+            if (idleSamples.size > 3000) idleSamples.removeAt(0)
+            if (revSamples.size > 3000) revSamples.removeAt(0)
+            chargeMin = if (chargeMin.isNaN()) v else minOf(chargeMin, v)
+            chargeMax = if (chargeMax.isNaN()) v else maxOf(chargeMax, v)
+            lastAltDuty = s.altDutyPct ?: lastAltDuty
             chargeSamples.add(v)
             if (chargeSamples.size > 600) chargeSamples.removeAt(0)
             val b = Repo.battery.value
@@ -98,14 +157,44 @@ class BatteryMonitor(private val ctx: Context) {
                 chargingV = chargeSamples.average().toFloat(),
                 chargingMinV = minOf(b.chargingMinV ?: v, v),
                 chargingMaxV = maxOf(b.chargingMaxV ?: v, v),
+                chargeIdleV = idleSamples.takeIf { it.size >= 5 }?.average()?.toFloat() ?: b.chargeIdleV,
+                chargeRevV = revSamples.takeIf { it.size >= 5 }?.average()?.toFloat() ?: b.chargeRevV,
             )
-            if (!chargeLogged && chargeSamples.size >= 60) {
-                chargeLogged = true
-                event(now, "charging", chargeSamples.average(), (s.altDutyPct ?: 0f).toDouble())
-            }
+            // one record per drive: at the engine stop, or after 10 minutes if the drive is long
+            if (!chargeLogged && now - runningSinceMs > 10 * 60_000L) logCharging(now)
         }
         wasRunning = running
     }
+
+    private fun logCharging(now: Long) {
+        // at least a minute of charging and some readings (OBD-II reads the voltage only every few polls)
+        if (chargeLogged || chargeSamples.size < 10 || now - runningSinceMs < 90_000) return
+        chargeLogged = true
+        event(now, "charging", chargeSamples.average(), lastAltDuty.toDouble(), info(
+            "idle_v" to idleSamples.takeIf { it.size >= 5 }?.average(), "rev_v" to revSamples.takeIf { it.size >= 5 }?.average(),
+            "min_v" to chargeMin.takeUnless { it.isNaN() }?.toDouble(), "max_v" to chargeMax.takeUnless { it.isNaN() }?.toDouble(),
+        ))
+    }
+
+    /** Writes the waiting start record with its recovery time (-1 = not back at 13.2 V within a minute). */
+    private fun finishCrank(now: Long, recoveryS: Float) {
+        val c = pendingCrank ?: return
+        pendingCrank = null
+        Repo.battery.value = Repo.battery.value.copy(crankRecoveryS = recoveryS)
+        if (Repo.settings.feature("battAlert")) {
+            when {
+                c.value < 9.6 -> Alerts.raise("battCrank", "Слабый пуск: напряжение падало до %.1f В — проверьте аккумулятор".format(c.value),
+                    Alerts.Level.WARN, 6 * 3_600_000L)
+                recoveryS < 0 -> Alerts.raise("battRecover", "После пуска напряжение минуту не поднимается до 13,2 В — проверьте генератор и АКБ",
+                    Alerts.Level.WARN, 6 * 3_600_000L)
+            }
+        }
+        val info = c.info + (if (c.info.isEmpty()) "" else ";") + "recovery_s=%.1f".format(Locale.US, recoveryS)
+        event(c.timeMs, c.type, c.value, c.extra, info)
+    }
+
+    private fun info(vararg kv: Pair<String, Double?>) =
+        kv.filter { it.second != null }.joinToString(";") { (k, v) -> "$k=" + "%.2f".format(Locale.US, v).trimEnd('0').trimEnd('.') }
 
     private fun restoreFromLog() {
         runCatching { Repo.db.purgeBogusCranks() }
@@ -115,27 +204,43 @@ class BatteryMonitor(private val ctx: Context) {
         val charging = events.firstOrNull { it.type == "charging" }
         Repo.battery.value = BatteryState(
             restingV = resting?.value?.toFloat(), restingTimeMs = resting?.timeMs ?: 0,
+            restingParkedH = resting?.num("parked_h")?.toFloat(),
             crankMinV = crank?.value?.toFloat(), crankTimeMs = crank?.timeMs ?: 0, crankMs = crank?.extra?.toLong(),
+            crankRecoveryS = crank?.num("recovery_s")?.toFloat(), crankTempC = crank?.num("intake_c")?.toInt(),
+            crankRpm = crank?.num("crank_rpm")?.toInt(),
             chargingV = charging?.value?.toFloat(),
+            chargingMinV = charging?.num("min_v")?.toFloat(), chargingMaxV = charging?.num("max_v")?.toFloat(),
+            chargeIdleV = charging?.num("idle_v")?.toFloat(), chargeRevV = charging?.num("rev_v")?.toFloat(),
         )
     }
 
-    private fun event(now: Long, type: String, value: Double, extra: Double) {
-        Repo.db.addBatteryEvent(BatteryEvent(now, type, value, extra))
+    private fun event(now: Long, type: String, value: Double, extra: Double, info: String = "") {
+        val e = BatteryEvent(now, type, value, extra, info)
+        Repo.db.addBatteryEvent(e)
         runCatching {
             val dir = File(ctx.getExternalFilesDir(null), "logs").apply { mkdirs() }
             val f = File(dir, "battery.csv")
+            // a file from an older version has fewer columns: keep it aside, start a new one
+            if (f.exists() && f.bufferedReader().use { it.readLine() } != CSV_HEAD) {
+                f.renameTo(File(dir, "battery-" + SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) + "-old.csv"))
+            }
             val newFile = !f.exists()
             FileWriter(f, true).use { w ->
-                if (newFile) w.write("datetime,type,volts,extra\n")
+                if (newFile) w.write(CSV_HEAD + "\n")
                 val t = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(now))
-                w.write("$t,$type,${"%.2f".format(Locale.US, value)},${"%.0f".format(Locale.US, extra)}\n")
+                fun col(k: String) = e.num(k)?.let { "%.2f".format(Locale.US, it).trimEnd('0').trimEnd('.') } ?: ""
+                w.write("$t,$type,${"%.2f".format(Locale.US, value)},${"%.0f".format(Locale.US, extra)}," +
+                    CSV_INFO.joinToString(",") { col(it) } + "\n")
             }
         }
         Repo.touch()
     }
 
     companion object {
+        /** battery.csv: extra = crank ms / alternator duty %, then the further numbers of each reading. */
+        private val CSV_INFO = listOf("parked_h", "soc_pct", "intake_c", "coolant_c", "crank_rpm", "recovery_s", "idle_v", "rev_v", "min_v", "max_v")
+        private val CSV_HEAD = "datetime,type,volts,extra," + CSV_INFO.joinToString(",")
+
         /** Approximate state of charge of a rested 12 V lead-acid battery. */
         fun socPct(v: Float): Int = when {
             v >= 12.7f -> 100

@@ -53,6 +53,7 @@ import kg.forester.sg.data.LinkState
 import kg.forester.sg.data.Repo
 import kg.forester.sg.service.EcuService
 import kg.forester.sg.ui.C
+import kg.forester.sg.ui.LinkIcon
 import kg.forester.sg.ui.DtcScreen
 import kg.forester.sg.ui.FuelScreen
 import kg.forester.sg.ui.HomeScreen
@@ -466,8 +467,7 @@ private fun TopBar(screen: Screen) {
         Icon(Lucide.Thermometer, null, tint = C.Text, modifier = Modifier.size(22.dp))
         T(" ${e.coolantC ?: "—"}°C", 18.sp)
         Spacer(Modifier.width(22.dp))
-        val ok = link == LinkState.CONNECTED
-        Icon(if (ok) Lucide.Usb else Lucide.Unplug, null, tint = if (ok) C.Green else C.Orange, modifier = Modifier.size(24.dp))
+        LinkIcon(24.dp)
         Spacer(Modifier.width(22.dp))
         T(SimpleDateFormat("HH:mm", Locale.US).format(now), 26.sp, weight = FontWeight.SemiBold)
         Spacer(Modifier.width(8.dp))

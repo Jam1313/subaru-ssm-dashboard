@@ -25,6 +25,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import com.composables.icons.lucide.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -130,24 +132,24 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector
 /** Small stat tile: icon + label + value + unit. */
 @Composable
 fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier: Modifier = Modifier, info: String = label) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(C.CardHi)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = C.Sub, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            T(label, 11.sp, C.Sub, maxLines = 1)
-            Row(verticalAlignment = Alignment.Bottom) {
-                T(value, 20.sp, weight = FontWeight.Bold, maxLines = 1)
-                Spacer(Modifier.width(4.dp))
-                T(unit, 12.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
+    // the "i" sits in the corner, so the value and its unit keep the whole width of a narrow tile
+    Box(modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
+        Row(
+            Modifier.fillMaxSize().padding(start = 10.dp, end = 22.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, tint = C.Sub, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                T(label, 11.sp, C.Sub, maxLines = 1)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    T(value, 20.sp, weight = FontWeight.Bold, maxLines = 1)
+                    Spacer(Modifier.width(4.dp))
+                    T(unit, 12.sp, C.Sub, maxLines = 1, modifier = Modifier.padding(bottom = 3.dp))
+                }
             }
         }
-        InfoButton(label, info)
+        InfoButton(label, info, Modifier.align(Alignment.TopEnd))
     }
 }
 
@@ -331,9 +333,15 @@ fun Legend(series: List<Series>, format: String = "%.1f") {
 
 /** Panel with a title row, legend and a live chart filling the rest. */
 @Composable
-fun ChartCard(title: String, series: List<Series>, min: Float, max: Float, modifier: Modifier, format: String = "%.1f", zeroLine: Boolean = false, info: String = title) {
+fun ChartCard(title: String, series: List<Series>, min: Float, max: Float, modifier: Modifier, format: String = "%.1f", zeroLine: Boolean = false, info: String = title,
+    icon: ImageVector? = null, tint: Color = C.Violet) {
     Panel(modifier, padding = 12.dp) {
         androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Box(Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center) { Icon(icon, null, tint = tint, modifier = Modifier.size(15.dp)) }
+                Spacer(Modifier.width(8.dp))
+            }
             T(title, 15.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Legend(series, format)
             InfoButton(title, info)
@@ -345,8 +353,26 @@ fun ChartCard(title: String, series: List<Series>, min: Float, max: Float, modif
                 T(format.format((max + min) / 2), 10.sp, C.Sub)
                 T(format.format(min), 10.sp, C.Sub)
             }
-            LiveChart(series, min, max, Modifier.weight(1f).fillMaxHeight(), zeroLine)
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                LiveChart(series, min, max, Modifier.fillMaxSize(), zeroLine)
+                if (series.all { sr -> sr.values.all { it == null } }) T("Нет данных", 13.sp, C.Sub, modifier = Modifier.align(Alignment.Center))
+            }
         }
+    }
+}
+
+/** Card header: the icon in a tinted circle, the title, an optional line under it, and the "i". */
+@Composable
+fun CardHeader(icon: ImageVector, title: String, tint: Color, info: String = title, sub: String? = null) {
+    androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center) { Icon(icon, null, tint = tint, modifier = Modifier.size(17.dp)) }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            T(title, 15.sp, weight = FontWeight.SemiBold, maxLines = 1)
+            if (sub != null) T(sub, 11.sp, C.Sub, maxLines = 1)
+        }
+        InfoButton(title, info)
     }
 }
 
@@ -379,4 +405,32 @@ fun RingGauge(
             }
         }
     }
+}
+
+/**
+ * The connection in the header: how the app talks to the car (USB cable, Wi-Fi or Bluetooth ELM327, demo),
+ * green when the ECU answers, orange (struck through) while it does not.
+ */
+@Composable
+fun LinkIcon(size: Dp) {
+    val link by kg.forester.sg.data.Repo.link.collectAsState()
+    val found by kg.forester.sg.data.Repo.adapterFound.collectAsState()
+    val ok = link == kg.forester.sg.data.LinkState.CONNECTED
+    val s = kg.forester.sg.data.Repo.settings
+    val via = when {
+        s.demo -> "demo"
+        found.startsWith("Wi-Fi") -> "wifi"
+        found.startsWith("Bluetooth") -> "bt"
+        found.startsWith("USB") -> "usb"
+        s.adapter == "elm_wifi" -> "wifi"
+        s.adapter == "elm_bt" -> "bt"
+        else -> "usb"
+    }
+    val icon = when (via) {
+        "demo" -> Lucide.MonitorPlay
+        "wifi" -> if (ok) Lucide.Wifi else Lucide.WifiOff
+        "bt" -> if (ok) Lucide.Bluetooth else Lucide.BluetoothOff
+        else -> if (ok) Lucide.Usb else Lucide.Unplug
+    }
+    Icon(icon, null, tint = if (via == "demo") C.Violet else if (ok) C.Green else C.Orange, modifier = Modifier.size(size))
 }

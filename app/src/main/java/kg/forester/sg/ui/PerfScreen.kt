@@ -259,6 +259,21 @@ fun NumberField(label: String, value: String, onChange: (String) -> Unit) {
     )
 }
 
+/** A text field in the app's dark style (same look as [NumberField]); [digits] keeps only digits and dots. */
+@Composable
+fun TextFieldDark(label: String, value: String, digits: Boolean = false, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value, onValueChange = { v -> onChange(if (digits) v.filter { it.isDigit() || it == '.' } else v) }, singleLine = true,
+        label = { T(label, 12.sp, C.Sub) },
+        keyboardOptions = KeyboardOptions(keyboardType = if (digits) KeyboardType.Number else KeyboardType.Text),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = C.Text, unfocusedTextColor = C.Text,
+            focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
 @Composable
 fun SwitchRow(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -41,9 +41,12 @@ data class Refill(
 /** 10-second consumption buckets for the charts. */
 data class Bucket(val timeMs: Long, val fuelL: Double, val km: Double)
 
-data class BatteryEvent(val timeMs: Long, val type: String, val value: Double, val extra: Double)
+/** [info]: further numbers of the reading as "key=value;key=value" (parked_h, intake_c, crank_rpm, recovery_s, idle_v, rev_v…). */
+data class BatteryEvent(val timeMs: Long, val type: String, val value: Double, val extra: Double, val info: String = "") {
+    fun num(key: String): Double? = info.split(';').firstOrNull { it.startsWith("$key=") }?.substringAfter('=')?.toDoubleOrNull()
+}
 
-class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 3) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 4) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -60,17 +63,18 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 3) {
     }
 
     private fun createV2(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS battery(time INTEGER, type TEXT, value REAL, extra REAL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS battery(time INTEGER, type TEXT, value REAL, extra REAL, info TEXT DEFAULT '')")
         db.execSQL("CREATE TABLE IF NOT EXISTS volts(time INTEGER PRIMARY KEY, v REAL, running INTEGER)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) createV2(db)
         if (oldVersion < 3) db.execSQL("ALTER TABLE trips ADD COLUMN idle_l REAL DEFAULT 0")
+        if (oldVersion in 2..3) db.execSQL("ALTER TABLE battery ADD COLUMN info TEXT DEFAULT ''")
     }
 
     fun addBatteryEvent(e: BatteryEvent) {
-        val cv = ContentValues().apply { put("time", e.timeMs); put("type", e.type); put("value", e.value); put("extra", e.extra) }
+        val cv = ContentValues().apply { put("time", e.timeMs); put("type", e.type); put("value", e.value); put("extra", e.extra); put("info", e.info) }
         writableDatabase.insert("battery", null, cv)
     }
 
@@ -80,9 +84,9 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "forester.db", null, 3) {
     }
 
     fun batteryEvents(limit: Int = 100): List<BatteryEvent> =
-        readableDatabase.rawQuery("SELECT time,type,value,extra FROM battery ORDER BY time DESC LIMIT $limit", null).use { c ->
+        readableDatabase.rawQuery("SELECT time,type,value,extra,info FROM battery ORDER BY time DESC LIMIT $limit", null).use { c ->
             val out = ArrayList<BatteryEvent>()
-            while (c.moveToNext()) out += BatteryEvent(c.getLong(0), c.getString(1), c.getDouble(2), c.getDouble(3))
+            while (c.moveToNext()) out += BatteryEvent(c.getLong(0), c.getString(1), c.getDouble(2), c.getDouble(3), c.getString(4) ?: "")
             out
         }
 

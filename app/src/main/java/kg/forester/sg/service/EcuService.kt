@@ -314,6 +314,10 @@ class EcuService : Service() {
         Repo.link.value = LinkState.CONNECTED
         Repo.linkMessage.value = "Демо-данные (без машины)"
         knock.reset(System.currentTimeMillis(), record = false)
+        // a trip counted in memory only (never saved), so the fuel screen shows something in the demo
+        val demoStart = System.currentTimeMillis()
+        var demoTrip = kg.forester.sg.data.Trip(startMs = demoStart, endMs = demoStart, distanceKm = 0.0, fuelL = 0.0)
+        var lastDemo = demoStart
         while (scope.isActive && Repo.settings.demo) {
             val now = System.currentTimeMillis()
             val (snap, tcu) = Demo.ecu(now)
@@ -339,8 +343,20 @@ class EcuService : Service() {
             val lh = Demo.litersPerHour(snap)
             val v = snap.speedKmh ?: 0
             val tank = Repo.settings.tankL.takeIf { it > 0 } ?: 60.0
+            val dtH = (now - lastDemo) / 3_600_000.0
+            lastDemo = now
+            val km = v * dtH; val l = lh * dtH
+            demoTrip = demoTrip.copy(
+                endMs = now, distanceKm = demoTrip.distanceKm + km, fuelL = demoTrip.fuelL + l,
+                cityKm = demoTrip.cityKm + if (v in 3..59) km else 0.0, cityL = demoTrip.cityL + if (v in 3..59) l else 0.0,
+                hwyKm = demoTrip.hwyKm + if (v >= 60) km else 0.0, hwyL = demoTrip.hwyL + if (v >= 60) l else 0.0,
+                idleS = demoTrip.idleS + if (v < 3) dtH * 3600 else 0.0, idleL = demoTrip.idleL + if (v < 3) l else 0.0,
+                maxRpm = maxOf(demoTrip.maxRpm, snap.rpm ?: 0),
+            )
+            val left = tank * 0.62
             Repo.trip.value = Repo.trip.value.copy(
-                instLh = lh, instPer100 = if (v >= 5) lh / v * 100 else null, fuelLeftL = tank * 0.62,
+                trip = demoTrip, instLh = lh, instPer100 = if (v >= 5) lh / v * 100 else null, fuelLeftL = left,
+                rangeKm = (demoTrip.per100 ?: 11.0).let { left / it * 100 },
             )
             delay(250)
         }

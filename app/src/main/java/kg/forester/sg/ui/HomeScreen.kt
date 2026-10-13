@@ -103,11 +103,13 @@ fun HomeScreen() {
                 // long press on a gauge: pick its design (NFS Underground style custom gauges)
                 if (!tachCard) Box(Modifier.align(Alignment.CenterStart).padding(start = 14.dp).size(d)
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { stylePick = "tach" }) }) {
-                    Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f, Modifier.fillMaxSize(), dialStyle(styles.first))
+                    Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f, Modifier.fillMaxSize(), dialStyle(styles.first),
+                        range = tripRangeOf("rpm", e.rpm?.toFloat()))
                 }
                 if (!speedoCard) Box(Modifier.align(Alignment.CenterEnd).padding(end = 14.dp).size(d)
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { stylePick = "speedo" }) }) {
-                    Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null, Modifier.fillMaxSize(), dialStyle(styles.second))
+                    Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null, Modifier.fillMaxSize(), dialStyle(styles.second),
+                        range = tripRangeOf("speed", e.speedKmh?.toFloat()), minMark = false)
                 }
                 stylePick?.let { which ->
                     DialStylePicker(which, Modifier.align(if (which == "tach") Alignment.CenterStart else Alignment.CenterEnd)) { stylePick = null }
@@ -180,9 +182,9 @@ private fun HomeTile(
                 val d = minOf(maxWidth, maxHeight)
                 // "" = the design picked for this gauge in the 3D block
                 if (id == "tach") Dial(e.rpm?.toFloat(), 7000f, 1000f, 1000f, "об/мин", "x1000", redFrom = 6000f, Modifier.size(d),
-                    dialStyle(st.ifEmpty { styles.first }))
+                    dialStyle(st.ifEmpty { styles.first }), range = tripRangeOf("rpm", e.rpm?.toFloat()))
                 else Dial(e.speedKmh?.toFloat(), 200f, 20f, 1f, "км/ч", null, redFrom = null, Modifier.size(d),
-                    dialStyle(st.ifEmpty { styles.second }))
+                    dialStyle(st.ifEmpty { styles.second }), range = tripRangeOf("speed", e.speedKmh?.toFloat()), minMark = false)
             }
         }
         "coolant" -> BarCard(st, "home.$id", icon, title, e.coolantC?.toFloat(), 40f, 110f, "°C", "%.0f", m, warnAbove = 102f)
@@ -250,20 +252,68 @@ private fun BarCard(
         Panel(Modifier.fillMaxSize(), padding = if (tight) 9.dp else 12.dp) {
             CardTitle(icon, title, info)
             // taller cards (fewer of them on the screen) get bigger numbers; the factory grid keeps 26 sp
-            FitValue(
-                value?.let { format.format(it) } ?: "—", unit, if (tall) 40f else 26f, Modifier.weight(1f).fillMaxWidth(),
-                if (warn) C.Orange else Color.White,
-            )
-            if (extra != null) T(extra, 11.sp, C.Sub, maxLines = 1)
-            else if (!tight && Repo.settings.feature("minmax")) {
-                // the trip's lowest and highest, as in BtSSM
-                Repo.tripRange.collectAsState().value[info.substringAfter('.')]?.let { (lo, hi) ->
-                    // the range is updated after the card's value: include the value so "max" is never below it
-                    T("мин ${format.format(minOf(lo, value ?: lo))} · макс ${format.format(maxOf(hi, value ?: hi))}", 10.sp, C.Sub, maxLines = 1)
+            val range = if (extra == null) tripRangeOf(info.substringAfter('.'), value) else null
+            Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                FitValue(
+                    value?.let { format.format(it) } ?: "—", unit, if (tall) 40f else 26f, Modifier.weight(1f).fillMaxHeight(),
+                    if (warn) C.Orange else Color.White,
+                )
+                if (range != null && !tight) {
+                    // the trip's highest over its lowest (as in BtSSM), in the colours of their marks on the bar
+                    Column(horizontalAlignment = Alignment.End) {
+                        MinMaxLine(Lucide.ArrowUp, format.format(range.second), MaxMarkColor, if (tall) 15 else 13)
+                        MinMaxLine(Lucide.ArrowDown, format.format(range.first), MinMarkColor, if (tall) 15 else 13)
+                    }
                 }
             }
+            if (extra != null) T(extra, 11.sp, C.Sub, maxLines = 1)
             Spacer(Modifier.height(if (tight) 4.dp else 6.dp))
-            ProgressBar(value?.let { (it - min) / (max - min) } ?: 0f, color, Modifier.fillMaxWidth(), if (tight) 5.dp else 6.dp)
+            val frac = { x: Float -> ((x - min) / (max - min)).coerceIn(0f, 1f) }
+            RangeBar(value?.let(frac) ?: 0f, range?.let { frac(it.first) to frac(it.second) }, color, Modifier.fillMaxWidth(), if (tight) 5.dp else 6.dp)
+        }
+    }
+}
+
+@Composable
+private fun MinMaxLine(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color, sp: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Icon(icon, null, tint = color, modifier = Modifier.size((sp - 1).dp))
+        Spacer(Modifier.width(2.dp))
+        T(text, sp.sp, color, FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+/** The trip's min and max of a home card (null if the feature is off or nothing is counted yet); [value] is included. */
+@Composable
+fun tripRangeOf(key: String, value: Float?): Pair<Float, Float>? {
+    if (!Repo.settings.feature("minmax")) return null
+    val (lo, hi) = Repo.tripRange.collectAsState().value[key] ?: return null
+    return minOf(lo, value ?: lo) to maxOf(hi, value ?: hi)
+}
+
+/** A bar with the trip's range lit up between its min and max marks, like the telltale needles of a gauge. */
+@Composable
+private fun RangeBar(fraction: Float, range: Pair<Float, Float>?, brush: Brush, modifier: Modifier, height: androidx.compose.ui.unit.Dp) {
+    val anim by androidx.compose.animation.core.animateFloatAsState(fraction.coerceIn(0f, 1f), androidx.compose.animation.core.tween(400), label = "bar")
+    androidx.compose.foundation.Canvas(modifier.height(height + 6.dp)) {
+        val h = height.toPx()
+        val top = (size.height - h) / 2
+        val rad = androidx.compose.ui.geometry.CornerRadius(h / 2, h / 2)
+        drawRoundRect(C.Border, androidx.compose.ui.geometry.Offset(0f, top), androidx.compose.ui.geometry.Size(size.width, h), rad)
+        if (range != null) {
+            val x0 = range.first * size.width
+            val x1 = range.second * size.width
+            drawRoundRect(Color.White.copy(alpha = 0.16f), androidx.compose.ui.geometry.Offset(x0, top),
+                androidx.compose.ui.geometry.Size((x1 - x0).coerceAtLeast(h), h), rad)
+        }
+        drawRoundRect(brush, androidx.compose.ui.geometry.Offset(0f, top), androidx.compose.ui.geometry.Size((anim * size.width).coerceAtLeast(h * 0.5f), h), rad)
+        if (range != null) {
+            val w = 3.dp.toPx()
+            for ((f, col) in listOf(range.first to MinMarkColor, range.second to MaxMarkColor)) {
+                val x = (f * size.width).coerceIn(w / 2, size.width - w / 2)
+                drawRoundRect(col, androidx.compose.ui.geometry.Offset(x - w / 2, 0f), androidx.compose.ui.geometry.Size(w, size.height),
+                    androidx.compose.ui.geometry.CornerRadius(w / 2, w / 2))
+            }
         }
     }
 }

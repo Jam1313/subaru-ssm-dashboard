@@ -251,6 +251,7 @@ class EngineGuard {
             "pedal" to e.pedalPct, "avcs" to e.avcsDeg, "map" to e.mapKpa, "atm" to e.atmKpa, "alt" to e.altDutyPct,
             "atf" to t?.atfC?.toFloat(), "fuel" to trip.instLh.toFloat(), "per100" to trip.instPer100?.toFloat(),
             "gps" to Repo.gps.value?.speedKmh, "load" to e.loadGRev,
+            "rpm" to e.rpm?.toFloat(), "speed" to e.speedKmh?.toFloat(),
         )
         val old = Repo.tripRange.value
         val next = HashMap(old)

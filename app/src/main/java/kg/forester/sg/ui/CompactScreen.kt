@@ -84,8 +84,7 @@ fun CompactScreen(onMenu: (() -> Unit)? = null) {
                 }
                 Repo.carVersion.collectAsState().value
                 T(Repo.settings.carTitle, 16.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
-                val ok = link == LinkState.CONNECTED
-                Icon(if (ok) Lucide.Usb else Lucide.Unplug, null, tint = if (ok) C.Green else C.Orange, modifier = Modifier.size(18.dp))
+                LinkIcon(18.dp)
                 Spacer(Modifier.width(10.dp))
                 T(SimpleDateFormat("HH:mm", Locale.US).format(now), 18.sp, weight = FontWeight.SemiBold)
             }

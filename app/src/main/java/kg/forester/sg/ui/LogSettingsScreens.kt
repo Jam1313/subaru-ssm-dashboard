@@ -1,5 +1,7 @@
 package kg.forester.sg.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +58,8 @@ fun LogScreen() {
         }
     }
 
+    var viewing by remember { mutableStateOf<File?>(null) }
+    viewing?.let { f -> LogViewer(f) { viewing = null }; return }
     Row(Modifier.fillMaxSize()) {
         Panel(Modifier.width(420.dp).fillMaxHeight()) {
             PanelTitle(Lucide.FileText, "Запись лога")
@@ -85,50 +89,117 @@ fun LogScreen() {
             Chip("Что писать в лог…", false, { pick = true })
             if (pick) LogColumnsDialog { pick = false }
             Spacer(Modifier.height(12.dp))
-            T("Файлы", 15.sp)
-            LazyColumn(Modifier.weight(1f)) {
-                items(files) { f ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                        T(f.name, 13.sp, modifier = Modifier.weight(1f))
-                        T("${f.length() / 1024} КБ", 13.sp, C.Sub)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Icon(Lucide.FolderOpen, null, tint = C.Violet, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                T("Файлы", 15.sp, weight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f))
+                if (files.isNotEmpty()) T("${files.size} шт · ${fileSize(files.sumOf { it.length() })}", 12.sp, C.Sub)
+            }
+            Spacer(Modifier.height(6.dp))
+            T(if (files.isEmpty()) "Пока нет: файл появится, когда заведётся двигатель." else "Нажмите на файл — откроются графики. Справа: скачать в «Загрузки», поделиться, удалить.", 12.sp, C.Sub)
+            Spacer(Modifier.height(6.dp))
+            LazyColumn(Modifier.weight(1f).clip(Rounded).background(if (files.isEmpty()) C.Card else C.CardHi)) {
+                items(files.size) { i ->
+                    val f = files[i]
+                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.6f)))
+                    Row(Modifier.fillMaxWidth().clickable { viewing = f }.padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        val now = f.name == current
+                        androidx.compose.material3.Icon(if (now) Lucide.CirclePlay else Lucide.FileSpreadsheet, null,
+                            tint = if (now) C.Green else C.Sub, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        T(f.name, 13.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                        T(fileSize(f.length()), 12.sp, C.Sub)
+                        Spacer(Modifier.width(2.dp))
+                        LogFileActions(f, small = true) {
+                            files = File(ctx.getExternalFilesDir(null), "logs").listFiles()?.sortedByDescending { it.name } ?: emptyList()
+                        }
+                        androidx.compose.material3.Icon(Lucide.ChevronRight, null, tint = C.Sub, modifier = Modifier.size(16.dp))
                     }
                 }
             }
         }
         Spacer(Modifier.width(12.dp))
         Panel(Modifier.weight(1f).fillMaxHeight()) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                T("Текущие значения", 16.sp, modifier = Modifier.weight(1f))
-                InfoButton("Текущие значения")
-            }
-            Spacer(Modifier.height(8.dp))
-            val rows = listOf(
-                "Обороты" to (e.rpm?.toString() ?: "—"),
-                "Скорость, км/ч" to (e.speedKmh?.toString() ?: "—"),
-                "Темп. ОЖ, °C" to (e.coolantC?.toString() ?: "—"),
-                "Темп. впуска, °C" to (e.intakeC?.toString() ?: "—"),
-                "MAF, г/с" to fmtF(e.mafGs, 2),
-                "Дроссель, %" to fmtF(e.throttlePct),
-                "Напряжение, В" to fmtF(e.batteryV, 2),
-                "Впрыск, мс" to fmtF(e.injPwMs, 2),
-                "УОЗ, °" to fmtF(e.timingDeg),
-                "Коррекция детонации, °" to fmtF(e.knockDeg),
-                "Атм. давление, кПа" to fmtF(e.atmKpa, 0),
-                "Абс. давление впуска, кПа" to fmtF(e.mapKpa, 0),
-                "Давление отн. атмосферы, кПа" to fmtF(e.gaugeKpa, 0),
-                "Педаль газа, %" to fmtF(e.pedalPct, 0),
-                "AVCS, °" to fmtF(e.avcsDeg, 0),
-                "Коррекция A/F, %" to fmtF(e.afCorrPct),
-                "Обучение A/F, %" to fmtF(e.afLearnPct),
-                "AFR" to fmtF(e.afr),
-                "Wastegate, %" to fmtF(e.wastegatePct, 0),
+            PanelTitle(Lucide.Activity, "Текущие значения")
+            Spacer(Modifier.height(10.dp))
+            val g by Repo.guard.collectAsState()
+            val engine = listOf(
+                LiveRow(Lucide.Gauge, "Обороты", e.rpm?.toString(), "об/мин"),
+                LiveRow(Lucide.Car, "Скорость", e.speedKmh?.toString(), "км/ч"),
+                LiveRow(Lucide.Thermometer, "Темп. ОЖ", e.coolantC?.toString(), "°C"),
+                LiveRow(Lucide.Wind, "Темп. впуска", e.intakeC?.toString(), "°C"),
+                LiveRow(Lucide.BatteryCharging, "Напряжение", e.batteryV?.let { fmtF(it, 2) }, "В"),
+                LiveRow(Lucide.Activity, "Дроссель", e.throttlePct?.let { fmtF(it) }, "%"),
+                LiveRow(Lucide.Footprints, "Педаль газа", e.pedalPct?.let { fmtF(it, 0) }, "%"),
+                LiveRow(Lucide.Weight, "Нагрузка", e.loadGRev?.let { fmtF(it, 2) }, "г/об"),
+                LiveRow(Lucide.RotateCw, "AVCS", e.avcsDeg?.let { fmtF(it, 0) }, "°"),
             )
-            LazyColumn {
-                items(rows) { (k, v) ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-                        T(k, 14.sp, C.Sub, modifier = Modifier.weight(1f))
-                        T(v, 14.sp)
-                    }
+            val fuel = listOf(
+                LiveRow(Lucide.AirVent, "MAF", e.mafGs?.let { fmtF(it, 2) }, "г/с"),
+                LiveRow(Lucide.Syringe, "Впрыск", e.injPwMs?.let { fmtF(it, 2) }, "мс"),
+                LiveRow(Lucide.Percent, "Загрузка форсунок", e.injDutyPct?.let { fmtF(it, 0) }, "%"),
+                LiveRow(Lucide.Crosshair, "Коррекция A/F", e.afCorrPct?.let { fmtF(it) }, "%"),
+                LiveRow(Lucide.ChartLine, "Обучение A/F", e.afLearnPct?.let { fmtF(it) }, "%"),
+                LiveRow(Lucide.FlaskConical, "AFR", e.afr?.let { fmtF(it) }, ""),
+            )
+            val ignition = listOf(
+                LiveRow(Lucide.Zap, "УОЗ", e.timingDeg?.let { fmtF(it) }, "°"),
+                LiveRow(Lucide.Flame, "Коррекция детонации", e.knockDeg?.let { fmtF(it) }, "°"),
+                LiveRow(Lucide.Scale, "IAM", g.iam?.let { fmtF(it, 2) }, ""),
+                LiveRow(Lucide.SquareActivity, "FBKC (откат)", g.fbkc?.let { fmtF(it) }, "°"),
+                LiveRow(Lucide.Waves, "FLKC (обучение)", g.flkc?.let { fmtF(it) }, "°"),
+            )
+            val boost = listOf(
+                LiveRow(Lucide.Mountain, "Атм. давление", e.atmKpa?.let { fmtF(it, 0) }, "кПа"),
+                LiveRow(Lucide.Gauge, "Абс. давление впуска", e.mapKpa?.let { fmtF(it, 0) }, "кПа"),
+                LiveRow(Lucide.CircleArrowUp, "Наддув (отн. атмосферы)", e.gaugeKpa?.let { fmtF(it, 0) }, "кПа"),
+                LiveRow(Lucide.Target, "Целевой наддув", g.targetBoostKpa?.let { fmtF(it, 0) }, "кПа"),
+                LiveRow(Lucide.Fan, "Wastegate", e.wastegatePct?.let { fmtF(it, 0) }, "%"),
+            )
+            Row(Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LiveGroup(Lucide.Gauge, "Двигатель", C.Blue, engine)
+                    LiveGroup(Lucide.Zap, "Зажигание и детонация", C.Orange, ignition)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LiveGroup(Lucide.Fuel, "Топливо", C.Green, fuel)
+                    LiveGroup(Lucide.Fan, "Наддув", C.Violet, boost)
+                }
+            }
+        }
+    }
+}
+
+private class LiveRow(val icon: androidx.compose.ui.graphics.vector.ImageVector, val name: String, val value: String?, val unit: String)
+
+/** One block of «Текущие значения»: a header with the group's icon, then the rows divided by thin lines. */
+@Composable
+private fun LiveGroup(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, tint: androidx.compose.ui.graphics.Color, rows: List<LiveRow>) {
+    Column(
+        Modifier.fillMaxWidth().clip(Rounded).background(C.CardHi)
+            .border(1.dp, C.Border, Rounded).padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center) {
+                androidx.compose.material3.Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            T(title, 15.sp, weight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(6.dp))
+        rows.forEachIndexed { i, r ->
+            if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.6f)))
+            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Icon(r.icon, null, tint = C.Sub, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(10.dp))
+                T(r.name, 14.sp, C.Sub, modifier = Modifier.weight(1f))
+                T(r.value ?: "—", 15.sp, if (r.value == null) C.Gray else C.Text, weight = androidx.compose.ui.text.font.FontWeight.Medium)
+                if (r.unit.isNotEmpty() && r.value != null) {
+                    Spacer(Modifier.width(4.dp))
+                    T(r.unit, 12.sp, C.Sub)
                 }
             }
         }
@@ -520,6 +591,8 @@ private fun FeatureSettings() {
                 F("warmup", "Прогрев", "Предупреждать, если крутить выше 3600 об/мин на холодном масле")
                 F("cooling", "Охлаждение", "Перегрев от 105°, резкий рост ОЖ (прокладка ГБЦ на EJ25), термостат")
                 F("atf", "Температура ATF", "Предупреждать при 110° и 120°")
+                F("battAlert", "Аккумулятор", "Разряжен на стоянке (ниже 12,2 В), слабый пуск (ниже 9,6 В), долго не восстанавливается после пуска")
+                F("altAlert", "Генератор", "Не заряжает (ниже 13,0 В на работающем моторе) или перезаряд (выше 15,0 В)")
                 F("service", "Напоминания о ТО", "Раз в день при поездке, если подошёл срок по пробегу или дате")
                 val speech by kg.forester.sg.service.Speech.status.collectAsState()
                 SettingSwitch("Голосовые предупреждения",
@@ -553,7 +626,8 @@ private fun FeatureSettings() {
                 F("sensors", "Экран «Датчики»", "Все параметры ЭБУ из базы RomRaider")
                 F("health", "Экран «Здоровье»", "Мотор, ТО, шины и журнал предупреждений (сами предупреждения настраиваются слева)")
                 TcuRateSetting()
-                F("minmax", "Мин/макс за поездку на виджетах", "Под значением на карточках Главной — самое низкое и высокое за поездку")
+                F("minmax", "Мин/макс за поездку на виджетах", "Справа от значения на карточках и метками на полосах и шкалах тахометра/спидометра")
+                if (s.feature("minmax")) Box(Modifier.fillMaxWidth().clip(Rounded).background(C.CardHi).padding(10.dp)) { MinMaxLegend() }
                 F("update", "Проверять обновления", "Раз в день смотреть, нет ли новой версии на GitHub, и сообщить")
                 SettingSwitch("Давление в шинах (TPMS)", "Слушать Bluetooth-датчики давления. Разрешение и порог — в «Здоровье» → «Шины»", tpms) {
                     tpms = it; s.tpms = it

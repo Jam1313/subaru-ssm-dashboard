@@ -297,6 +297,8 @@ fun Dial(
     value: Float?, max: Float, step: Float, labelDiv: Float, unit: String, scaleNote: String?,
     redFrom: Float?, modifier: Modifier, style: DialStyle = DialStyles.first(),
     min: Float = 0f, format: String = "%.0f",
+    /** The trip's lowest and highest value, marked on the scale like the telltale needles of a real gauge. */
+    range: Pair<Float, Float>? = null, minMark: Boolean = true,
 ) {
     val v by animateFloatAsState((value ?: min).coerceIn(min, max), tween(240), label = "dial")
     val text = value?.let { format.format(it) } ?: "—"
@@ -304,7 +306,10 @@ fun Dial(
     val photo = remember(style.image) { style.image?.let { kg.forester.sg.data.GaugeImages.bitmap(ctx, it)?.asImageBitmap() } }
     val ringFill = if (style.rings.isEmpty()) emptyList() else ringValues()
     Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill) }
+        Canvas(Modifier.fillMaxSize()) {
+            drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill)
+            if (range != null) drawPeakMarks(range, min, max, style, minMark)
+        }
         val ro = style.readout
         if (ro != null) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -366,6 +371,48 @@ private fun ReadoutBox(text: String, ro: Readout, width: androidx.compose.ui.uni
 }
 
 /** The scale runs [min]..[max]; the lit arc starts at 0 when the scale has both signs (trims, timing). */
+/** Colours of the trip's min and max marks (cards and gauges). */
+val MinMarkColor = Color(0xFF60A5FA)
+val MaxMarkColor = Color(0xFFF59E0B)
+
+/**
+ * The trip's min and max on the scale: a faint arc between them just outside the track and a small triangle at each
+ * end pointing at the scale (same geometry as [drawDial]).
+ */
+private fun DrawScope.drawPeakMarks(range: Pair<Float, Float>, min: Float, max: Float, st: DialStyle, minMark: Boolean) {
+    val r = size.minDimension / 2f * (if (st.outer != null || st.rings.isNotEmpty()) 0.9f else 1f)
+    val c = center
+    val start = 90f + (360f - st.sweep) / 2f
+    fun ang(x: Float) = start + st.sweep * ((x.coerceIn(min, max) - min) / (max - min))
+    val arcR = if (st.band != null) r * 0.80f else r * 0.86f
+    val outside = if (st.band != null) r * 0.13f else r * (if (st.minimal) 0.035f else 0.07f) / 2f
+    val rr = arcR + outside + r * 0.035f
+    fun pt(deg: Float, rad: Float): Offset {
+        val a = Math.toRadians(deg.toDouble())
+        return Offset(c.x + rad * kotlin.math.cos(a).toFloat(), c.y + rad * kotlin.math.sin(a).toFloat())
+    }
+    val (lo, hi) = range
+    val a0 = if (minMark) ang(lo) else start
+    val a1 = ang(hi)
+    if (a1 > a0) drawArc(Color.White.copy(alpha = 0.22f), a0, a1 - a0, false, Offset(c.x - rr, c.y - rr), Size(rr * 2, rr * 2),
+        style = Stroke(r * 0.022f, cap = StrokeCap.Round))
+    fun mark(deg: Float, col: Color) {
+        val tip = pt(deg, rr - r * 0.01f)
+        val base = rr + r * 0.085f
+        val half = 4.5f
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(tip.x, tip.y)
+            pt(deg - half, base).let { lineTo(it.x, it.y) }
+            pt(deg + half, base).let { lineTo(it.x, it.y) }
+            close()
+        }
+        drawPath(path, col)
+        drawPath(path, Color.Black.copy(alpha = 0.5f), style = Stroke(1.2f))
+    }
+    if (minMark) mark(ang(lo), MinMarkColor)
+    mark(ang(hi), MaxMarkColor)
+}
+
 private fun DrawScope.drawDial(
     v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle,
     photo: androidx.compose.ui.graphics.ImageBitmap? = null,

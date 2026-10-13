@@ -2,6 +2,7 @@ package kg.forester.sg.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -136,36 +137,39 @@ private fun CurrentTab() {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.width(210.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Tile(Lucide.Milestone, "Запас хода", fmt(ts.rangeKm, 0), "км", Modifier.fillMaxWidth().weight(1f))
-                        Column(
-                            Modifier.fillMaxWidth().weight(1.25f).clip(RoundedCornerShape(12.dp)).background(C.CardHi)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Lucide.Fuel, null, tint = C.Sub, modifier = Modifier.size(22.dp))
-                                Spacer(Modifier.width(10.dp))
-                                val leftTitle = if (ts.fuelFromSensor) "Осталось (датчик)" else "Осталось топлива"
-                                Column(Modifier.weight(1f)) {
-                                    T(leftTitle, 12.sp, C.Sub)
-                                    Row(verticalAlignment = Alignment.Bottom) {
-                                        T(fmt(ts.fuelLeftL, 0), 22.sp, weight = FontWeight.Bold)
-                                        T(" л", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
+                        Box(Modifier.fillMaxWidth().weight(1.25f).clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
+                            val leftTitle = if (ts.fuelFromSensor) "Осталось (датчик)" else "Осталось топлива"
+                            Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+                                verticalArrangement = Arrangement.SpaceEvenly) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Lucide.Fuel, null, tint = C.Sub, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        T(leftTitle, 11.sp, C.Sub, maxLines = 1)
+                                        Row(verticalAlignment = Alignment.Bottom) {
+                                            T(fmt(ts.fuelLeftL, 0), 20.sp, weight = FontWeight.Bold)
+                                            T(" л", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
+                                            Spacer(Modifier.weight(1f))
+                                            // fuel used since the last refill, on the same line so the tile never overflows
+                                            T("с заправки ${fmt(Repo.settings.usedSinceRefillL)} л", 11.sp, C.Sub, maxLines = 1,
+                                                modifier = Modifier.padding(bottom = 3.dp))
+                                        }
                                     }
                                 }
-                                InfoButton(leftTitle, "Осталось топлива")
-                            }
-                            if (tank > 0) {
-                                val frac = ((ts.fuelLeftL ?: 0.0) / tank).toFloat()
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    ProgressBar(frac, C.Accent, Modifier.weight(1f))
-                                    Spacer(Modifier.width(8.dp))
-                                    T("${(frac * 100).toInt()}%", 12.sp, C.Sub)
+                                if (tank > 0) {
+                                    val frac = ((ts.fuelLeftL ?: 0.0) / tank).toFloat()
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        ProgressBar(frac, C.Accent, Modifier.weight(1f), 6.dp)
+                                        Spacer(Modifier.width(8.dp))
+                                        T("${(frac * 100).toInt()}%", 11.sp, C.Sub)
+                                    }
                                 }
+                                val live by Repo.live.collectAsState()
+                                val sensor = live.fuelSensorV?.let { "датчик ${"%.2f".format(it)} В" }
+                                    ?: live.fuelSensorOhm?.let { "датчик ${"%.0f".format(it)} Ом" }
+                                if (sensor != null) T(sensor, 10.sp, C.Sub, maxLines = 1)
                             }
-                            val live by Repo.live.collectAsState()
-                            val sensor = live.fuelSensorV?.let { "датчик ${"%.2f".format(it)} В" }
-                                ?: live.fuelSensorOhm?.let { "датчик ${"%.0f".format(it)} Ом" }
-                            T("с заправки: ${fmt(Repo.settings.usedSinceRefillL)} л" + (sensor?.let { " · $it" } ?: ""), 11.sp, C.Sub, maxLines = 1)
+                            InfoButton(leftTitle, "Осталось топлива", Modifier.align(Alignment.TopEnd))
                         }
                         if (trip != null && trip.per100 == null && trip.durationS > 30) {
                             Tile(Lucide.Gauge, "Средний (стоянка)", fmt(trip.fuelL / (trip.durationS / 3600.0)), "л/ч", Modifier.fillMaxWidth().weight(1f))
@@ -266,9 +270,10 @@ private fun TripInfoPanel(trip: Trip?, modifier: Modifier) {
         val dur = trip?.durationS ?: 0
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tile(Lucide.Clock, "В пути", "%d:%02d".format(dur / 3600, dur / 60 % 60), "ч:мин", Modifier.weight(1f).fillMaxHeight())
+                val (dv, du) = if (dur < 3600) "${dur / 60}" to "мин" else "%d:%02d".format(dur / 3600, dur / 60 % 60) to "ч"
+                Tile(Lucide.Clock, "В пути", if (trip == null) "—" else dv, du, Modifier.weight(1f).fillMaxHeight())
                 Tile(Lucide.Activity, "Пробег", fmt(trip?.distanceKm), "км", Modifier.weight(1f).fillMaxHeight())
-                Tile(Lucide.Gauge, "Ср. скорость", fmt(trip?.avgSpeed, 0), "км/ч", Modifier.weight(1f).fillMaxHeight())
+                Tile(Lucide.Gauge, "Средняя", fmt(trip?.avgSpeed, 0), "км/ч", Modifier.weight(1f).fillMaxHeight(), info = "Ср. скорость")
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (trip != null && trip.per100 == null && trip.durationS > 30) {
@@ -361,16 +366,119 @@ private fun RecentTripsPanel(version: Long, modifier: Modifier) {
         }
         Spacer(Modifier.height(8.dp))
         if (trips.isEmpty()) T("Пока нет поездок", 13.sp, C.Sub)
-        trips.forEach { TripRow(it); Spacer(Modifier.height(5.dp)) }
+        var open by remember { mutableStateOf<Trip?>(null) }
+        trips.forEach { TripRow(it) { open = it }; Spacer(Modifier.height(5.dp)) }
+        open?.let { TripDialog(it) { open = null } }
+    }
+}
+
+/** The CSV logs that overlap [t]: started (with the engine) before its end and written to after its start. */
+private fun tripLogs(ctx: android.content.Context, t: Trip): List<java.io.File> {
+    val fmt = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
+    return java.io.File(ctx.getExternalFilesDir(null), "logs").listFiles().orEmpty().filter { f ->
+        val start = runCatching { fmt.parse(f.name.removeSuffix(".csv"))?.time }.getOrNull() ?: return@filter false
+        start <= t.endMs && f.lastModified() >= t.startMs + 10_000L
+    }.sortedBy { it.name }
+}
+
+/** Everything about one trip, with its CSV log as charts if it is still kept. */
+@Composable
+private fun TripDialog(t: Trip, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    val logs = remember(t) { tripLogs(ctx, t) }
+    var viewing by remember { mutableStateOf<java.io.File?>(null) }
+    val hm = remember { SimpleDateFormat("HH:mm", Locale.US) }
+    val d = t.durationS
+    val parked = t.per100 == null
+    val cur = Repo.settings.currency
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = C.Card, titleContentColor = C.Text, textContentColor = C.Text,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(38.dp).clip(CircleShape).background(C.Blue.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                    Icon(if (parked) Lucide.SquareParking else Lucide.Route, null, tint = C.Blue, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    T(if (parked) "Стоянка с мотором" else "Поездка", 20.sp, weight = FontWeight.SemiBold)
+                    T("${dayLabel(t.startMs)} · ${hm.format(Date(t.startMs))}–${hm.format(Date(t.endMs))} · " +
+                        if (d < 3600) "${d / 60} мин" else "%d ч %02d мин".format(d / 3600, d / 60 % 60), 13.sp, C.Sub)
+                }
+            }
+        },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                @Composable
+                fun row(vararg items: Triple<androidx.compose.ui.graphics.vector.ImageVector, String, String>) =
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items.forEach { (icon, label, value) ->
+                            Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(C.CardHi).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(icon, null, tint = C.Sub, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    T(label, 11.sp, C.Sub, maxLines = 1)
+                                }
+                                T(value, 17.sp, weight = FontWeight.Bold, maxLines = 1)
+                            }
+                        }
+                    }
+                row(
+                    Triple(Lucide.Activity, "Пробег", "${fmt(t.distanceKm)} км"),
+                    Triple(Lucide.Droplet, "Топливо", "${fmt(t.fuelL, 2)} л"),
+                    Triple(Lucide.Fuel, "Расход", t.per100?.let { "${fmt(it)} л/100" } ?: if (d > 30) "${fmt(t.fuelL / (d / 3600.0))} л/ч" else "—"),
+                )
+                row(
+                    Triple(Lucide.Gauge, "Средняя скорость", if (parked) "—" else "${fmt(t.avgSpeed, 0)} км/ч"),
+                    Triple(Lucide.Banknote, "Стоимость", "${fmt(t.fuelL * Repo.settings.pricePerL, 0)} $cur"),
+                    Triple(Lucide.Clock, "На холостых", "${(t.idleS / 60).toInt()} мин · ${fmt(t.idleL, 2)} л"),
+                )
+                row(
+                    Triple(Lucide.Gauge, "Макс. обороты", if (t.maxRpm > 0) "${t.maxRpm}" else "—"),
+                    Triple(Lucide.Fan, "Макс. наддув", if (t.maxBoostKpa > 0) "%.2f бар".format(t.maxBoostKpa / 100) else "—"),
+                    Triple(Lucide.Zap, "Резкие разгоны / торм.", "${t.hardAccel} / ${t.hardBrake}"),
+                )
+                if (!parked) {
+                    T("По режимам", 13.sp, C.Violet, FontWeight.SemiBold)
+                    listOf(Triple("Город", t.cityKm, t.cityL), Triple("Трасса", t.hwyKm, t.hwyL), Triple("Смешанный", t.mixKm, t.mixL))
+                        .filter { it.second > 0.05 }.forEach { (name, km, l) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                T(name, 13.sp, modifier = Modifier.width(100.dp))
+                                T("${fmt(km)} км", 13.sp, C.Sub, modifier = Modifier.width(80.dp))
+                                T(if (km > 0.3) "${fmt(l / km * 100)} л/100 км" else "${fmt(l, 2)} л", 13.sp, weight = FontWeight.SemiBold)
+                            }
+                        }
+                }
+                T("Лог поездки", 13.sp, C.Violet, FontWeight.SemiBold)
+                if (logs.isEmpty()) T("Подробный лог уже удалён или не писался (включается на экране «Лог»).", 12.sp, C.Sub)
+                logs.forEach { f ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Lucide.FileSpreadsheet, null, tint = C.Sub, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        T(f.name, 12.sp, C.Sub, modifier = Modifier.weight(1f), maxLines = 1)
+                        Chip("Графики", false, { viewing = f }, Lucide.ChartLine)
+                        Spacer(Modifier.width(4.dp))
+                        LogFileActions(f, small = true)
+                    }
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClose) { androidx.compose.material3.Text("Закрыть", color = C.Violet) } },
+    )
+    viewing?.let { f ->
+        androidx.compose.ui.window.Dialog({ viewing = null }, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(Modifier.fillMaxSize().background(C.Bg).padding(12.dp)) { LogViewer(f) { viewing = null } }
+        }
     }
 }
 
 @Composable
-private fun TripRow(t: Trip) {
+private fun TripRow(t: Trip, onClick: () -> Unit) {
     val d = t.durationS
     val parked = t.per100 == null
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.CardHi).padding(horizontal = 10.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.CardHi).clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {

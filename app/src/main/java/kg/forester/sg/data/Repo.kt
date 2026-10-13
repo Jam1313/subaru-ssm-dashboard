@@ -30,6 +30,16 @@ data class BatteryState(
     val chargingV: Float? = null,
     val chargingMinV: Float? = null,
     val chargingMaxV: Float? = null,
+    /** Hours the car stood before the resting reading (under ~2 h the battery still has surface charge). */
+    val restingParkedH: Float? = null,
+    /** After the start: seconds until the voltage came back to 13.2 V (null = not yet / not known, -1 = not within a minute). */
+    val crankRecoveryS: Float? = null,
+    /** Intake air temperature at the start (≈ outside air on a cold engine) and cranking speed. */
+    val crankTempC: Int? = null,
+    val crankRpm: Int? = null,
+    /** Alternator output at idle and at 1800–3500 rpm. */
+    val chargeIdleV: Float? = null,
+    val chargeRevV: Float? = null,
 )
 
 /** Live trip accumulators, updated by the service on every sample. */
@@ -216,6 +226,11 @@ class Settings(ctx: Context) {
         set(v) = p.edit().putFloat("odoBaseTrips", v.toFloat()).apply()
 
     /** Engine running hours the app has counted (plus what the user set), for oil changes by hours. */
+    /** When the engine was last switched off (for how long the car stood before a resting reading). */
+    var lastEngineOffMs: Long
+        get() = p.getLong("lastEngineOffMs", 0L)
+        set(v) = p.edit().putLong("lastEngineOffMs", v).apply()
+
     var engineHours: Double
         get() = p.getFloat("engineHours", 0f).toDouble()
         set(v) = p.edit().putFloat("engineHours", v.toFloat()).apply()

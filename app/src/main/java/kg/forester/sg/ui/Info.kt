@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Info
+import com.composables.icons.lucide.ArrowDown
+import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Lucide
 
 /** What a card shows, how the app gets the number, and what is normal. */
@@ -42,11 +44,11 @@ fun InfoButton(title: String, key: String = title, modifier: Modifier = Modifier
     ) {
         Icon(Lucide.Info, "Что это", tint = C.Sub.copy(alpha = 0.6f), modifier = Modifier.size(15.dp))
     }
-    if (open) InfoDialog(title, info) { open = false }
+    if (open) InfoDialog(title, info, key) { open = false }
 }
 
 @Composable
-fun InfoDialog(title: String, info: InfoText, onClose: () -> Unit) {
+fun InfoDialog(title: String, info: InfoText, key: String = "", onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = C.CardHi,
@@ -56,6 +58,12 @@ fun InfoDialog(title: String, info: InfoText, onClose: () -> Unit) {
                 Section("Что показывает", info.what)
                 Section("Как считается", info.how)
                 info.norm?.let { Section("Норма и подсказки", it) }
+                // the cards of the home and «Динамика» screens show the trip's min and max
+                if ((key.startsWith("home.") || key.startsWith("drive.")) && kg.forester.sg.data.Repo.settings.feature("minmax")) {
+                    T("Мин и макс за поездку", 13.sp, C.Violet, FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    MinMaxLegend()
+                }
             }
         },
         confirmButton = { TextButton(onClose) { Text("Понятно") } },
@@ -68,4 +76,23 @@ private fun Section(head: String, body: String) {
     Spacer(Modifier.height(3.dp))
     T(body, 14.sp)
     Spacer(Modifier.height(12.dp))
+}
+
+/** What the min / max marks on the cards and gauges mean (info pop-ups, «Функции»). */
+@Composable
+fun MinMaxLegend() {
+    Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Lucide.ArrowUp, null, tint = MaxMarkColor, modifier = Modifier.size(14.dp))
+            T(" 89", 14.sp, MaxMarkColor, FontWeight.SemiBold)
+            T("   — самое высокое значение за поездку (оранжевая метка)", 13.sp)
+        }
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Lucide.ArrowDown, null, tint = MinMarkColor, modifier = Modifier.size(14.dp))
+            T(" 87", 14.sp, MinMarkColor, FontWeight.SemiBold)
+            T("   — самое низкое (синяя метка)", 13.sp)
+        }
+        T("На полосе светлым выделен весь диапазон поездки между метками, на тахометре и спидометре — треугольники на шкале. " +
+            "Считается, пока работает двигатель, и сбрасывается с новой поездкой. Выключается в Настройки → «Функции».", 12.sp, C.Sub)
+    }
 }

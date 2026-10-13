@@ -83,50 +83,72 @@ fun TransmissionScreen() {
             }
         when (cfg.id) {
             "range" -> Panel(m) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    T("Селектор / передача", 14.sp, C.Sub, modifier = Modifier.weight(1f))
-                    InfoButton("Селектор / передача", info)
-                }
+                CardHeader(Lucide.Cog, "Селектор / передача", C.Violet, info)
                 val range = t?.range
                 val driving = range == "D" || range == "3" || range == "2" || range == "1"
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    AnimatedContent(
-                        targetState = range,
-                        transitionSpec = { (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut()) },
-                        label = "range",
-                    ) { r ->
-                        T(r ?: "—", if ((r?.length ?: 1) > 1) 64.sp else 96.sp, C.Violet, FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AnimatedContent(
+                            targetState = range,
+                            transitionSpec = { (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut()) },
+                            label = "range",
+                        ) { r -> T(r ?: "—", if ((r?.length ?: 1) > 1) 52.sp else 72.sp, if (r == null) C.Gray else C.Violet, FontWeight.Bold) }
+                        if (driving) {
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                T("передача", 12.sp, C.Sub)
+                                AnimatedContent(
+                                    targetState = t?.gear,
+                                    transitionSpec = {
+                                        val up = (targetState ?: 0) > (initialState ?: 0)
+                                        (slideInVertically { if (up) it else -it } + fadeIn()) togetherWith
+                                            (slideOutVertically { if (up) -it else it } + fadeOut())
+                                    },
+                                    label = "gear",
+                                ) { g -> T(g?.toString() ?: "—", 40.sp, weight = FontWeight.Bold) }
+                            }
+                        }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    T("Передача: ", 16.sp, C.Sub)
-                    AnimatedContent(
-                        targetState = if (driving) t?.gear else null,
-                        transitionSpec = {
-                            val up = (targetState ?: 0) > (initialState ?: 0)
-                            (slideInVertically { if (up) it else -it } + fadeIn()) togetherWith
-                                (slideOutVertically { if (up) -it else it } + fadeOut())
-                        },
-                        label = "gear",
-                    ) { g -> T(g?.toString() ?: "—", 28.sp, weight = FontWeight.Bold) }
+                // the selector strip, the current position lit
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("P", "R", "N", "D", "3", "2", "1").forEach { pos ->
+                        val on = range == pos
+                        Box(Modifier.weight(1f).height(26.dp).clip(RoundedCornerShape(7.dp))
+                            .background(if (on) C.Violet else C.CardHi), contentAlignment = Alignment.Center) {
+                            T(pos, 13.sp, if (on) C.Text else C.Sub, if (on) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
                 }
             }
             "atf" -> ValueCard(
                 CardValue(Lucide.ThermometerSun, "Температура ATF", t?.atfC?.toFloat(), 0f, 130f, "°C", "%.0f", info, 110f), cfg.style, m,
             ) { AtfCard(t?.atfC, m) }
             "converter" -> Panel(m) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    T("Гидротрансформатор", 14.sp, C.Sub, modifier = Modifier.weight(1f))
-                    InfoButton("Гидротрансформатор", info)
+                CardHeader(Lucide.Lock, "Гидротрансформатор", C.Blue, info)
+                Spacer(Modifier.height(10.dp))
+                val known = t?.lockUpPct != null
+                val (stText, stColor) = when {
+                    !known -> "нет данных" to C.Gray
+                    locked -> "заблокирован" to C.Green
+                    else -> "разблокирован" to C.Blue
                 }
-                Spacer(Modifier.height(10.dp))
-                T(if (locked) "Заблокирован" else "Разблокирован", 24.sp, if (locked) C.Green else C.Text, FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-                T("Обороты двигателя: $rpm", 14.sp)
-                T("Обороты турбины: ${t?.turbineRpm ?: "—"}", 14.sp)
-                T("Проскальзывание: ${fmtF(slip, 0)} %", 14.sp, if ((slip ?: 0f) > 15 && locked) C.Orange else C.Text)
+                Row(Modifier.clip(RoundedCornerShape(8.dp)).background(stColor.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (locked) Lucide.Lock else Lucide.LockOpen, null, tint = stColor, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    T(stText, 14.sp, stColor, FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(8.dp))
+                ConvRow(Lucide.Gauge, "Двигатель", if (rpm > 0) "$rpm" else "—", "об/мин")
+                ConvRow(Lucide.Fan, "Турбина", t?.turbineRpm?.toString() ?: "—", "об/мин")
+                ConvRow(Lucide.Percent, "Проскальзывание", fmtF(slip, 0), "%", if ((slip ?: 0f) > 15 && locked) C.Orange else C.Text)
                 Spacer(Modifier.weight(1f))
-                T(status, 12.sp, C.Sub)
+                if (status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Lucide.Info, null, tint = if (t == null) C.Orange else C.Sub, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(6.dp))
+                    T(status, 12.sp, if (t == null) C.Orange else C.Sub, maxLines = 2)
+                }
             }
             "lockup" -> Small(Lucide.Lock, "Блокировка (Lock-up)", t?.lockUpPct, "%")
             "line" -> Small(Lucide.ArrowDownUp, "Давление в линии", t?.linePressurePct, "%")
@@ -135,7 +157,7 @@ fun TransmissionScreen() {
             "chartAtf" -> ChartCard(
                 "Температура ATF, °C",
                 listOf(Series("ATF", th.map { it.atfC?.toFloat() }, C.Orange)),
-                0f, 130f, m, "%.0f", info = info,
+                0f, 130f, m, "%.0f", info = info, icon = Lucide.ThermometerSun, tint = C.Orange,
             )
             "chartLock" -> ChartCard(
                 "Блокировка и полный привод, %",
@@ -144,12 +166,12 @@ fun TransmissionScreen() {
                     Series("AWD", th.map { it.transferPct }, C.Blue),
                     Series("линия", th.map { it.linePressurePct }, C.Violet),
                 ),
-                0f, 100f, m, "%.0f", info = info,
+                0f, 100f, m, "%.0f", info = info, icon = Lucide.Lock, tint = C.Green,
             )
             "chartTurbine" -> ChartCard(
                 "Обороты турбины, об/мин",
                 listOf(Series("турбина", th.map { it.turbineRpm?.toFloat() }, C.Violet)),
-                0f, 7000f, m, "%.0f", info = info,
+                0f, 7000f, m, "%.0f", info = info, icon = Lucide.Fan,
             )
             "chartWheels" -> ChartCard(
                 "Скорость колёс, км/ч",
@@ -157,7 +179,7 @@ fun TransmissionScreen() {
                     Series("перед", th.map { it.frontWheelKmh?.toFloat() }, C.Blue),
                     Series("зад", th.map { it.rearWheelKmh?.toFloat() }, C.Orange),
                 ),
-                0f, 200f, m, "%.0f", info = info,
+                0f, 200f, m, "%.0f", info = info, icon = Lucide.CarFront, tint = C.Blue,
             )
         }
     }
@@ -173,22 +195,33 @@ private fun AtfCard(atf: Int?, modifier: Modifier) {
         else -> "перегрев!" to C.Red
     }
     Panel(modifier) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            T("Температура ATF", 14.sp, C.Sub, modifier = Modifier.weight(1f))
-            InfoButton("Температура ATF", "tcu.atf")
-        }
+        CardHeader(Lucide.ThermometerSun, "Температура ATF", C.Orange, "tcu.atf")
         RingGauge((atf ?: 0) / 130f, atf?.let { "$it°" } ?: "—", label, Modifier.weight(1f).fillMaxWidth(), unitColor = color)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            T("0", 11.sp, C.Sub)
-            Spacer(Modifier.width(6.dp))
-            ProgressBar(
-                (atf ?: 0) / 130f,
-                Brush.horizontalGradient(listOf(C.Blue, C.Green, C.Orange, C.Red)),
-                Modifier.weight(1f), 6.dp,
-            )
-            Spacer(Modifier.width(6.dp))
-            T("130", 11.sp, C.Sub)
+        // zones: cold (do not load it) / normal / hot / overheating
+        val zones = listOf(40f to C.Blue, 60f to C.Green, 15f to C.Orange, 15f to C.Red)
+        Row(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))) {
+            zones.forEach { (w, c) -> Box(Modifier.weight(w).fillMaxHeight().background(c.copy(alpha = 0.7f))) }
         }
+        Box(Modifier.fillMaxWidth().height(14.dp)) {
+            listOf(0f to "0", 40f to "40", 100f to "100", 115f to "115", 130f to "130").forEach { (v, l) ->
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val x = maxWidth * (v / 130f)
+                    T(l, 10.sp, C.Sub, modifier = Modifier.padding(start = (x - if (v == 0f) 0.dp else if (v == 130f) 20.dp else 9.dp).coerceAtLeast(0.dp)))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConvRow(icon: ImageVector, label: String, value: String, unit: String, color: androidx.compose.ui.graphics.Color = C.Text) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = C.Sub, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(8.dp))
+        T(label, 13.sp, C.Sub, modifier = Modifier.weight(1f))
+        T(value, 15.sp, color, FontWeight.SemiBold)
+        Spacer(Modifier.width(4.dp))
+        T(unit, 11.sp, C.Sub)
     }
 }
 
@@ -207,8 +240,9 @@ private fun AwdTile(duty: Float?, front: Int?, rear: Int?, modifier: Modifier) {
         (if (vtd) 55f - 5f * e else 50f * e).roundToInt()
     }
     val slip = front != null && rear != null && rear > 5 && front - rear > 3
+    Box(modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
     Row(
-        modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi).padding(horizontal = 10.dp, vertical = 4.dp),
+        Modifier.fillMaxSize().padding(start = 10.dp, end = 22.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Lucide.Waypoints, null, tint = C.Sub, modifier = Modifier.size(20.dp))
@@ -227,6 +261,7 @@ private fun AwdTile(duty: Float?, front: Int?, rear: Int?, modifier: Modifier) {
             }
             if (slip) T("передние буксуют", 11.sp, C.Orange, maxLines = 1)
         }
-        InfoButton("Муфта полного привода", "tcu.awd")
+    }
+    InfoButton("Муфта полного привода", "tcu.awd", Modifier.align(Alignment.TopEnd))
     }
 }

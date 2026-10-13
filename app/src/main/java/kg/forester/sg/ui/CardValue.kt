@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,7 +49,10 @@ fun NeedleCard(m: CardValue, style: DialStyle, modifier: Modifier) {
         CardTitle(m.icon, m.title, m.info)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Box(Modifier.padding(2.dp).aspectRatio(1f, matchHeightConstraintsFirst = maxHeight < maxWidth)) {
-                Dial(m.value, hi, step, div, m.unit, if (div > 1f) "x1000" else null, m.redFrom, Modifier.fillMaxSize(), style, min = lo, format = m.format)
+                val range = if (kg.forester.sg.data.Repo.settings.feature("minmax"))
+                    kg.forester.sg.data.Repo.tripRange.collectAsState().value[m.info.substringAfter('.')] else null
+                Dial(m.value, hi, step, div, m.unit, if (div > 1f) "x1000" else null, m.redFrom, Modifier.fillMaxSize(), style, min = lo,
+                    format = m.format, range = range?.let { (a, b) -> minOf(a, m.value ?: a) to maxOf(b, m.value ?: b) })
             }
         }
     }
