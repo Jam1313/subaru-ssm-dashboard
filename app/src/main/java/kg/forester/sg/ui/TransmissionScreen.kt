@@ -34,6 +34,34 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kg.forester.sg.data.Repo
+import kg.forester.sg.data.TcuBoard
+import kg.forester.sg.data.TileCfg
+import androidx.compose.ui.graphics.vector.ImageVector
+
+/** Cards of the "АКПП" screen, for the "add" menu. */
+val TcuCards: CardNames = linkedMapOf(
+    "range" to ("Селектор / передача" to Lucide.Cog),
+    "atf" to ("Температура ATF" to Lucide.ThermometerSun),
+    "converter" to ("Гидротрансформатор" to Lucide.Lock),
+    "lockup" to ("Блокировка (Lock-up)" to Lucide.Lock),
+    "line" to ("Давление в линии" to Lucide.ArrowDownUp),
+    "awd" to ("Муфта полного привода" to Lucide.Waypoints),
+    "wheels" to ("Колёса перед / зад" to Lucide.CarFront),
+    "chartAtf" to ("График: температура ATF" to Lucide.ChartLine),
+    "chartLock" to ("График: блокировка и полный привод" to Lucide.ChartLine),
+    "chartTurbine" to ("График: обороты двигателя и турбины" to Lucide.ChartLine),
+    "chartWheels" to ("График: скорость колёс" to Lucide.ChartLine),
+)
+
+private val TcuEdit = BoardEdit(TcuBoard, gaugeable = setOf("atf", "lockup", "line"))
+
+/** Row heights: big cards 1.1, charts 1.2, small tiles 0.55 (or 1.1 once shown as a needle). */
+private fun tcuRowWeight(t: TileCfg) = when {
+    t.id.startsWith("chart") -> 1.2f
+    t.id in setOf("range", "atf", "converter") -> 1.1f
+    t.style.isNotEmpty() -> 1.1f
+    else -> 0.55f
+}
 
 @Composable
 fun TransmissionScreen() {
@@ -46,10 +74,19 @@ fun TransmissionScreen() {
     val slip = t?.turbineRpm?.let { tr -> if (rpm > 800) ((rpm - tr) * 100f / rpm) else null }
     val locked = (t?.lockUpPct ?: 0f) > 60f
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.weight(1.1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Panel(Modifier.weight(0.8f).fillMaxHeight()) {
-                T("Селектор / передача", 14.sp, C.Sub)
+    BoardScreen(TcuEdit, TcuCards, ::tcuRowWeight) { cfg, m ->
+        val info = "tcu.${cfg.id}"
+        @Composable
+        fun Small(icon: ImageVector, title: String, v: Float?, unit: String) =
+            ValueCard(CardValue(icon, title, v, 0f, 100f, unit, "%.0f", info), cfg.style, m) {
+                Tile(icon, title, fmtF(v, 0), unit, m, info)
+            }
+        when (cfg.id) {
+            "range" -> Panel(m) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    T("Селектор / передача", 14.sp, C.Sub, modifier = Modifier.weight(1f))
+                    InfoButton("Селектор / передача", info)
+                }
                 val range = t?.range
                 val driving = range == "D" || range == "3" || range == "2" || range == "1"
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -74,9 +111,14 @@ fun TransmissionScreen() {
                     ) { g -> T(g?.toString() ?: "—", 28.sp, weight = FontWeight.Bold) }
                 }
             }
-            AtfCard(t?.atfC, Modifier.weight(1f).fillMaxHeight())
-            Panel(Modifier.weight(1.2f).fillMaxHeight()) {
-                T("Гидротрансформатор", 14.sp, C.Sub)
+            "atf" -> ValueCard(
+                CardValue(Lucide.ThermometerSun, "Температура ATF", t?.atfC?.toFloat(), 0f, 130f, "°C", "%.0f", info, 110f), cfg.style, m,
+            ) { AtfCard(t?.atfC, m) }
+            "converter" -> Panel(m) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    T("Гидротрансформатор", 14.sp, C.Sub, modifier = Modifier.weight(1f))
+                    InfoButton("Гидротрансформатор", info)
+                }
                 Spacer(Modifier.height(10.dp))
                 T(if (locked) "Заблокирован" else "Разблокирован", 24.sp, if (locked) C.Green else C.Text, FontWeight.Bold)
                 Spacer(Modifier.height(10.dp))
@@ -86,27 +128,36 @@ fun TransmissionScreen() {
                 Spacer(Modifier.weight(1f))
                 T(status, 12.sp, C.Sub)
             }
-        }
-        Row(Modifier.weight(0.55f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile(Lucide.Lock, "Блокировка (Lock-up)", fmtF(t?.lockUpPct, 0), "%", Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.ArrowDownUp, "Давление в линии", fmtF(t?.linePressurePct, 0), "%", Modifier.weight(1f).fillMaxHeight())
-            AwdTile(t?.transferPct, t?.frontWheelKmh, t?.rearWheelKmh, Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.CarFront, "Колёса перед / зад", "${t?.frontWheelKmh ?: "—"} / ${t?.rearWheelKmh ?: "—"}", "км/ч", Modifier.weight(1f).fillMaxHeight())
-        }
-        Row(Modifier.weight(1.2f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ChartCard(
+            "lockup" -> Small(Lucide.Lock, "Блокировка (Lock-up)", t?.lockUpPct, "%")
+            "line" -> Small(Lucide.ArrowDownUp, "Давление в линии", t?.linePressurePct, "%")
+            "awd" -> AwdTile(t?.transferPct, t?.frontWheelKmh, t?.rearWheelKmh, m)
+            "wheels" -> Tile(Lucide.CarFront, "Колёса перед / зад", "${t?.frontWheelKmh ?: "—"} / ${t?.rearWheelKmh ?: "—"}", "км/ч", m, info)
+            "chartAtf" -> ChartCard(
                 "Температура ATF, °C",
                 listOf(Series("ATF", th.map { it.atfC?.toFloat() }, C.Orange)),
-                0f, 130f, Modifier.weight(1f).fillMaxHeight(), "%.0f",
+                0f, 130f, m, "%.0f", info = info,
             )
-            ChartCard(
+            "chartLock" -> ChartCard(
                 "Блокировка и полный привод, %",
                 listOf(
                     Series("lock-up", th.map { it.lockUpPct }, C.Green),
                     Series("AWD", th.map { it.transferPct }, C.Blue),
                     Series("линия", th.map { it.linePressurePct }, C.Violet),
                 ),
-                0f, 100f, Modifier.weight(1f).fillMaxHeight(), "%.0f",
+                0f, 100f, m, "%.0f", info = info,
+            )
+            "chartTurbine" -> ChartCard(
+                "Обороты турбины, об/мин",
+                listOf(Series("турбина", th.map { it.turbineRpm?.toFloat() }, C.Violet)),
+                0f, 7000f, m, "%.0f", info = info,
+            )
+            "chartWheels" -> ChartCard(
+                "Скорость колёс, км/ч",
+                listOf(
+                    Series("перед", th.map { it.frontWheelKmh?.toFloat() }, C.Blue),
+                    Series("зад", th.map { it.rearWheelKmh?.toFloat() }, C.Orange),
+                ),
+                0f, 200f, m, "%.0f", info = info,
             )
         }
     }
@@ -122,7 +173,10 @@ private fun AtfCard(atf: Int?, modifier: Modifier) {
         else -> "перегрев!" to C.Red
     }
     Panel(modifier) {
-        T("Температура ATF", 14.sp, C.Sub)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            T("Температура ATF", 14.sp, C.Sub, modifier = Modifier.weight(1f))
+            InfoButton("Температура ATF", "tcu.atf")
+        }
         RingGauge((atf ?: 0) / 130f, atf?.let { "$it°" } ?: "—", label, Modifier.weight(1f).fillMaxWidth(), unitColor = color)
         Row(verticalAlignment = Alignment.CenterVertically) {
             T("0", 11.sp, C.Sub)
@@ -159,7 +213,7 @@ private fun AwdTile(duty: Float?, front: Int?, rear: Int?, modifier: Modifier) {
     ) {
         Icon(Lucide.Waypoints, null, tint = C.Sub, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             T("Муфта полного привода", 11.sp, C.Sub, maxLines = 1)
             Row(verticalAlignment = Alignment.Bottom) {
                 T(fmtF(duty, 0), 20.sp, weight = FontWeight.Bold, maxLines = 1)
@@ -173,5 +227,6 @@ private fun AwdTile(duty: Float?, front: Int?, rear: Int?, modifier: Modifier) {
             }
             if (slip) T("передние буксуют", 11.sp, C.Orange, maxLines = 1)
         }
+        InfoButton("Муфта полного привода", "tcu.awd")
     }
 }

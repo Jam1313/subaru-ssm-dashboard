@@ -124,15 +124,16 @@ fun dialStyle(id: String) = DialStyles.firstOrNull { it.id == id } ?: DialStyles
 fun Dial(
     value: Float?, max: Float, step: Float, labelDiv: Float, unit: String, scaleNote: String?,
     redFrom: Float?, modifier: Modifier, style: DialStyle = DialStyles.first(),
+    min: Float = 0f, format: String = "%.0f",
 ) {
-    val v by animateFloatAsState((value ?: 0f).coerceIn(0f, max), tween(240), label = "dial")
+    val v by animateFloatAsState((value ?: min).coerceIn(min, max), tween(240), label = "dial")
     Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) { drawDial(v, max, step, labelDiv, redFrom, style) }
+        Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style) }
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 4.dp)) {
             BoxWithConstraints(Modifier.fillMaxWidth(if (style.minimal) 0.62f else 0.5f)) {
                 val d = LocalDensity.current
                 val sp = with(d) { (maxWidth / 3.1f).toSp() }
-                T(value?.let { "%.0f".format(it) } ?: "—", sp, style.value, FontWeight.Bold, maxLines = 1,
+                T(value?.let { format.format(it) } ?: "—", sp, style.value, FontWeight.Bold, maxLines = 1,
                     modifier = Modifier.align(Alignment.Center))
             }
             T(unit, 12.sp, style.unit, maxLines = 1)
@@ -141,12 +142,14 @@ fun Dial(
     }
 }
 
-private fun DrawScope.drawDial(v: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle) {
+/** The scale runs [min]..[max]; the lit arc starts at 0 when the scale has both signs (trims, timing). */
+private fun DrawScope.drawDial(v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle) {
     val r = size.minDimension / 2f
     val c = center
     val start = 135f
     val sweep = 270f
-    fun ang(x: Float) = start + sweep * (x / max)
+    fun ang(x: Float) = start + sweep * ((x - min) / (max - min))
+    val from = if (min < 0f && max > 0f) 0f else min
     fun pt(deg: Float, rr: Float): Offset {
         val a = Math.toRadians(deg.toDouble())
         return Offset(c.x + rr * kotlin.math.cos(a).toFloat(), c.y + rr * kotlin.math.sin(a).toFloat())
@@ -167,11 +170,13 @@ private fun DrawScope.drawDial(v: Float, max: Float, step: Float, labelDiv: Floa
         drawArc(st.red.copy(alpha = if (st.minimal) 0.5f else 0.6f), ang(redFrom), ang(max) - ang(redFrom), false, tl, sz, style = Stroke(stroke))
     }
     val arc = st.arc
-    if (arc != null && v > 0f) {
+    if (arc != null && v != from) {
         val hot = redFrom != null && v >= redFrom
         val brush = if (hot) Brush.sweepGradient(listOf(C.Orange, C.Red), c) else Brush.sweepGradient(arc, c)
-        st.glow?.let { drawArc(it.copy(alpha = 0.25f), start, ang(v) - start, false, tl, sz, style = Stroke(stroke * 2.4f, cap = StrokeCap.Round)) }
-        drawArc(brush, start, ang(v) - start, false, tl, sz, style = Stroke(stroke, cap = StrokeCap.Round))
+        val a0 = ang(minOf(from, v))
+        val a1 = ang(maxOf(from, v))
+        st.glow?.let { drawArc(it.copy(alpha = 0.25f), a0, a1 - a0, false, tl, sz, style = Stroke(stroke * 2.4f, cap = StrokeCap.Round)) }
+        drawArc(brush, a0, a1 - a0, false, tl, sz, style = Stroke(stroke, cap = StrokeCap.Round))
     }
     // ticks and numbers
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -182,20 +187,23 @@ private fun DrawScope.drawDial(v: Float, max: Float, step: Float, labelDiv: Floa
         st.glow?.let { setShadowLayer(r * 0.05f, 0f, 0f, it.toArgb()) }
     }
     val minor = step / 2f
-    var x = 0f
-    while (x <= max + 0.01f) {
-        val major = (x / step).let { kotlin.math.abs(it - kotlin.math.round(it)) < 0.01f }
+    val decimals = step / labelDiv < 1f
+    var i = 0
+    while (true) {
+        val x = min + minor * i++
+        if (x > max + minor * 0.01f) break
+        val major = i % 2 == 1 // ticks alternate major/minor from [min], which is a multiple of [step]
         val a = ang(x)
         val red = redFrom != null && x >= redFrom
         val col = if (red) st.red else if (major) st.tickMajor else st.tickMinor
         if (col.alpha > 0f) {
             drawLine(col, pt(a, arcR - stroke * 0.9f), pt(a, arcR - stroke * (if (major) 2.6f else 1.7f)), if (major) 2.5f else 1.4f)
         }
-        if (major && (step * 2 > max / 8 || kotlin.math.round(x / step).toInt() % 2 == 0)) {
+        if (major && (step * 2 > (max - min) / 8 || (i / 2) % 2 == 0)) {
             val p = pt(a, arcR - stroke * (if (st.minimal) 5.5f else 3.9f))
-            drawContext.canvas.nativeCanvas.drawText((x / labelDiv).toInt().toString(), p.x, p.y + paint.textSize * 0.35f, paint)
+            val label = if (decimals) "%.1f".format(x / labelDiv) else kotlin.math.round(x / labelDiv).toInt().toString()
+            drawContext.canvas.nativeCanvas.drawText(label, p.x, p.y + paint.textSize * 0.35f, paint)
         }
-        x += minor
     }
     // needle
     if (st.needle.alpha > 0f) {
@@ -233,35 +241,56 @@ private fun DrawScope.carbonWeave(c: Offset, r: Float) {
 @Composable
 fun DialStylePicker(which: String, modifier: Modifier, onClose: () -> Unit) {
     val s = kg.forester.sg.data.Repo.settings
-    val current = if (which == "tach") s.tachStyle else s.speedoStyle
+    StylePicker(
+        if (which == "tach") "Дизайн тахометра" else "Дизайн спидометра",
+        if (which == "tach") s.tachStyle else s.speedoStyle, plain = null, modifier,
+        preview = { st, m ->
+            if (which == "tach") Dial(3600f, 7000f, 1000f, 1000f, "об/мин", null, 6000f, m, st)
+            else Dial(96f, 200f, 20f, 1f, "км/ч", null, null, m, st)
+        },
+        onPick = { if (which == "tach") s.tachStyle = it else s.speedoStyle = it },
+        onClose = onClose,
+    )
+}
+
+/**
+ * Pop-up with a live [preview] of every gauge design; [plain] (if given) is the name of the card's normal look,
+ * offered first and picked as "".
+ */
+@Composable
+fun StylePicker(
+    title: String, current: String, plain: String?, modifier: Modifier,
+    preview: @Composable (DialStyle, Modifier) -> Unit, onPick: (String) -> Unit, onClose: () -> Unit,
+) {
     androidx.compose.ui.window.Popup(onDismissRequest = onClose, alignment = Alignment.Center) {
         Column(
             modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
                 .background(C.Card).border(1.dp, C.Purple, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
                 .padding(14.dp),
         ) {
-            T(if (which == "tach") "Дизайн тахометра" else "Дизайн спидометра", 16.sp, weight = FontWeight.SemiBold)
+            T(title, 16.sp, weight = FontWeight.SemiBold)
             androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
-            DialStyles.chunked(4).forEach { row ->
+            val options: List<DialStyle?> = (if (plain != null) listOf(null) else emptyList<DialStyle?>()) + DialStyles
+            options.chunked(if (plain != null) 5 else 4).forEach { row ->
                 androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                     row.forEach { st ->
-                        val on = st.id == current
+                        val on = (st?.id ?: "") == current
                         Column(
                             Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
                                 .background(if (on) C.Purple.copy(alpha = 0.25f) else Color.Transparent)
                                 .border(if (on) 2.dp else 1.dp, if (on) C.Purple else C.Border, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                                .clickable {
-                                    if (which == "tach") s.tachStyle = st.id else s.speedoStyle = st.id
-                                    onClose()
-                                }
+                                .clickable { onPick(st?.id ?: ""); onClose() }
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Box(Modifier.size(112.dp).background(Color(0xFF0B0F1C), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))) {
-                                if (which == "tach") Dial(3600f, 7000f, 1000f, 1000f, "об/мин", null, 6000f, Modifier.fillMaxSize().padding(4.dp), st)
-                                else Dial(96f, 200f, 20f, 1f, "км/ч", null, null, Modifier.fillMaxSize().padding(4.dp), st)
+                            Box(
+                                Modifier.size(112.dp).background(Color(0xFF0B0F1C), androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (st != null) preview(st, Modifier.fillMaxSize().padding(4.dp))
+                                else T("— — —", 22.sp, C.Violet, FontWeight.Bold)
                             }
-                            T(st.name, 12.sp, if (on) C.Text else C.Sub, maxLines = 1)
+                            T(st?.name ?: plain ?: "", 12.sp, if (on) C.Text else C.Sub, maxLines = 1)
                         }
                     }
                 }

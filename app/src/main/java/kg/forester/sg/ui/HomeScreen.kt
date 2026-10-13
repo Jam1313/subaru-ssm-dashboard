@@ -117,8 +117,8 @@ fun HomeScreen() {
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { t ->
                     Box(Modifier.weight(t.span.toFloat()).fillMaxHeight().then(longPress)) {
-                        HomeTile(t.id, e, ts, gps, tcu, Modifier.fillMaxSize())
-                        if (edit) TileEditOverlay(t)
+                        HomeTile(t.id, t.style, e, ts, gps, tcu, Modifier.fillMaxSize())
+                        if (edit) TileEditOverlay(HomeEdit, t, HomeTileInfo[t.id]?.first ?: "")
                     }
                 }
                 val used = row.sumOf { it.span }
@@ -138,35 +138,35 @@ fun HomeScreen() {
 
 @Composable
 private fun HomeTile(
-    id: String, e: kg.forester.sg.ssm.EcuSnapshot, ts: kg.forester.sg.data.TripState,
+    id: String, st: String, e: kg.forester.sg.ssm.EcuSnapshot, ts: kg.forester.sg.data.TripState,
     gps: kg.forester.sg.data.GpsFix?, tcu: kg.forester.sg.ssm.TcuSnapshot?, m: Modifier,
 ) {
     val (title, icon) = HomeTileInfo[id] ?: return
     when (id) {
-        "coolant" -> BarCard(icon, title, e.coolantC?.toFloat(), 40f, 110f, "°C", "%.0f", m, warnAbove = 102f)
-        "intake" -> BarCard(icon, title, e.intakeC?.toFloat(), -20f, 70f, "°C", "%.0f", m, warnAbove = 55f)
-        "battery" -> BarCard(icon, title, e.batteryV, 10f, 15f, "В", "%.1f", m, warnBelow = 12f)
-        "throttle" -> BarCard(icon, title, e.throttlePct, 0f, 100f, "%", "%.0f", m)
-        "maf" -> BarCard(icon, title, e.mafGs, 0f, 150f, "г/с", "%.1f", m)
-        "afr" -> BarCard(icon, title, e.afr, 10f, 20f, "", "%.1f", m)
-        "afcorr" -> BarCard(icon, title, e.afCorrPct, -25f, 25f, "%", "%+.1f", m, warnAbs = 15f)
-        "aflearn" -> BarCard(icon, title, e.afLearnPct, -25f, 25f, "%", "%+.1f", m, warnAbs = 10f)
-        "timing" -> BarCard(icon, title, e.timingDeg, -10f, 50f, "°", "%.1f", m)
-        "knock" -> BarCard(icon, title, e.knockDeg, -10f, 2f, "°", "%.1f", m, warnBelow = -2f)
-        "inj" -> BarCard(icon, title, e.injPwMs, 0f, 20f, "мс", "%.2f", m)
-        "wgdc" -> BarCard(icon, title, e.wastegatePct, 0f, 100f, "%", "%.0f", m)
-        "fuel" -> BarCard(icon, "Расход", ts.instLh.toFloat(), 0f, 40f, "л/ч", "%.1f", m)
-        "boost" -> BarCard(icon, title, e.boostBar, 0f, 1.2f, "бар", "%.2f", m)
-        "gps" -> BarCard(icon, title, gps?.speedKmh, 0f, 200f, "км/ч", "%.0f", m,
+        "coolant" -> BarCard(st, "home.$id", icon, title, e.coolantC?.toFloat(), 40f, 110f, "°C", "%.0f", m, warnAbove = 102f)
+        "intake" -> BarCard(st, "home.$id", icon, title, e.intakeC?.toFloat(), -20f, 70f, "°C", "%.0f", m, warnAbove = 55f)
+        "battery" -> BarCard(st, "home.$id", icon, title, e.batteryV, 10f, 15f, "В", "%.1f", m, warnBelow = 12f)
+        "throttle" -> BarCard(st, "home.$id", icon, title, e.throttlePct, 0f, 100f, "%", "%.0f", m)
+        "maf" -> BarCard(st, "home.$id", icon, title, e.mafGs, 0f, 150f, "г/с", "%.1f", m)
+        "afr" -> BarCard(st, "home.$id", icon, title, e.afr, 10f, 20f, "", "%.1f", m)
+        "afcorr" -> BarCard(st, "home.$id", icon, title, e.afCorrPct, -25f, 25f, "%", "%+.1f", m, warnAbs = 15f)
+        "aflearn" -> BarCard(st, "home.$id", icon, title, e.afLearnPct, -25f, 25f, "%", "%+.1f", m, warnAbs = 10f)
+        "timing" -> BarCard(st, "home.$id", icon, title, e.timingDeg, -10f, 50f, "°", "%.1f", m)
+        "knock" -> BarCard(st, "home.$id", icon, title, e.knockDeg, -10f, 2f, "°", "%.1f", m, warnBelow = -2f)
+        "inj" -> BarCard(st, "home.$id", icon, title, e.injPwMs, 0f, 20f, "мс", "%.2f", m)
+        "wgdc" -> BarCard(st, "home.$id", icon, title, e.wastegatePct, 0f, 100f, "%", "%.0f", m)
+        "fuel" -> BarCard(st, "home.$id", icon, "Расход", ts.instLh.toFloat(), 0f, 40f, "л/ч", "%.1f", m)
+        "boost" -> BarCard(st, "home.$id", icon, title, e.boostBar, 0f, 1.2f, "бар", "%.2f", m)
+        "gps" -> BarCard(st, "home.$id", icon, title, gps?.speedKmh, 0f, 200f, "км/ч", "%.0f", m,
             extra = gps?.let { "спутников ${it.satellites}, ±${it.accuracyM.toInt()} м" } ?: "нет сигнала")
-        "pedal" -> BarCard(icon, title, e.pedalPct, 0f, 100f, "%", "%.0f", m)
-        "avcs" -> BarCard(icon, title, e.avcsDeg, -10f, 50f, "°", "%.0f", m)
-        "map" -> BarCard(icon, title, e.mapKpa, 20f, 220f, "кПа", "%.0f", m)
-        "atm" -> BarCard(icon, title, e.atmKpa, 70f, 105f, "кПа", "%.0f", m)
-        "alt" -> BarCard(icon, title, e.altDutyPct, 0f, 100f, "%", "%.0f", m)
-        "atf" -> BarCard(icon, title, tcu?.atfC?.toFloat(), 0f, 130f, "°C", "%.0f", m, warnAbove = 110f)
-        "per100" -> BarCard(icon, "Расход", ts.instPer100?.toFloat(), 0f, 30f, "л/100", "%.1f", m)
-        "range" -> BarCard(icon, title, ts.rangeKm?.toFloat(), 0f, 800f, "км", "%.0f", m)
+        "pedal" -> BarCard(st, "home.$id", icon, title, e.pedalPct, 0f, 100f, "%", "%.0f", m)
+        "avcs" -> BarCard(st, "home.$id", icon, title, e.avcsDeg, -10f, 50f, "°", "%.0f", m)
+        "map" -> BarCard(st, "home.$id", icon, title, e.mapKpa, 20f, 220f, "кПа", "%.0f", m)
+        "atm" -> BarCard(st, "home.$id", icon, title, e.atmKpa, 70f, 105f, "кПа", "%.0f", m)
+        "alt" -> BarCard(st, "home.$id", icon, title, e.altDutyPct, 0f, 100f, "%", "%.0f", m)
+        "atf" -> BarCard(st, "home.$id", icon, title, tcu?.atfC?.toFloat(), 0f, 130f, "°C", "%.0f", m, warnAbove = 110f)
+        "per100" -> BarCard(st, "home.$id", icon, "Расход", ts.instPer100?.toFloat(), 0f, 30f, "л/100", "%.1f", m)
+        "range" -> BarCard(st, "home.$id", icon, title, ts.rangeKm?.toFloat(), 0f, 800f, "км", "%.0f", m)
     }
 }
 
@@ -175,7 +175,10 @@ private fun BigGauge(
     title: String, value: Float?, max: Float, unit: String, format: String, modifier: Modifier, min: Float = 0f,
 ) {
     Panel(modifier, padding = 10.dp) {
-        T(title, 14.sp, C.Sub, maxLines = 1)
+        Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            T(title, 14.sp, C.Sub, maxLines = 1, modifier = Modifier.weight(1f))
+            InfoButton(title)
+        }
         RingGauge(
             ((value ?: min) - min) / (max - min), value?.let { format.format(it) } ?: "—", unit,
             Modifier.fillMaxSize(),
@@ -185,7 +188,7 @@ private fun BigGauge(
 
 @Composable
 private fun BarCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: Float?, min: Float, max: Float, unit: String, format: String, modifier: Modifier,
+    style: String, info: String, icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: Float?, min: Float, max: Float, unit: String, format: String, modifier: Modifier,
     warnAbove: Float? = null, warnBelow: Float? = null, warnAbs: Float? = null, extra: String? = null,
 ) {
     val warn = value != null && (
@@ -193,12 +196,16 @@ private fun BarCard(
             (warnBelow != null && value < warnBelow) ||
             (warnAbs != null && kotlin.math.abs(value) > warnAbs)
         )
+    if (style.isNotEmpty()) {
+        NeedleCard(CardValue(icon, title, value, min, max, unit, format, info, warnAbove), dialStyle(style), modifier.fillMaxHeight())
+        return
+    }
     val color: Brush = if (warn) Brush.horizontalGradient(listOf(C.Orange, C.Red)) else C.Accent
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxHeight()) {
         val tight = maxHeight < 84.dp
         val tall = maxHeight > 140.dp
         Panel(Modifier.fillMaxSize(), padding = if (tight) 9.dp else 12.dp) {
-            CardTitle(icon, title)
+            CardTitle(icon, title, info)
             // taller cards (fewer of them on the screen) get bigger numbers; the factory grid keeps 26 sp
             FitValue(
                 value?.let { format.format(it) } ?: "—", unit, if (tall) 40f else 26f, Modifier.weight(1f).fillMaxWidth(),

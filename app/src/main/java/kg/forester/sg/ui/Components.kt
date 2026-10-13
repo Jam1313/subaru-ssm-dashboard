@@ -101,6 +101,7 @@ fun PanelTitle(icon: ImageVector, title: String, trailing: @Composable () -> Uni
         Spacer(Modifier.width(10.dp))
         T(title, 17.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         trailing()
+        InfoButton(title)
     }
 }
 
@@ -127,7 +128,7 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector
 
 /** Small stat tile: icon + label + value + unit. */
 @Composable
-fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier: Modifier = Modifier) {
+fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier: Modifier = Modifier, info: String = label) {
     Row(
         modifier
             .clip(RoundedCornerShape(12.dp))
@@ -137,7 +138,7 @@ fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier
     ) {
         Icon(icon, null, tint = C.Sub, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             T(label, 11.sp, C.Sub, maxLines = 1)
             Row(verticalAlignment = Alignment.Bottom) {
                 T(value, 20.sp, weight = FontWeight.Bold, maxLines = 1)
@@ -145,6 +146,7 @@ fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier
                 T(unit, 12.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
             }
         }
+        InfoButton(label, info)
     }
 }
 
@@ -328,11 +330,12 @@ fun Legend(series: List<Series>, format: String = "%.1f") {
 
 /** Panel with a title row, legend and a live chart filling the rest. */
 @Composable
-fun ChartCard(title: String, series: List<Series>, min: Float, max: Float, modifier: Modifier, format: String = "%.1f", zeroLine: Boolean = false) {
+fun ChartCard(title: String, series: List<Series>, min: Float, max: Float, modifier: Modifier, format: String = "%.1f", zeroLine: Boolean = false, info: String = title) {
     Panel(modifier, padding = 12.dp) {
         androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
             T(title, 15.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Legend(series, format)
+            InfoButton(title, info)
         }
         Spacer(Modifier.height(6.dp))
         androidx.compose.foundation.layout.Row(Modifier.weight(1f)) {

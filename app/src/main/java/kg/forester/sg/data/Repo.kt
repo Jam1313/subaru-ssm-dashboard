@@ -185,6 +185,10 @@ class Settings(ctx: Context) {
         get() = p.getString("homeTiles", "")!!
         set(v) { p.edit().putString("homeTiles", v).apply(); Repo.homeTiles.value = v }
 
+    /** Layout of any editable screen (see Board), by its settings key. */
+    fun board(key: String) = p.getString(key, "")!!
+    fun setBoard(key: String, v: String) { p.edit().putString(key, v).apply(); Repo.boardFlow(key).value = v }
+
     /** 3D car + dials block: 0 hidden, 1 normal, 2 large, 3 huge. */
     var clusterSize: Int
         get() = p.getInt("clusterSize", 1)
@@ -259,6 +263,13 @@ object Repo {
     val car3d = MutableStateFlow("SG")
     val carPaint = MutableStateFlow("chameleon")
     val homeTiles = MutableStateFlow("")
+    val driveTiles = MutableStateFlow("")
+    val tcuTiles = MutableStateFlow("")
+    fun boardFlow(key: String) = when (key) {
+        "driveTiles" -> driveTiles
+        "tcuTiles" -> tcuTiles
+        else -> homeTiles
+    }
     /** tachometer style id to speedometer style id */
     val dialStyles = MutableStateFlow("neon" to "neon")
     val clusterSize = MutableStateFlow(1)
@@ -275,6 +286,8 @@ object Repo {
             car3d.value = settings.car3d
             carPaint.value = settings.carPaint
             homeTiles.value = settings.homeTiles
+            driveTiles.value = settings.board("driveTiles")
+            tcuTiles.value = settings.board("tcuTiles")
             dialStyles.value = settings.tachStyle to settings.speedoStyle
             clusterSize.value = settings.clusterSize
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled

@@ -28,7 +28,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kg.forester.sg.data.DriveBoard
 import kg.forester.sg.data.KnockStats
+import kg.forester.sg.data.TileCfg
+import androidx.compose.ui.graphics.vector.ImageVector
 import kg.forester.sg.data.Repo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
@@ -45,67 +48,109 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Cards of the "Динамика" screen, for the "add" menu. */
+val DriveCards: CardNames = linkedMapOf(
+    "pedal" to ("Педаль газа" to Lucide.ChevronsUp),
+    "throttle" to ("Дроссель" to Lucide.Disc),
+    "boost" to ("Наддув" to Lucide.Fan),
+    "load" to ("Нагрузка" to Lucide.Activity),
+    "rpm" to ("Обороты" to Lucide.Gauge),
+    "knock" to ("Детонация" to Lucide.AudioWaveform),
+    "chartPedal" to ("График: педаль и дроссель" to Lucide.ChartLine),
+    "chartBoost" to ("График: наддув" to Lucide.ChartLine),
+    "chartAfr" to ("График: смесь (AFR)" to Lucide.ChartLine),
+    "chartTiming" to ("График: зажигание и детонация" to Lucide.ChartLine),
+    "chartRpm" to ("График: обороты" to Lucide.ChartLine),
+    "chartTrims" to ("График: коррекции A/F" to Lucide.ChartLine),
+    "chartMaf" to ("График: MAF" to Lucide.ChartLine),
+    "avcs" to ("AVCS (впуск)" to Lucide.RefreshCw),
+    "injDuty" to ("Загрузка форсунок" to Lucide.Droplets),
+    "maf" to ("MAF" to Lucide.Wind),
+    "throttleMotor" to ("Привод дросселя" to Lucide.Cog),
+    "wgdc" to ("Wastegate" to Lucide.Wind),
+    "pressure" to ("Абс. давление" to Lucide.Gauge),
+)
+
+private val DriveEdit = BoardEdit(
+    DriveBoard,
+    gaugeable = setOf("pedal", "throttle", "boost", "load", "rpm", "avcs", "injDuty", "maf", "throttleMotor", "wgdc"),
+)
+
+/** Row heights: gauges 0.9, charts 1.2, small tiles 0.55; a row with a needle gauge gets 1.3 so the dial is readable. */
+private fun driveRowWeight(t: TileCfg) = when {
+    t.id.startsWith("chart") -> 1.2f
+    t.style.isNotEmpty() -> 1.3f
+    t.id in setOf("avcs", "injDuty", "maf", "throttleMotor", "wgdc", "pressure") -> 0.55f
+    else -> 0.9f
+}
+
 @Composable
 fun DriveScreen() {
     val e by Repo.live.collectAsState()
     val h by Repo.history.collectAsState()
     val knock by Repo.knock.collectAsState()
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.weight(0.9f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MiniGauge(Lucide.ChevronsUp, "Педаль газа", e.pedalPct, 0f, 100f, "%", "%.0f", Modifier.weight(1f))
-            MiniGauge(Lucide.Disc, "Дроссель", e.throttlePct, 0f, 100f, "%", "%.0f", Modifier.weight(1f))
-            MiniGauge(Lucide.Fan, "Наддув", e.boostBar, 0f, 1.2f, "бар", "%.2f", Modifier.weight(1f), sub = e.vacuumKpa?.takeIf { it > 1f }?.let { "разрежение %.0f кПа".format(it) })
-            MiniGauge(Lucide.Activity, "Нагрузка", e.loadGRev, 0f, 2.5f, "г/об", "%.2f", Modifier.weight(1f))
-            KnockCard(knock, e.knockDeg, Modifier.weight(1f))
-        }
-        Row(Modifier.weight(1.2f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ChartCard(
+    BoardScreen(DriveEdit, DriveCards, ::driveRowWeight) { t, m ->
+        val info = "drive.${t.id}"
+        @Composable
+        fun Mini(icon: ImageVector, title: String, v: Float?, min: Float, max: Float, unit: String, fmt: String, sub: String? = null, red: Float? = null) =
+            ValueCard(CardValue(icon, title, v, min, max, unit, fmt, info, red), t.style, m) {
+                MiniGauge(icon, title, v, min, max, unit, fmt, m, sub = sub, info = info)
+            }
+        @Composable
+        fun Small(icon: ImageVector, title: String, v: Float?, min: Float, max: Float, unit: String, fmt: String) =
+            ValueCard(CardValue(icon, title, v, min, max, unit, fmt, info), t.style, m) {
+                Tile(icon, title, v?.let { fmt.format(it) } ?: "—", unit, m, info)
+            }
+        @Composable
+        fun Chart(title: String, series: List<Series>, min: Float, max: Float, fmt: String = "%.1f", zero: Boolean = false) =
+            ChartCard(title, series, min, max, m, fmt, zero, info)
+        when (t.id) {
+            "pedal" -> Mini(Lucide.ChevronsUp, "Педаль газа", e.pedalPct, 0f, 100f, "%", "%.0f")
+            "throttle" -> Mini(Lucide.Disc, "Дроссель", e.throttlePct, 0f, 100f, "%", "%.0f")
+            "boost" -> Mini(Lucide.Fan, "Наддув", e.boostBar, 0f, 1.2f, "бар", "%.2f",
+                sub = e.vacuumKpa?.takeIf { it > 1f }?.let { "разрежение %.0f кПа".format(it) })
+            "load" -> Mini(Lucide.Activity, "Нагрузка", e.loadGRev, 0f, 2.5f, "г/об", "%.2f")
+            "rpm" -> Mini(Lucide.Gauge, "Обороты", e.rpm?.toFloat(), 0f, 7000f, "об/мин", "%.0f", red = 6000f)
+            "knock" -> KnockCard(knock, e.knockDeg, m)
+            "chartPedal" -> Chart(
                 "Педаль и дроссель, %",
-                listOf(
-                    Series("педаль", h.map { it.pedalPct }, C.Violet),
-                    Series("дроссель", h.map { it.throttlePct }, C.Blue),
-                ),
-                0f, 100f, Modifier.weight(1f).fillMaxHeight(), "%.0f",
+                listOf(Series("педаль", h.map { it.pedalPct }, C.Violet), Series("дроссель", h.map { it.throttlePct }, C.Blue)),
+                0f, 100f, "%.0f",
             )
-            ChartCard(
-                "Наддув, бар",
-                listOf(Series("наддув", h.map { it.boostBar }, C.Green)),
-                0f, 1.2f, Modifier.weight(1f).fillMaxHeight(), "%.2f",
-            )
-        }
-        Row(Modifier.weight(1.2f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ChartCard(
-                "Смесь (AFR)",
-                listOf(Series("AFR", h.map { it.afr }, C.Orange)),
-                10f, 20f, Modifier.weight(1f).fillMaxHeight(),
-            )
-            ChartCard(
+            "chartBoost" -> Chart("Наддув, бар", listOf(Series("наддув", h.map { it.boostBar }, C.Green)), 0f, 1.2f, "%.2f")
+            "chartAfr" -> Chart("Смесь (AFR)", listOf(Series("AFR", h.map { it.afr }, C.Orange)), 10f, 20f)
+            "chartTiming" -> Chart(
                 "Зажигание и детонация, °",
                 listOf(Series("УОЗ", h.map { it.timingDeg }, C.Blue), Series("детонация", h.map { it.knockDeg }, C.Red)),
-                -10f, 45f, Modifier.weight(1f).fillMaxHeight(), "%.0f", zeroLine = true,
+                -10f, 45f, "%.0f", zero = true,
             )
-        }
-        Row(Modifier.weight(0.55f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile(Lucide.RefreshCw, "AVCS (впуск)", fmtF(e.avcsDeg, 0), "°", Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.Droplets, "Загрузка форсунок", fmtF(e.injDutyPct, 0), "%", Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.Wind, "MAF", fmtF(e.mafGs, 1), "г/с", Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.Cog, "Привод дросселя", fmtF(e.throttleMotorPct, 0), "%", Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.Wind, "Wastegate", fmtF(e.wastegatePct, 0), "%", Modifier.weight(1f).fillMaxHeight())
-            Tile(Lucide.Gauge, "Абс. давление", "${fmtF(e.mapKpa, 0)} / ${fmtF(e.atmKpa, 0)}", "кПа", Modifier.weight(1f).fillMaxHeight())
+            "chartRpm" -> Chart("Обороты, об/мин", listOf(Series("обороты", h.map { it.rpm?.toFloat() }, C.Violet)), 0f, 7000f, "%.0f")
+            "chartTrims" -> Chart(
+                "Коррекции A/F, %",
+                listOf(Series("коррекция", h.map { it.afCorrPct }, C.Orange), Series("обучение", h.map { it.afLearnPct }, C.Blue)),
+                -25f, 25f, "%.0f", zero = true,
+            )
+            "chartMaf" -> Chart("MAF, г/с", listOf(Series("MAF", h.map { it.mafGs }, C.Blue)), 0f, 150f, "%.0f")
+            "avcs" -> Small(Lucide.RefreshCw, "AVCS (впуск)", e.avcsDeg, -10f, 50f, "°", "%.0f")
+            "injDuty" -> Small(Lucide.Droplets, "Загрузка форсунок", e.injDutyPct, 0f, 100f, "%", "%.0f")
+            "maf" -> Small(Lucide.Wind, "MAF", e.mafGs, 0f, 150f, "г/с", "%.1f")
+            "throttleMotor" -> Small(Lucide.Cog, "Привод дросселя", e.throttleMotorPct, -100f, 100f, "%", "%.0f")
+            "wgdc" -> Small(Lucide.Wind, "Wastegate", e.wastegatePct, 0f, 100f, "%", "%.0f")
+            "pressure" -> Tile(Lucide.Gauge, "Абс. давление", "${fmtF(e.mapKpa, 0)} / ${fmtF(e.atmKpa, 0)}", "кПа", m, info)
         }
     }
 }
 
 @Composable
-fun MiniGauge(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: Float?, min: Float, max: Float, unit: String, format: String, modifier: Modifier, sub: String? = null, big: Boolean = false) {
+fun MiniGauge(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: Float?, min: Float, max: Float, unit: String, format: String, modifier: Modifier, sub: String? = null, big: Boolean = false, info: String = title) {
     // The card height depends on the screen; drop the scale labels and shrink the number when it is short
     // instead of letting the number get clipped.
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxHeight()) {
         val roomy = maxHeight >= if (big) 150.dp else 135.dp
         val tight = maxHeight < 96.dp
         Panel(Modifier.fillMaxSize(), padding = if (tight) 8.dp else 12.dp) {
-            CardTitle(icon, title)
+            CardTitle(icon, title, info)
             FitValue(
                 value?.let { format.format(it) } ?: "—", unit, if (big) 46f else 30f,
                 Modifier.weight(1f).fillMaxWidth(),
@@ -126,11 +171,12 @@ fun MiniGauge(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Stri
 
 /** Card header: a small accent icon and the parameter name. */
 @Composable
-fun CardTitle(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+fun CardTitle(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, info: String = title) {
+    Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.material3.Icon(icon, null, tint = C.Violet.copy(alpha = 0.85f), modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
-        T(title, 13.sp, C.Sub, maxLines = 1)
+        T(title, 13.sp, C.Sub, maxLines = 1, modifier = Modifier.weight(1f))
+        InfoButton(title, info)
     }
 }
 
@@ -164,7 +210,10 @@ private fun KnockCard(stats: KnockStats, knockDeg: Float?, modifier: Modifier) {
         0.35f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse), label = "pulse",
     )
     Panel(modifier.fillMaxHeight().clip(Rounded).clickable { open = true }, padding = 12.dp) {
-        T("Детонация", 13.sp, C.Sub)
+        Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            T("Детонация", 13.sp, C.Sub, modifier = Modifier.weight(1f))
+            InfoButton("Детонация", "drive.knock")
+        }
         Spacer(Modifier.weight(1f))
         T(
             if (active) "%.1f°".format(knockDeg) else "нет",
