@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.sp
 enum class TickShape { LINE, DOT, TRIANGLE }
 
 /** Artwork painted on the face under the scale. */
-enum class FacePattern { NONE, CARBON, FLAMES, CIRCUIT, SPARKLES, CAT }
+enum class FacePattern { NONE, CARBON, FLAMES, CIRCUIT, SPARKLES, CAT, SAKURA, CHECKER, SYNTH, STARS }
 
 /**
  * Digital read-out instead of the big number in the middle: [segments] uses the 7-segment font with unlit
@@ -84,11 +84,16 @@ data class DialStyle(
     val needleWidth: Float = 0.022f,   // of the radius
     val shortNeedle: Boolean = false,  // only the tip near the scale (Hot Pursuit)
     val image: String? = null,         // user picture under the face (see GaugeImages)
+    val tickLow: Color? = null,        // ticks and numbers fade from this colour at the start to tickMajor at the end
+    val segments: Boolean = false,     // LED blocks lit up to the value instead of an arc (coloured along [arc])
 )
 
 private val WarmLcd = Readout(Color(0xFFB9A46A), Color(0xFF1B1608), Color(0x2A1B1608), Color(0xFF6B5A2A))
 
-val DialStyles = listOf(
+/** All gauge designs: the original ones, then the preset collection (GaugePresets.kt). */
+val DialStyles: List<DialStyle> by lazy { CoreDialStyles + PresetDialStyles }
+
+private val CoreDialStyles = listOf(
     DialStyle(
         "neon", "Неон",
         face = listOf(Color(0xE60B0F1C), Color(0xCC0B0F1C), Color(0x660B0F1C)), rim = C.Border, track = Color(0xFF1E2438),
@@ -396,7 +401,20 @@ private fun DrawScope.drawDial(
         }
     }
     val arc = st.arc
-    if (arc != null && v != from) {
+    if (st.segments) {
+        // LED bar: 24 blocks, lit up to the value, coloured along the arc colours (green → orange → red etc.)
+        val n = 24
+        val cols = arc ?: listOf(st.tickMajor, st.tickMajor)
+        val gap = sweep / n * 0.28f
+        repeat(n) { k ->
+            val f = (k + 0.5f) / n
+            val lit = min + (max - min) * f <= v + 1e-3f
+            val col = lerpColors(cols, f)
+            val a0 = start + sweep * k / n + gap / 2
+            drawArc(if (lit) col else col.copy(alpha = 0.12f), a0, sweep / n - gap, false, tl, sz, style = Stroke(stroke * 2.2f))
+            if (lit) st.glow?.let { drawArc(it.copy(alpha = 0.18f), a0, sweep / n - gap, false, tl, sz, style = Stroke(stroke * 3.4f)) }
+        }
+    } else if (arc != null && v != from) {
         val hot = redFrom != null && v >= redFrom
         val brush = if (hot) Brush.sweepGradient(listOf(C.Orange, C.Red), c) else Brush.sweepGradient(arc, c)
         val a0 = ang(minOf(from, v))
@@ -422,7 +440,10 @@ private fun DrawScope.drawDial(
         val major = i % 2 == 1 // ticks alternate major/minor from [min], which is a multiple of [step]
         val a = ang(x)
         val red = redFrom != null && x >= redFrom
-        val col = if (red && band == null) st.red else if (major) st.tickMajor else st.tickMinor
+        val low = st.tickLow
+        val col = if (red && band == null) st.red
+            else if (low != null) lerp(low, st.tickMajor, (x - min) / (max - min)).let { if (major) it else it.copy(alpha = it.alpha * 0.7f) }
+            else if (major) st.tickMajor else st.tickMinor
         val tickR = if (band != null) arcR - r * 0.13f else arcR
         if (col.alpha > 0f) when (st.ticks) {
             TickShape.LINE -> drawLine(col, pt(a, tickR - stroke * 0.9f), pt(a, tickR - stroke * (if (major) 2.6f else 1.7f)), if (major) 2.5f else 1.4f)
@@ -437,11 +458,12 @@ private fun DrawScope.drawDial(
         if (major && (step * 2 > (max - min) / 8 || (i / 2) % 2 == 0)) {
             val p = pt(a, if (band != null) arcR else arcR - stroke * (if (st.minimal) 5.5f else 3.9f))
             val label = if (decimals) "%.1f".format(x / labelDiv) else kotlin.math.round(x / labelDiv).toInt().toString()
+            if (low != null && band == null) paint.color = (if (red) st.red else lerp(low, st.numbers, (x - min) / (max - min))).toArgb()
             drawContext.canvas.nativeCanvas.drawText(label, p.x, p.y + paint.textSize * 0.35f, paint)
         }
     }
     // needle
-    if (st.needle.alpha > 0f) {
+    if (st.needle.alpha > 0f && !st.segments) {
         val na = ang(v)
         val w = r * st.needleWidth
         val inner = if (st.shortNeedle) arcR - stroke * 4.5f else r * 0.10f
@@ -518,9 +540,93 @@ private fun DrawScope.facePattern(p: FacePattern, col: Color, c: Offset, r: Floa
                 drawLine(ink.copy(alpha = 0.6f), Offset(c.x - r * 0.95f, y - r * 0.04f * (1 - k)), Offset(c.x - r * 0.62f, y), r * 0.012f)
             }
         }
+        FacePattern.SAKURA -> {
+            // a branch across the upper face with blossoms, petals drifting below
+            val wood = Color(0xFF5B3A29)
+            val branch = androidx.compose.ui.graphics.Path().apply {
+                moveTo(c.x - r * 1.05f, c.y - r * 0.15f)
+                cubicTo(c.x - r * 0.5f, c.y - r * 0.55f, c.x + r * 0.1f, c.y - r * 0.35f, c.x + r * 1.05f, c.y - r * 0.75f)
+            }
+            drawPath(branch, wood, style = Stroke(r * 0.05f, cap = StrokeCap.Round))
+            drawLine(wood, Offset(c.x - r * 0.25f, c.y - r * 0.42f), Offset(c.x - r * 0.05f, c.y - r * 0.8f), r * 0.03f, cap = StrokeCap.Round)
+            drawLine(wood, Offset(c.x + r * 0.35f, c.y - r * 0.5f), Offset(c.x + r * 0.55f, c.y - r * 0.2f), r * 0.03f, cap = StrokeCap.Round)
+            repeat(16) {
+                val t = rnd.nextFloat()
+                val bx = c.x - r * 0.9f + t * r * 1.9f
+                val by = c.y - r * (0.2f + 0.45f * t) + (rnd.nextFloat() - 0.5f) * r * 0.35f
+                blossom(Offset(bx, by), r * (0.07f + rnd.nextFloat() * 0.05f), col)
+            }
+            repeat(10) {
+                val px = c.x + (rnd.nextFloat() - 0.5f) * r * 1.6f
+                val py = c.y + rnd.nextFloat() * r * 0.8f
+                drawOval(col.copy(alpha = 0.8f), Offset(px, py), Size(r * 0.06f, r * 0.035f))
+            }
+        }
+        FacePattern.CHECKER -> {
+            // EL-backlight checker ring around the hub
+            val cell = r * 0.055f
+            var y = c.y - r * 0.55f
+            while (y < c.y + r * 0.55f) {
+                var x = c.x - r * 0.55f
+                while (x < c.x + r * 0.55f) {
+                    val d = kotlin.math.hypot(x + cell / 2 - c.x, y + cell / 2 - c.y)
+                    val k = ((x - c.x) / cell).toInt() + ((y - c.y) / cell).toInt()
+                    if (d in r * 0.2f..r * 0.52f && k % 2 == 0) drawRect(col.copy(alpha = col.alpha * (1f - (d - r * 0.2f) / (r * 0.4f))), Offset(x, y), Size(cell, cell))
+                    x += cell
+                }
+                y += cell
+            }
+        }
+        FacePattern.SYNTH -> {
+            // synthwave: striped sun on a horizon, perspective grid below
+            val hz = c.y + r * 0.15f
+            val sunR = r * 0.42f
+            val sun = Offset(c.x, hz - sunR * 0.25f)
+            drawContext.canvas.save()
+            drawContext.canvas.clipRect(c.x - r, c.y - r, c.x + r, hz)
+            drawCircle(Brush.verticalGradient(listOf(Color(0xFFFFE066), Color(0xFFFF4FA3)), sun.y - sunR, sun.y + sunR), sunR, sun)
+            repeat(5) { k ->
+                val yy = sun.y + sunR * (0.1f + k * 0.18f)
+                drawRect(Color.Black.copy(alpha = 0.55f), Offset(c.x - sunR, yy), Size(sunR * 2, sunR * 0.05f * (k + 1)))
+            }
+            drawContext.canvas.restore()
+            repeat(7) { k ->
+                val f = (k + 1) / 7f
+                drawLine(col, Offset(c.x - r, hz + (c.y + r - hz) * f * f), Offset(c.x + r, hz + (c.y + r - hz) * f * f), r * 0.01f)
+            }
+            repeat(9) { k ->
+                val dx = (k - 4) / 4f
+                drawLine(col, Offset(c.x + dx * r * 0.15f, hz), Offset(c.x + dx * r * 1.4f, c.y + r), r * 0.01f)
+            }
+        }
+        FacePattern.STARS -> repeat(40) {
+            val a = rnd.nextFloat() * 6.283f
+            val d = r * kotlin.math.sqrt(rnd.nextFloat())
+            val p = Offset(c.x + d * kotlin.math.cos(a), c.y + d * kotlin.math.sin(a))
+            if (it % 9 == 0) sparkle(p, r * 0.04f, col) else drawCircle(col.copy(alpha = 0.4f + rnd.nextFloat() * 0.6f), r * (0.006f + rnd.nextFloat() * 0.01f), p)
+        }
         FacePattern.NONE -> Unit
     }
     drawContext.canvas.restore()
+}
+
+private fun lerp(a: Color, b: Color, f: Float) = androidx.compose.ui.graphics.lerp(a, b, f.coerceIn(0f, 1f))
+
+/** Colour at [f] (0…1) along a list of evenly spaced colours. */
+private fun lerpColors(cols: List<Color>, f: Float): Color {
+    if (cols.size == 1) return cols[0]
+    val p = f.coerceIn(0f, 1f) * (cols.size - 1)
+    val i = p.toInt().coerceAtMost(cols.size - 2)
+    return lerp(cols[i], cols[i + 1], p - i)
+}
+
+/** Five-petal blossom with a darker centre. */
+private fun DrawScope.blossom(p: Offset, s: Float, col: Color) {
+    repeat(5) { k ->
+        val a = Math.toRadians(k * 72.0 - 90.0)
+        drawCircle(col, s * 0.42f, Offset(p.x + s * 0.45f * kotlin.math.cos(a).toFloat(), p.y + s * 0.45f * kotlin.math.sin(a).toFloat()))
+    }
+    drawCircle(Color(0xFFD94A7A), s * 0.18f, p)
 }
 
 /** Four-point star glint. */
