@@ -250,7 +250,13 @@ fun MiniMapCard(styleText: String, modifier: Modifier, onStyle: (String) -> Unit
                     if (lat != null && lon != null) v.controller.setCenter(GeoPoint(lat, lon))
                     v.mapOrientation = if (cfg.northUp) 0f else heading?.let { -it } ?: v.mapOrientation
                 }
-                if (lat == null) T("Нет GPS", 13.sp, if (look.low == null) Color.Black else C.Sub)
+                if (lat == null) {
+                    val why by Repo.gpsStatus.collectAsState()
+                    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        T("Нет GPS", 13.sp, if (look.low == null) Color.Black else C.Sub)
+                        if (why.isNotEmpty()) T(why, 10.sp, if (look.low == null) Color.DarkGray else C.Sub, maxLines = 3)
+                    }
+                }
                 // frame and arrow on top of the map, so they also take the taps (the map itself never pans)
                 Canvas(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { openNavigator(ctx) }, onLongPress = { picking = true }) }) {
                     val turn = if (cfg.northUp) 0f else heading ?: 0f

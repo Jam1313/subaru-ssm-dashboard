@@ -28,6 +28,8 @@
     <!-- Bluetooth LE tyre pressure sensors: only listened to, never used to find the location -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- updating the app from its GitHub releases -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
         <!-- FYT head units (Teyes etc.): media service, decides whether the Media screen is shown -->

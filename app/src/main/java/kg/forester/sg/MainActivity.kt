@@ -92,6 +92,17 @@ class MainActivity : ComponentActivity() {
         if (intent?.hasExtra("demo") == true) Repo.settings.demo = intent.getBooleanExtra("demo", false)
         if (intent?.getBooleanExtra("skipSetup", false) == true) Repo.settings.setupDone = true
         kg.forester.sg.data.Shortcuts.load(this)
+        // once a day: is there a newer release on GitHub?
+        if (Repo.settings.feature("update") && System.currentTimeMillis() - Repo.settings.lastUpdateCheckMs > 24 * 3600_000L) {
+            Thread {
+                val r = kg.forester.sg.data.Updater.latest() ?: return@Thread
+                Repo.settings.lastUpdateCheckMs = System.currentTimeMillis()
+                if (kg.forester.sg.data.Updater.isNewer(r.tag, kg.forester.sg.data.Updater.current(this))) {
+                    kg.forester.sg.service.Alerts.raise("update", "Вышла версия ${r.tag.removePrefix("v")}: Настройки → Основные → «Обновление приложения»",
+                        kg.forester.sg.service.Alerts.Level.INFO, 24 * 3600_000L, speak = false)
+                }
+            }.start()
+        }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
         // Phones get the full head-unit layout too, sideways (either way round) and scaled to fit.

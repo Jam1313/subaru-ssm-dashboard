@@ -119,6 +119,9 @@ class EcuService : Service() {
         Voice.start(this)
         Fyt.bind(this)
         pollJob = scope.launch { pollLoop() }
+        scope.launch(Dispatchers.Main) {
+            while (isActive) { delay(30_000); runCatching { gpsWatchdog() } }
+        }
         scope.launch {
             while (isActive) {
                 Housekeeping.run(this@EcuService, Repo.logFile.value)
@@ -156,7 +159,7 @@ class EcuService : Service() {
                 "elm_bt" -> { bluetoothSession(s.btAddress, s.btName); delay(3000); continue }
                 "elm_wifi" -> { wifiSession(explicit = true); delay(3000); continue }
             }
-            val drivers = adapterProber.findAllDrivers(usb)
+            val drivers = adapterProber.findAllDrivers(usb) + unknownSerial(usb, adapterProber.findAllDrivers(usb))
             logUsbDevices(usb, drivers)
             val driver = pickDriver(kind, drivers)
             if (driver == null) {
@@ -178,7 +181,7 @@ class EcuService : Service() {
                     other != null -> "Найден OpenPort 2.0: выберите его в Настройках → Адаптер (или «Авто»)"
                     kind == "op2" -> "OpenPort 2.0 не найден"
                     kind == "elm_usb" -> "USB-адаптер ELM327 не найден"
-                    else -> "Кабель KKL не найден"
+                    else -> "Кабель KKL не найден (если он подключён — «Отправить журнал»: в журнале коды всех USB-устройств)"
                 }
                 delay(2000)
                 continue
@@ -254,6 +257,27 @@ class EcuService : Service() {
                 logger?.close(); logger = null
             }
             delay(1000)
+        }
+    }
+
+    /**
+     * USB devices the driver table does not list but whose chip vendor we know (FTDI, WCH CH340, Prolific,
+     * Silicon Labs): KKL clones and rebadged cables (e.g. an OpenPort 1.3 with its own product id) come with ids
+     * nobody listed.
+     */
+    private fun unknownSerial(usb: UsbManager, known: List<UsbSerialDriver>): List<UsbSerialDriver> {
+        val names = known.map { it.device.deviceName }.toSet()
+        return usb.deviceList.values.filter { it.deviceName !in names }.mapNotNull { d ->
+            runCatching<UsbSerialDriver?> {
+                when (d.vendorId) {
+                    0x0403 -> FtdiSerialDriver(d)
+                    0x1A86 -> com.hoho.android.usbserial.driver.Ch34xSerialDriver(d)
+                    0x067B -> com.hoho.android.usbserial.driver.ProlificSerialDriver(d)
+                    0x10C4 -> com.hoho.android.usbserial.driver.Cp21xxSerialDriver(d)
+                    // not a generic CDC-ACM fallback: a head unit's internal 4G modem looks like one
+                    else -> null
+                }
+            }.getOrNull()?.takeIf { it.ports.isNotEmpty() }
         }
     }
 
@@ -794,16 +818,38 @@ class EcuService : Service() {
 
     // ---- GPS ----
 
+    @Volatile private var lastGpsFixMs = 0L
+    @Volatile private var gpsSats = 0
+    @Volatile private var gpsStartedMs = 0L
+
     private val gpsListener = object : LocationListener {
         override fun onLocationChanged(l: Location) {
+            lastGpsFixMs = System.currentTimeMillis()
+            Repo.gpsStatus.value = ""
             Repo.gps.value = GpsFix(
                 speedKmh = if (l.hasSpeed()) l.speed * 3.6f else 0f,
                 altitudeM = l.altitude,
                 accuracyM = if (l.hasAccuracy()) l.accuracy else 99f,
-                satellites = l.extras?.getInt("satellites") ?: 0,
+                satellites = (l.extras?.getInt("satellites") ?: 0).takeIf { it > 0 } ?: gpsSats,
                 timeMs = System.currentTimeMillis(),
                 bearing = if (l.hasBearing()) l.bearing else null,
                 lat = l.latitude, lon = l.longitude,
+            )
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+        override fun onProviderEnabled(provider: String) { gpsCheck() }
+        override fun onProviderDisabled(provider: String) { gpsCheck() }
+    }
+
+    /** Position from the network while GPS has nothing (indoors, just woken up): for the map only, no speed. */
+    private val netListener = object : LocationListener {
+        override fun onLocationChanged(l: Location) {
+            if (System.currentTimeMillis() - lastGpsFixMs < 30_000) return
+            Repo.gps.value = GpsFix(
+                speedKmh = 0f, altitudeM = l.altitude, accuracyM = if (l.hasAccuracy()) maxOf(l.accuracy, 50f) else 99f,
+                satellites = gpsSats, timeMs = System.currentTimeMillis(), bearing = null, lat = l.latitude, lon = l.longitude,
             )
         }
 
@@ -813,14 +859,60 @@ class EcuService : Service() {
         override fun onProviderDisabled(provider: String) {}
     }
 
+    private val gnssCallback = object : android.location.GnssStatus.Callback() {
+        override fun onSatelliteStatusChanged(status: android.location.GnssStatus) {
+            gpsSats = (0 until status.satelliteCount).count { status.usedInFix(it) }
+            if (System.currentTimeMillis() - lastGpsFixMs > 5000) {
+                Repo.gpsStatus.value = "ищу спутники: видно ${status.satelliteCount}, в решении $gpsSats"
+            }
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private fun startGps() {
-        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Repo.gpsStatus.value = "нет разрешения на геолокацию: откройте приложение и разрешите"
+            return
+        }
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         runCatching { lm.removeUpdates(gpsListener) }
+        runCatching { lm.removeUpdates(netListener) }
+        runCatching { lm.unregisterGnssStatusCallback(gnssCallback) }
         runCatching {
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, gpsListener, Looper.getMainLooper())
+        }.onFailure { SsmTrace.log("gps: $it") }
+        runCatching { lm.registerGnssStatusCallback(gnssCallback, android.os.Handler(Looper.getMainLooper())) }
+        if (lm.allProviders.contains(LocationManager.NETWORK_PROVIDER)) runCatching {
+            lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10_000L, 0f, netListener, Looper.getMainLooper())
         }
+        gpsStartedMs = System.currentTimeMillis()
+        gpsCheck()
+        SsmTrace.log("gps started, providers ${lm.allProviders}, enabled ${lm.getProviders(true)}")
+    }
+
+    /** Why there is no position, for the GPS card and the mini-map. */
+    private fun gpsCheck() {
+        if (System.currentTimeMillis() - lastGpsFixMs < 5000) return
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        Repo.gpsStatus.value = when {
+            checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ->
+                "нет разрешения на геолокацию: откройте приложение и разрешите"
+            !lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> "геолокация выключена в настройках Android"
+            else -> Repo.gpsStatus.value.ifEmpty { "ищу спутники…" }
+        }
+    }
+
+    /**
+     * Called every half minute: re-subscribes when GPS has been silent for a minute (after the head unit's sleep
+     * the GPS module comes back, but the old subscription often stays dead) and refreshes the status text.
+     */
+    private fun gpsWatchdog() {
+        if (Repo.settings.demo) return
+        val now = System.currentTimeMillis()
+        if (now - lastGpsFixMs > 60_000 && now - gpsStartedMs > 60_000) {
+            SsmTrace.log("gps silent for a minute, re-subscribing")
+            startGps()
+        } else gpsCheck()
     }
 
     // ---- notification ----

@@ -2,4 +2,5 @@
 <!-- files handed to other apps through the share sheet (exchange log) -->
 <paths>
     <cache-path name="share" path="share/" />
+    <cache-path name="update" path="update/" />
 </paths>

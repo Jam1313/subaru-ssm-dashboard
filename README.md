@@ -14,9 +14,20 @@
 
 ## 🧪 Бета 0.9 (для тестов)
 
-Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta6, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
+Отдельная тестовая версия: [Releases](https://github.com/surtaeff/subaru-ssm-dashboard/releases), помечена как pre-release. Ставится поверх 0.9-beta1…beta7, данные сохраняются. Бета подписана другим ключом, чем 0.8: перед установкой удалите 0.8 (поездки и заправки удалятся).
 
-> **[⬇️ Скачать 0.9-beta7](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta7/subaru-ssm-dashboard-0.9-beta7.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta7) · [руководство (PDF)](docs/manual-ru.pdf)
+> **[⬇️ Скачать 0.9-beta8](https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta8/subaru-ssm-dashboard-0.9-beta8.apk)** · [что нового](https://github.com/surtaeff/subaru-ssm-dashboard/releases/tag/v0.9-beta8) · [руководство (PDF)](docs/manual-ru.pdf)
+
+### Новое в 0.9-beta8
+
+- **Обновление из приложения:** Настройки → Основные → «Обновление приложения».
+  - Приложение проверяет последний релиз на GitHub, показывает, что изменилось, скачивает и ставит поверх с сохранением данных.
+  - Раз в день проверяет само (выключается в «Функциях»).
+- **GPS.**
+  - Приложение заново подписывается на GPS, если тот молчит минуту (например, после сна магнитолы).
+  - Мини-карта и виджет GPS пишут причину: нет разрешения, геолокация выключена, ищу спутники (сколько видно).
+  - Пока спутников нет, позиция для карты берётся из сети.
+- **USB-кабели с нестандартными кодами** на чипах FTDI, CH340, PL2303 и CP210x теперь подхватываются. Раньше было «кабель не найден».
 
 ### Новое в 0.9-beta7
 

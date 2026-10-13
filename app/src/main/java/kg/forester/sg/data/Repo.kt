@@ -164,6 +164,11 @@ class Settings(ctx: Context) {
     fun feature(id: String) = p.getBoolean("f_$id", true)
     fun setFeature(id: String, on: Boolean) { p.edit().putBoolean("f_$id", on).apply(); Repo.featureVersion.value++ }
 
+    /** Last automatic look for a newer release. */
+    var lastUpdateCheckMs: Long
+        get() = p.getLong("updCheck", 0L)
+        set(v) = p.edit().putLong("updCheck", v).apply()
+
     /** Spoken warnings (IAM, overheating, maintenance…); without a Russian voice on the unit it is a beep. */
     var voiceAlerts: Boolean
         get() = p.getBoolean("voiceAlerts", true)
@@ -376,6 +381,8 @@ object Repo {
     val ecuInit = MutableStateFlow<EcuInit?>(null)
     val live = MutableStateFlow(EcuSnapshot())
     val gps = MutableStateFlow<GpsFix?>(null)
+    /** Why there is no GPS position ("" = there is one), for the GPS card and the mini-map. */
+    val gpsStatus = MutableStateFlow("")
     val trip = MutableStateFlow(TripState())
     val dataVersion = MutableStateFlow(0L) // bump to make screens re-query the DB
     val logFile = MutableStateFlow<String?>(null)

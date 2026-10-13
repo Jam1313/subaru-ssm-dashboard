@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import com.composables.icons.lucide.*
+import kotlinx.coroutines.launch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
@@ -248,8 +249,74 @@ private fun GeneralSettings() {
                     "при заправках до полного бака. Если ЭБУ не передаёт уровень топлива, остаток считается от последней заправки.",
                 13.sp, C.Sub,
             )
+            Spacer(Modifier.height(18.dp))
+            UpdateSettings()
         }
     }
+}
+
+/** Check GitHub for a newer release, show what changed, download and install it over this one. */
+@Composable
+private fun UpdateSettings() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val current = remember { kg.forester.sg.data.Updater.current(ctx) }
+    var status by remember { mutableStateOf("") }
+    var release by remember { mutableStateOf<kg.forester.sg.data.Updater.Release?>(null) }
+    var progress by remember { mutableStateOf<Float?>(null) }
+    var apk by remember { mutableStateOf<java.io.File?>(null) }
+    T("Обновление приложения", 16.sp)
+    Spacer(Modifier.height(6.dp))
+    InfoRow("Установлена версия", current)
+    Spacer(Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Chip("Проверить обновления", false, {
+            status = "Проверяю…"; release = null; apk = null
+            scope.launch {
+                val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { kg.forester.sg.data.Updater.latest() }
+                release = r?.takeIf { kg.forester.sg.data.Updater.isNewer(it.tag, current) }
+                status = when {
+                    r == null -> "Не удалось проверить: нет интернета или GitHub недоступен"
+                    release == null -> "У вас последняя версия (${r.tag.removePrefix("v")})"
+                    else -> "Доступна версия ${r.tag.removePrefix("v")}"
+                }
+            }
+        })
+        release?.let { r ->
+            Chip(if (progress != null) "Скачиваю…" else "Скачать и установить", false, {
+                if (progress != null) return@Chip
+                apk?.let { if (kg.forester.sg.data.Updater.install(ctx, it)) return@Chip }
+                progress = 0f
+                scope.launch {
+                    val f = runCatching {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            kg.forester.sg.data.Updater.download(ctx, r) { p -> progress = p }
+                        }
+                    }
+                    progress = null
+                    f.onSuccess { file ->
+                        apk = file
+                        status = if (kg.forester.sg.data.Updater.install(ctx, file))
+                            "Установщик открыт: подтвердите обновление. Если он пишет «конфликт пакетов» — у вас версия с другой " +
+                                "подписью (0.8 или собранная самостоятельно): сохраните резервную копию (слева), удалите приложение и поставьте заново"
+                        else "Разрешите установку из этого приложения и нажмите «Скачать и установить» ещё раз"
+                    }.onFailure { status = "Не скачалось: ${it.message}" }
+                }
+            })
+        }
+    }
+    progress?.let {
+        Spacer(Modifier.height(6.dp))
+        androidx.compose.material3.LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth(), color = C.Purple)
+    }
+    if (status.isNotEmpty()) { Spacer(Modifier.height(6.dp)); T(status, 13.sp, if (release != null) C.Green else C.Sub) }
+    release?.let { r ->
+        Spacer(Modifier.height(6.dp))
+        T(r.name, 13.sp)
+        T(r.notes.replace(Regex("!\\[[^]]*]\\([^)]*\\)"), "").replace("**", "").trim().take(700), 11.sp, C.Sub, maxLines = 12)
+    }
+    Spacer(Modifier.height(4.dp))
+    T("Данные сохраняются: версии подписаны одним ключом. Приложение раз в день само проверяет, нет ли новой версии.", 11.sp, C.Sub)
 }
 
 /** Manual backup to a file the user picks, restore from one, and the daily automatic copy. */
@@ -462,6 +529,7 @@ private fun FeatureSettings() {
                 F("motion", "G-метр и крен", "Перегрузки и наклон (акселерометр магнитолы, VDC или GPS)")
                 F("sensors", "Экран «Датчики»", "Все параметры ЭБУ из базы RomRaider")
                 F("health", "Экран «Здоровье»", "Мотор, ТО, шины и журнал предупреждений (сами предупреждения настраиваются слева)")
+                F("update", "Проверять обновления", "Раз в день смотреть, нет ли новой версии на GitHub, и сообщить")
                 SettingSwitch("Давление в шинах (TPMS)", "Слушать Bluetooth-датчики давления. Разрешение и порог — в «Здоровье» → «Шины»", tpms) {
                     tpms = it; s.tpms = it
                     if (it) kg.forester.sg.service.Tpms.start(ctx) else kg.forester.sg.service.Tpms.stop(ctx)

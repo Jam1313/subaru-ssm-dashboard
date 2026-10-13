@@ -200,7 +200,8 @@ private fun HomeTile(
         "fuel" -> BarCard(st, "home.$id", icon, "Расход", ts.instLh.toFloat(), 0f, 40f, "л/ч", "%.1f", m)
         "boost" -> BarCard(st, "home.$id", icon, title, e.boostBar, 0f, 1.2f, "бар", "%.2f", m)
         "gps" -> BarCard(st, "home.$id", icon, title, gps?.speedKmh, 0f, 200f, "км/ч", "%.0f", m,
-            extra = gps?.let { "спутников ${it.satellites}, ±${it.accuracyM.toInt()} м" } ?: "нет сигнала")
+            extra = gps?.let { "спутников ${it.satellites}, ±${it.accuracyM.toInt()} м" }
+                ?: Repo.gpsStatus.collectAsState().value.ifEmpty { "нет сигнала" })
         "pedal" -> BarCard(st, "home.$id", icon, title, e.pedalPct, 0f, 100f, "%", "%.0f", m)
         "avcs" -> BarCard(st, "home.$id", icon, title, e.avcsDeg, -10f, 50f, "°", "%.0f", m)
         "map" -> BarCard(st, "home.$id", icon, title, e.mapKpa, 20f, 220f, "кПа", "%.0f", m)
