@@ -78,7 +78,8 @@ fun FuelScreen() {
             Spacer(Modifier.width(12.dp))
             Panel(Modifier.width(240.dp).fillMaxHeight(), padding = 10.dp) {
                 T("Средний расход (весь период)", 12.sp, C.Sub, maxLines = 1)
-                Row(verticalAlignment = Alignment.Bottom) {
+                // the panel is only 64 dp tall: the "i" sits at the end of the value row, not in a header row
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     if (totals.first > 1) {
                         T(fmt(totals.second / totals.first * 100), 24.sp, weight = FontWeight.Bold)
                         Spacer(Modifier.width(6.dp))
@@ -89,6 +90,8 @@ fun FuelScreen() {
                         Spacer(Modifier.width(6.dp))
                         T("л · пробега пока нет", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 4.dp), maxLines = 1)
                     }
+                    Spacer(Modifier.weight(1f))
+                    InfoButton("Средний расход (весь период)")
                 }
             }
         }
@@ -141,13 +144,15 @@ private fun CurrentTab() {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Lucide.Fuel, null, tint = C.Sub, modifier = Modifier.size(22.dp))
                                 Spacer(Modifier.width(10.dp))
-                                Column {
-                                    T(if (ts.fuelFromSensor) "Осталось (датчик)" else "Осталось топлива", 12.sp, C.Sub)
+                                val leftTitle = if (ts.fuelFromSensor) "Осталось (датчик)" else "Осталось топлива"
+                                Column(Modifier.weight(1f)) {
+                                    T(leftTitle, 12.sp, C.Sub)
                                     Row(verticalAlignment = Alignment.Bottom) {
                                         T(fmt(ts.fuelLeftL, 0), 22.sp, weight = FontWeight.Bold)
                                         T(" л", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
                                     }
                                 }
+                                InfoButton(leftTitle, "Осталось топлива")
                             }
                             if (tank > 0) {
                                 val frac = ((ts.fuelLeftL ?: 0.0) / tank).toFloat()
@@ -297,7 +302,10 @@ private fun ModesPanel(trip: Trip?, modifier: Modifier) {
     fun per(km: Double, l: Double) = if (km > 0.3) "${fmt(l / km * 100)} л/100 км" else "— л/100 км"
     fun pct(l: Double) = if (totalL > 0) (l / totalL * 100).toInt() else 0
     Panel(modifier, padding = 12.dp) {
-        T("Расход по режимам", 16.sp, weight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            T("Расход по режимам", 16.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            InfoButton("Расход по режимам")
+        }
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(124.dp), contentAlignment = Alignment.Center) {
                 Donut(
@@ -347,7 +355,10 @@ private fun ModeRow(name: String, color: Color, detail: String, pct: Int) {
 private fun RecentTripsPanel(version: Long, modifier: Modifier) {
     val trips = remember(version) { Repo.db.trips(4) }
     Panel(modifier, padding = 12.dp) {
-        T("Последние поездки", 16.sp, weight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            T("Последние поездки", 16.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            InfoButton("Последние поездки")
+        }
         Spacer(Modifier.height(8.dp))
         if (trips.isEmpty()) T("Пока нет поездок", 13.sp, C.Sub)
         trips.forEach { TripRow(it); Spacer(Modifier.height(5.dp)) }

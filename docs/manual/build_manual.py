@@ -1,0 +1,177 @@
+"""Turns the developer reference widgets.md into the user manual: no code references, today's features, PDF via Chrome."""
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import markdown
+
+S = Path(sys.argv[1])
+src = (S / "widgets.md").read_text()
+
+# --- cut the developer-only parts -------------------------------------------------------------
+src = src[: src.index("## 16. Найденные ошибки")].rstrip().rstrip("-").rstrip()
+head_end = src.index("## 0. Общие сведения")
+src = src[head_end:]
+
+NEW_SCREENS = """### 1.6 Настройка экранов, стрелочные приборы и подсказки «i»
+Главная, «Динамика» и «АКПП» настраиваются одинаково.
+
+- **Вход в настройку:** долгое нажатие на любую карточку экрана. На Главной ещё есть карандаш в углу 3D-блока.
+- **Панель сверху:** «Добавить виджет» (список скрытых карточек экрана), «Сбросить» (заводская раскладка), «Готово». На Главной там же выбирается размер 3D-блока: Скрыть, Обычный, Большой, Макс.
+- **Кнопки на карточке:**
+  - ← → — поменять местами с соседней видимой карточкой;
+  - − / + — ширина карточки;
+  - кнопка с прибором — вид карточки: «Обычный» или стрелочный прибор одного из 8 дизайнов (Неон, Underground, Кислота, STI, Белая классика, Карбон, Ретро, Минимал). Есть только у карточек с одним числом;
+  - ✕ — скрыть карточку. Вернуть её можно через «Добавить виджет».
+- **Сетка:**
+  - На Главной 5 колонок, ширина карточки 1–3 колонки, свободное место в ряду остаётся пустым.
+  - На «Динамике» и «АКПП» 12 колонок. Карточки ряда делят его ширину пропорционально своей ширине, так что ряд всегда заполнен.
+  - Высота ряда зависит от самой высокой карточки в нём: графики выше маленьких плиток. Ряд со стрелочным прибором становится выше, чтобы шкала читалась.
+- **Стрелочный прибор:** шкала строится автоматически от минимума до максимума карточки, с круглым шагом делений (5–8 делений). Если шкала заходит в минус (коррекции, УОЗ), подсвеченная дуга идёт от нуля. Большие числа (обороты) подписаны в тысячах, как на тахометре. Красная зона рисуется там, где у карточки есть порог «слишком много»: например, ОЖ выше 102 °C или ATF выше 110 °C.
+- **Подсказка «i»:** значок в заголовке карточки. Нажатие открывает окно «Что показывает / Как считается / Норма и подсказки», это краткая версия текста из этого руководства.
+- Раскладка каждого экрана хранится отдельно и не сбрасывается при обновлении. Карточки из новых версий приложения добавляются выключенными.
+"""
+
+DESIGN_24 = """### 2.4 Дизайн приборов
+Долгое нажатие на тахометр или спидометр открывает окно с живыми превью. Тахометр и спидометр настраиваются отдельно. Варианты: «Неон» (по умолчанию), «Underground», «Кислота», «STI», «Белая классика», «Карбон», «Ретро», «Минимал». Влияет только на внешний вид. Те же дизайны доступны для любой карточки с одним числом (см. 1.6).
+
+"""
+
+EDIT_25 = """### 2.5 Редактор главного экрана
+Общие правила описаны в 1.6. Заводская раскладка Главной: 15 включённых плиток (Темп. ОЖ, Темп. впуска, Напряжение, Дроссель, MAF, AFR, Коррекция A/F, Обучение A/F, УОЗ, Коррекция детонации, Впрыск, Wastegate, Расход л/ч, Наддув, GPS). Ещё 8 выключены: Педаль газа, AVCS, Абс. давление, Атм. давление, Генератор, Темп. ATF, Расход л/100, Запас хода. «Сбросить» также возвращает обычный размер 3D-блока.
+
+"""
+
+DRIVE_EXTRA = """
+#### Обороты (по умолчанию выключена)
+- **Источник:** ЭБУ 0x0E/0x0F, `x16 / 4`. Шкала 0…7000 об/мин, в стрелочном виде красная зона от 6000.
+
+"""
+
+DRIVE_CHARTS_EXTRA = """| Обороты, об/мин (по умолчанию выключен) | обороты двигателя | 0…7000 |
+| Коррекции A/F, % (по умолчанию выключен) | коррекция (оранжевая), обучение (синяя), пунктир нуля | −25…25 |
+| MAF, г/с (по умолчанию выключен) | MAF | 0…150 |
+"""
+
+TCU_CHARTS_EXTRA = """- «Обороты турбины, об/мин», 0…7000 (по умолчанию выключен). Вместе с оборотами двигателя показывает, как работает гидротрансформатор.
+- «Скорость колёс, км/ч», 0…200: передние (синяя) и задние (оранжевая) (по умолчанию выключен). Расхождение линий при разгоне указывает на пробуксовку передних колёс.
+"""
+
+
+def replace_section(text, heading, new):
+    """Replaces from [heading] up to the next heading of the same or higher level."""
+    i = text.index(heading)
+    level = len(heading) - len(heading.lstrip("#"))
+    m = re.compile(r"^#{1,%d} " % level, re.M).search(text, i + len(heading))
+    return text[:i] + new + text[m.start():]
+
+
+def section_end(text, heading):
+    i = text.index(heading)
+    level = len(heading) - len(heading.lstrip("#"))
+    return re.compile(r"^#{1,%d} " % level, re.M).search(text, i + len(heading)).start()
+
+
+src = replace_section(src, "### 2.4 Дизайн приборов", DESIGN_24)
+src = replace_section(src, "### 2.5 Редактор главного экрана", EDIT_25)
+src = src[: src.index("## 2. Главная")] + NEW_SCREENS + "\n" + src[src.index("## 2. Главная"):]
+
+i = src.index("## 3. Динамика")
+src = src[:i] + src[i:].replace(
+    "\n### 3.1", "\nЭкран настраивается (1.6). Ниже описаны все карточки, в том числе выключенные по умолчанию.\n\n### 3.1", 1
+)
+src = src[: section_end(src, "#### Нагрузка")] + DRIVE_EXTRA + src[section_end(src, "#### Нагрузка"):]
+i = src.index("| Зажигание и детонация, ° |")
+j = src.index("\n", i) + 1
+src = src[:j] + DRIVE_CHARTS_EXTRA + src[j:]
+i = src.index("## 5. АКПП")
+src = src[:i] + src[i:].replace("\n### 5.1", "\nЭкран настраивается (1.6).\n\n### 5.1", 1)
+k = section_end(src, "### 5.5 Графики")
+src = src[:k].rstrip() + "\n" + TCU_CHARTS_EXTRA + "\n" + src[k:]
+
+# --- strip code references --------------------------------------------------------------------
+CODE = r"`[^`\n]*(?:\.kt|\.xml|\.py)\b[^`\n]*`"
+src = re.sub(r"\s*\((?:\s*" + CODE + r"\s*[,;и]?\s*)+\)", "", src)  # "(`A.kt:1`, `B.kt:2`)"
+src = re.sub(r"\s+—\s+(?:" + CODE + r"(?:,\s*)?)+(?=\s*$)", "", src, flags=re.M)  # heading " — `A.kt:1-2`"
+src = re.sub(r"\s*\(см\. раздел 16\)", "", src)
+src = re.sub(CODE, "", src)
+src = re.sub(r"\(\s*\)", "", src)
+src = re.sub(r"\(\s*,\s*", "(", src)
+src = re.sub(r"[ \t]+([,.;])", r"\1", src)
+src = re.sub(r"[ \t]{2,}", " ", src)
+
+
+def drop_columns(text):
+    """Drops the 'Строка' / 'Где в коде' columns from markdown tables."""
+    out, lines, i = [], text.split("\n"), 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("|") and i + 1 < len(lines) and re.match(r"^\|[\s:|-]+\|$", lines[i + 1]):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            drop = {n for n, c in enumerate(cells) if c in ("Строка", "Где в коде")}
+            while i < len(lines) and lines[i].startswith("|"):
+                row = [c for c in re.split(r"(?<!\\)\|", lines[i].strip()[1:-1])]
+                out.append("| " + " | ".join(c.strip() for n, c in enumerate(row) if n not in drop) + " |")
+                i += 1
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
+IDS = {
+    "**Наддув, бар** `boostBar` = ": "**Наддув, бар** = ", "**Разрежение, кПа** `vacuumKpa` = ": "**Разрежение, кПа** = ",
+    " (`carTitle`, по умолчанию": " (по умолчанию", " (`carSub`, по умолчанию": " (по умолчанию", " (`LinkState.CONNECTED`)": "",
+    "вычисление `TripTracker`": "расчёт приложения", "текст = `rangeKm`": "текст = запас хода", " `speedK`": "",
+    ": кадр `driveFrame`, по умолчанию 43": "", "(`BarCard`, ): ": ": ", "`instLh` из `TripTracker`, сглаженный": "мгновенный расход, л/ч, сглаженный",
+    "`rangeKm` (14.5)": "запас хода (14.5)", "`rangeKm`, км": "Запас хода, км", "Как считается:** `boostBar`.": "Как считается:** наддув из 0.3.",
+    "Подпись = `vacuumKpa = max(0, ATM − MAP)`": "Подпись: разрежение = `max(0, ATM − MAP)`", "счётчик `KnockWatch`": "счётчик откатов",
+    "| `boostBar` (зелёная) |": "| наддув (зелёная) |", "Значения — `instPer100` и `instLh` (14.1)": "Значения — мгновенный расход в л/100 и л/ч (14.1)",
+    "«С заправки» = `usedSinceRefillL`": "«С заправки» — сколько насчитано топлива с последней заправки", "Логика `RefillLogic.add`": "Как обрабатывается заправка",
+    "расчёт = `usedSinceFullL`": "расчёт = насчитанный расход", "относительное давление `gaugeKpa`": "давление относительно атмосферы",
+    "(`gaugeKpa`, со знаком)": "(со знаком)", "задаёт `fuelAtRefillL` и": "задаёт остаток в баке и", " = `speedK`, 3 знака": ", 3 знака",
+    " = `fuelK`.": ".", "| `boostBar`, бар |": "| наддув, бар |", "калибровки `k` (`fuelK`)": "калибровки `k`", " (`KnockStats.START_DEG`)": "",
+}
+for a, b in IDS.items():
+    src = src.replace(a, b)
+src = re.sub(r"\s*\(строк[аи] [\d\-–, ]+\)", "", src)
+src = re.sub(r"\s*\(`[\d\-–, ]+`(?:,\s*`[\d\-–, ]+`)*\)", "", src)
+src = re.sub(r"^(#### [^\n(]*?)\s*\(`[a-z0-9]+`(?:,\s*([^)]*))?\)", lambda m: m.group(1) + (f" ({m.group(2)})" if m.group(2) else ""), src, flags=re.M)
+src = re.sub(r"^(#### [^\n(]*?)\s*\(`[a-z0-9]+`\)", r"\1", src, flags=re.M)
+src = src.replace("**Давление относительно атмосферы** `gaugeKpa` = ", "**Давление относительно атмосферы** P_отн = ").replace("gaugeKpa", "P_отн").replace("instPer100", "л/100").replace(" (service/)", "")
+src = re.sub(r",\s*\)", ")", src)
+src = drop_columns(src)
+(S / "manual.md").write_text(src)
+
+leftover = [l for l in src.split("\n") if ".kt" in l or re.search(r"`[A-Za-z_.]*[a-z][A-Z][A-Za-z_.]*`", l)]
+if leftover:
+    print("LEFTOVER .kt:", *leftover[:20], sep="\n  ")
+
+# --- HTML + PDF -------------------------------------------------------------------------------
+body = markdown.markdown(src, extensions=["tables", "sane_lists", "toc"], extension_configs={"toc": {"toc_depth": "2"}})
+toc = markdown.Markdown(extensions=["toc"], extension_configs={"toc": {"toc_depth": "2"}})
+toc.convert(src)
+
+css = (S / "manual.css").read_text()
+html = f"""<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Subaru SSM Dashboard — руководство</title>
+<style>{css}</style></head><body>
+<section class="cover">
+  <div class="brand">SUBARU SSM DASHBOARD</div>
+  <h1 class="title">Экраны, виджеты<br>и как всё считается</h1>
+  <p class="lead">Что показывает каждый элемент приложения, откуда берутся данные, по каким формулам они считаются и какие значения нормальны для Forester SG и SH.</p>
+  <div class="meta">Версия приложения 0.9 beta · октябрь 2026</div>
+  <div class="legend"><b>Как читать.</b> «Порог в приложении» — значение, при котором приложение подсвечивает карточку. «Ориентир» — типичное значение для исправной машины, оно зависит от мотора, топлива и погоды. <code>x</code> — сырой байт от блока (0…255), <code>x16</code> — число из двух байтов.</div>
+</section>
+<nav class="toc"><h2>Содержание</h2>{toc.toc}</nav>
+<main>{body}</main></body></html>"""
+(S / "manual.html").write_text(html)
+
+chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+out = S / "Subaru_SSM_Dashboard_руководство.pdf"
+subprocess.run(
+    [chrome, "--headless=new", "--disable-gpu", "--no-pdf-header-footer", f"--print-to-pdf={out}",
+     (S / "manual.html").as_uri()],
+    check=True, capture_output=True,
+)
+print("PDF:", out, out.stat().st_size)

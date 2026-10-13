@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -32,9 +34,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** How ticks are drawn: lines, round dots (UG2 style) or small triangles pointing inwards. */
+enum class TickShape { LINE, DOT, TRIANGLE }
+
+/** Artwork painted on the face under the scale. */
+enum class FacePattern { NONE, CARBON, FLAMES, CIRCUIT, SPARKLES, CAT }
+
+/**
+ * Digital read-out instead of the big number in the middle: [segments] uses the 7-segment font with unlit
+ * "8"s behind the digits (NFS Most Wanted LCD), otherwise a plain number in a framed box (Hot Pursuit).
+ */
+data class Readout(val bg: Color, val fg: Color, val ghost: Color, val border: Color, val segments: Boolean = true)
+
 /**
  * Look of a round gauge, NFS Underground style "custom gauges": face, backlight colour of the scale and
- * numbers, needle, glow. Picked per gauge with a long press on it.
+ * numbers, needle, glow, plus optional extras (band, outer arcs, read-out, face artwork).
+ * Picked per gauge with a long press on it.
  */
 data class DialStyle(
     val id: String,
@@ -53,7 +68,21 @@ data class DialStyle(
     val glow: Color? = null,           // backlight halo around numbers / needle
     val carbon: Boolean = false,
     val minimal: Boolean = false,
+    val sweep: Float = 270f,           // scale angle; smaller = open "C" gauge
+    val ticks: TickShape = TickShape.LINE,
+    val italic: Boolean = false,       // slanted numbers
+    val band: List<Color>? = null,     // wide ring carrying the numbers (chrome / ultraviolet)
+    val bandText: Color = Color.Black,
+    val outer: Pair<Color, Color>? = null, // two-tone ring outside the scale, left half / right half (Most Wanted)
+    val readout: Readout? = null,
+    val pattern: FacePattern = if (carbon) FacePattern.CARBON else FacePattern.NONE,
+    val patternColor: Color = Color(0x22FFFFFF),
+    val hub: Color? = null,            // needle cap; null = rim colour
+    val needleWidth: Float = 0.022f,   // of the radius
+    val shortNeedle: Boolean = false,  // only the tip near the scale (Hot Pursuit)
 )
+
+private val WarmLcd = Readout(Color(0xFFB9A46A), Color(0xFF1B1608), Color(0x2A1B1608), Color(0xFF6B5A2A))
 
 val DialStyles = listOf(
     DialStyle(
@@ -112,13 +141,121 @@ val DialStyles = listOf(
         tickMajor = Color(0x99FFFFFF), tickMinor = Color.Transparent, numbers = Color(0x99FFFFFF),
         value = Color.White, unit = Color(0x99FFFFFF), needle = Color.Transparent, minimal = true,
     ),
+    // --- NFS Most Wanted: light textured face, orange/green outer ring, LCD read-out
+    DialStyle(
+        "lcd", "LCD",
+        face = listOf(Color(0xFFE9EAEC), Color(0xFFD5D7DB), Color(0xFFBFC2C8)), rim = Color(0xFF8A8F99), track = Color(0x00000000),
+        arc = null, red = Color(0xFFD32222),
+        tickMajor = Color(0xFF3A3F48), tickMinor = Color(0xFF6B7280), numbers = Color(0xFF3A3F48),
+        value = Color(0xFF1B1608), unit = Color(0xFF4B5160), needle = Color(0xFF2A2D33), hub = Color(0xFF1F2127),
+        outer = Color(0xFFF59E0B) to Color(0xFF9BE22B), readout = WarmLcd, needleWidth = 0.035f,
+        pattern = FacePattern.SPARKLES, patternColor = Color(0x14FFFFFF),
+    ),
+    DialStyle(
+        "lcd_night", "Ночной LCD",
+        face = listOf(Color(0xFF1B2733), Color(0xFF15202B), Color(0xFF0E161E)), rim = Color(0xFF2B3B4A), track = Color(0xFF203040),
+        arc = null, red = Color(0xFFE11D2E),
+        tickMajor = Color(0xFF5BC8F5), tickMinor = Color(0xFF2E6E8C), numbers = Color(0xFF5BC8F5),
+        value = Color(0xFFFFB347), unit = Color(0xFF5BC8F5), needle = Color(0xFFE8B04A), hub = Color(0xFF0B1118),
+        outer = Color(0xFFF59E0B) to Color(0xFF9BE22B), needleWidth = 0.03f,
+        readout = Readout(Color(0xFF2A1E08), Color(0xFFFFB347), Color(0x26FFB347), Color(0xFF6B4A12)),
+    ),
+    // --- NFS Hot Pursuit: white line art, framed digital number, short needle, side bars
+    DialStyle(
+        "pursuit", "Погоня",
+        face = listOf(Color(0xCC14161C), Color(0xB314161C), Color(0x6614161C)), rim = Color.Transparent, track = Color(0xFFF1F5F9),
+        arc = null, red = Color(0xFFE5232A),
+        tickMajor = Color(0xFFF1F5F9), tickMinor = Color(0xFFF1F5F9), numbers = Color(0xFFF1F5F9),
+        value = Color.White, unit = Color(0xFFCBD5E1), needle = Color(0xFFE5232A), shortNeedle = true, needleWidth = 0.03f,
+        outer = Color(0xFF5BC0EB) to Color(0xFFE5232A), sweep = 240f,
+        readout = Readout(Color(0x33000000), Color.White, Color.Transparent, Color(0x99F1F5F9), segments = false),
+    ),
+    // --- NFS Underground 2 custom gauges
+    DialStyle(
+        "flames", "Пламя",
+        face = listOf(Color(0xFF3A3B3F), Color(0xFF26272B), Color(0xFF16171A)), rim = Color(0xFF6B6E76), track = Color(0x00000000),
+        arc = null, red = Color(0xFFE5232A),
+        tickMajor = Color.White, tickMinor = Color(0xCCFFFFFF), numbers = Color.White,
+        value = Color.White, unit = Color(0xFFD4D4D8), needle = Color(0xFFE5E7EB), hub = Color(0xFF52525B),
+        ticks = TickShape.DOT, italic = true, pattern = FacePattern.FLAMES, patternColor = Color(0x30FFFFFF),
+    ),
+    DialStyle(
+        "circuit", "Плата",
+        face = listOf(Color(0xFF1A1D21), Color(0xFF121417), Color(0xFF0A0B0D)), rim = Color(0xFFE5E7EB), track = Color(0xFF2A2D33),
+        arc = listOf(Color.White, Color.White), red = Color(0xFFB91C1C),
+        tickMajor = Color.White, tickMinor = Color(0xFF9CA3AF), numbers = Color(0xFFE5E7EB),
+        value = Color.White, unit = Color(0xFF9CA3AF), needle = Color.White, glow = Color(0x66FFFFFF),
+        italic = true, pattern = FacePattern.CIRCUIT, patternColor = Color(0x33A3E6B4), sweep = 250f,
+    ),
+    DialStyle(
+        "chrome", "Хром",
+        face = listOf(Color(0xFF2A2A2E), Color(0xFF151518), Color(0xFF0B0B0D)), rim = Color(0xFFD9DCE1), track = Color(0x00000000),
+        arc = null, red = Color(0xFFF2A0A0),
+        tickMajor = Color(0xFF111111), tickMinor = Color(0xFF333333), numbers = Color(0xFF111111),
+        value = Color.White, unit = Color(0xFFBFC3C9), needle = Color(0xFFF5F5F5), hub = Color(0xFFE5E7EB),
+        band = listOf(Color(0xFFFFFFFF), Color(0xFFC9CDD3), Color(0xFFF4F5F7), Color(0xFF9EA3AA), Color(0xFFFFFFFF)),
+        bandText = Color(0xFF111111), italic = true, sweep = 240f, needleWidth = 0.04f,
+    ),
+    DialStyle(
+        "diamond", "Бриллиант",
+        face = listOf(Color(0xFF27272A), Color(0xFF111113), Color(0xFF050506)), rim = Color(0xFFD4D4D8), track = Color(0xFF3F3F46),
+        arc = listOf(Color(0xFFE4E4E7), Color.White), red = Color(0xFFDC2626),
+        tickMajor = Color.White, tickMinor = Color(0xFFA1A1AA), numbers = Color.White,
+        value = Color.White, unit = Color(0xFFA1A1AA), needle = Color(0xFFF4F4F5), glow = Color(0x55FFFFFF),
+        ticks = TickShape.DOT, italic = true, pattern = FacePattern.SPARKLES, patternColor = Color(0xCCFFFFFF),
+    ),
+    DialStyle(
+        "ultraviolet", "Ультрафиолет",
+        face = listOf(Color(0xFF14104A), Color(0xFF0C0A33), Color(0xFF07061F)), rim = Color(0xFF6D5BD0), track = Color(0x00000000),
+        arc = null, red = Color(0xFFD946EF),
+        tickMajor = Color(0xFFFBBF24), tickMinor = Color(0xFFB45309), numbers = Color(0xFFFBBF24),
+        value = Color.White, unit = Color(0xFFC4B5FD), needle = Color(0xFFE11D48), hub = Color(0xFFFBBF24),
+        band = listOf(Color(0xFF3B2F9E), Color(0xFF4C3FC2), Color(0xFF2E2480), Color(0xFF3B2F9E)), bandText = Color(0xFFFBBF24),
+        italic = true, needleWidth = 0.035f,
+    ),
+    DialStyle(
+        "kitty", "Котик",
+        face = listOf(Color(0xFF2A2C31), Color(0xFF1F2125), Color(0xFF141518)), rim = Color(0xFFE5E7EB), track = Color(0x00000000),
+        arc = null, red = Color(0xFFB91C1C),
+        tickMajor = Color.White, tickMinor = Color(0xCCFFFFFF), numbers = Color.White,
+        value = Color.White, unit = Color(0xFFD4D4D8), needle = Color(0xFF111111), hub = Color(0xFF111111),
+        ticks = TickShape.TRIANGLE, pattern = FacePattern.CAT, patternColor = Color(0xFFB8BBC2), needleWidth = 0.03f,
+    ),
+    // --- real-car inspired
+    DialStyle(
+        "amber", "Янтарь",
+        face = listOf(Color(0xFF0A0A0A), Color(0xFF050505), Color(0xFF000000)), rim = Color(0xFF3F2A0A), track = Color(0xFF221605),
+        arc = listOf(Color(0xFFFF9F1C), Color(0xFFFFC15E)), red = Color(0xFFFF3B1F),
+        tickMajor = Color(0xFFFFB13B), tickMinor = Color(0xFF8A5A12), numbers = Color(0xFFFFB13B),
+        value = Color(0xFFFFD08A), unit = Color(0xFFFFB13B), needle = Color.White, hub = Color(0xFFFF9F1C), glow = Color(0xFFFF9F1C),
+    ),
+    DialStyle(
+        "aqua", "Аква",
+        face = listOf(Color(0xFF2E5560), Color(0xFF1F3F49), Color(0xFF122A31)), rim = Color(0xFF8FB8C2), track = Color(0x00000000),
+        arc = null, red = Color(0xFFD62828),
+        tickMajor = Color.White, tickMinor = Color(0xCCE0F2F7), numbers = Color(0xFFE0F2F7),
+        value = Color.White, unit = Color(0xFFBFE3EC), needle = Color(0xFFE0A030), hub = Color(0xFF0E1F24),
+        outer = Color(0xFFF59E0B) to Color(0xFF9BE22B), needleWidth = 0.04f,
+        readout = Readout(Color(0xFF0E2A33), Color(0xFF7DD3FC), Color(0x227DD3FC), Color(0xFF4A8A9A)),
+    ),
+    DialStyle(
+        "cobalt", "Кобальт",
+        face = listOf(Color(0xFF0B1020), Color(0xFF070B17), Color(0xFF03050C)), rim = Color(0xFF9CA3AF), track = Color(0xFF111A33),
+        arc = listOf(Color(0xFF1E6BFF), Color(0xFF5AA0FF)), red = Color(0xFFFF2D2D),
+        tickMajor = Color(0xFF7FB2FF), tickMinor = Color(0xFF2B4C8C), numbers = Color(0xFFBFD6FF),
+        value = Color.White, unit = Color(0xFF7FB2FF), needle = Color(0xFFFF5A1F), glow = Color(0xFF1E6BFF),
+        ticks = TickShape.TRIANGLE,
+    ),
 )
 
 fun dialStyle(id: String) = DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()
 
+private val SegmentFont = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(kg.forester.sg.R.font.dseg7_bold_italic))
+
 /**
- * Round needle gauge (tachometer / speedometer): 270° scale with numbered major ticks, an optional red
- * zone, a lit arc up to the value and the number in the middle, drawn in [style].
+ * Round needle gauge (tachometer / speedometer): a 270° (or [DialStyle.sweep]) scale with numbered major
+ * ticks, an optional red zone, a lit arc up to the value and the number in the middle (or in a read-out
+ * below the hub), drawn in [style].
  */
 @Composable
 fun Dial(
@@ -127,47 +264,105 @@ fun Dial(
     min: Float = 0f, format: String = "%.0f",
 ) {
     val v by animateFloatAsState((value ?: min).coerceIn(min, max), tween(240), label = "dial")
+    val text = value?.let { format.format(it) } ?: "—"
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style) }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 4.dp)) {
-            BoxWithConstraints(Modifier.fillMaxWidth(if (style.minimal) 0.62f else 0.5f)) {
-                val d = LocalDensity.current
-                val sp = with(d) { (maxWidth / 3.1f).toSp() }
-                T(value?.let { format.format(it) } ?: "—", sp, style.value, FontWeight.Bold, maxLines = 1,
-                    modifier = Modifier.align(Alignment.Center))
+        val ro = style.readout
+        if (ro != null) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val d = minOf(maxWidth, maxHeight)
+                Column(
+                    Modifier.align(Alignment.Center).padding(top = d * 0.42f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    ReadoutBox(text, ro, d * 0.44f, style.value)
+                    T(unit, (d.value * 0.075f).coerceIn(8f, 13f).sp, style.unit, maxLines = 1)
+                }
             }
-            T(unit, 12.sp, style.unit, maxLines = 1)
-            if (scaleNote != null) T(scaleNote, 10.sp, style.unit.copy(alpha = 0.6f), maxLines = 1)
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 4.dp)) {
+                BoxWithConstraints(Modifier.fillMaxWidth(if (style.minimal) 0.62f else 0.5f)) {
+                    val d = LocalDensity.current
+                    val sp = with(d) { (maxWidth / 3.1f).toSp() }
+                    T(text, sp, style.value, FontWeight.Bold, maxLines = 1, modifier = Modifier.align(Alignment.Center))
+                }
+                T(unit, 12.sp, style.unit, maxLines = 1)
+                if (scaleNote != null) T(scaleNote, 10.sp, style.unit.copy(alpha = 0.6f), maxLines = 1)
+            }
+        }
+    }
+}
+
+/** LCD / framed digital number of [width]; unlit "8"s sit behind a segment read-out. */
+@Composable
+private fun ReadoutBox(text: String, ro: Readout, width: androidx.compose.ui.unit.Dp, plainColor: Color) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(width * 0.08f)
+    Box(
+        Modifier.size(width, width * 0.38f).clip(shape).background(ro.bg)
+            .border(1.dp, ro.border, shape).padding(horizontal = width * 0.06f),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        val d = LocalDensity.current
+        val digits = text.length.coerceAtLeast(3)
+        val sp = with(d) { minOf(width * 0.26f, (width * 0.86f) / (digits * 0.8f)).toSp() }
+        if (ro.segments) {
+            // a "1" is as wide as an "8" in DSEG, so the ghost lines up digit for digit
+            val ghost = text.map { if (it.isDigit() || it == '—' || it == '-') '8' else it }.joinToString("").padStart(digits, '8')
+            androidx.compose.material3.Text(ghost, color = ro.ghost, fontSize = sp, fontFamily = SegmentFont, maxLines = 1)
+            androidx.compose.material3.Text(text.replace('—', '-'), color = ro.fg, fontSize = sp, fontFamily = SegmentFont, maxLines = 1)
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                T(text, sp * 1.15f, plainColor, FontWeight.Bold, maxLines = 1)
+            }
         }
     }
 }
 
 /** The scale runs [min]..[max]; the lit arc starts at 0 when the scale has both signs (trims, timing). */
 private fun DrawScope.drawDial(v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle) {
-    val r = size.minDimension / 2f
+    val r = size.minDimension / 2f * (if (st.outer != null) 0.9f else 1f)
     val c = center
-    val start = 135f
-    val sweep = 270f
+    val sweep = st.sweep
+    val start = 90f + (360f - sweep) / 2f
     fun ang(x: Float) = start + sweep * ((x - min) / (max - min))
     val from = if (min < 0f && max > 0f) 0f else min
     fun pt(deg: Float, rr: Float): Offset {
         val a = Math.toRadians(deg.toDouble())
         return Offset(c.x + rr * kotlin.math.cos(a).toFloat(), c.y + rr * kotlin.math.sin(a).toFloat())
     }
+    // outer two-tone ring (Most Wanted: nitrous / speedbreaker bars)
+    st.outer?.let { (left, right) ->
+        val or = r * 1.06f
+        val w = r * 0.07f
+        val tl = Offset(c.x - or, c.y - or)
+        val sz = Size(or * 2, or * 2)
+        val mid = start + sweep / 2f
+        drawArc(left, start + 4f, mid - start - 6f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
+        drawArc(right, mid + 2f, start + sweep - mid - 6f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
+    }
     // face
     if (!st.minimal) {
         st.glow?.let { drawCircle(Brush.radialGradient(listOf(it.copy(alpha = 0.22f), Color.Transparent), c, r * 1.08f), r * 1.08f, c) }
         drawCircle(Brush.radialGradient(st.face, c, r), r, c)
-        if (st.carbon) carbonWeave(c, r)
-        drawCircle(st.rim, r - 1.5f, c, style = Stroke(if (st.glow != null) 2.5f else 1.5f))
+        facePattern(st.pattern, st.patternColor, c, r)
+        if (st.rim.alpha > 0f) drawCircle(st.rim, r - 1.5f, c, style = Stroke(if (st.glow != null) 2.5f else 1.5f))
     }
-    val arcR = r * 0.86f
+    val band = st.band
+    val arcR = if (band != null) r * 0.80f else r * 0.86f
     val tl = Offset(c.x - arcR, c.y - arcR)
     val sz = Size(arcR * 2, arcR * 2)
     val stroke = r * (if (st.minimal) 0.035f else 0.07f)
-    drawArc(st.track, start, sweep, false, tl, sz, style = Stroke(stroke))
-    if (redFrom != null) {
-        drawArc(st.red.copy(alpha = if (st.minimal) 0.5f else 0.6f), ang(redFrom), ang(max) - ang(redFrom), false, tl, sz, style = Stroke(stroke))
+    if (band != null) {
+        val bw = r * 0.26f
+        drawArc(Brush.sweepGradient(band, c), start, sweep, false, tl, sz, style = Stroke(bw, cap = StrokeCap.Butt))
+        if (redFrom != null) drawArc(st.red, ang(redFrom), ang(max) - ang(redFrom), false,
+            Offset(c.x - arcR - bw * 0.33f, c.y - arcR - bw * 0.33f), Size((arcR + bw * 0.33f) * 2, (arcR + bw * 0.33f) * 2),
+            style = Stroke(bw * 0.3f))
+    } else {
+        if (st.track.alpha > 0f) drawArc(st.track, start, sweep, false, tl, sz, style = Stroke(if (st.readout?.segments == false) 2f else stroke))
+        if (redFrom != null) {
+            drawArc(st.red.copy(alpha = if (st.minimal) 0.5f else 0.6f), ang(redFrom), ang(max) - ang(redFrom), false, tl, sz, style = Stroke(stroke))
+        }
     }
     val arc = st.arc
     if (arc != null && v != from) {
@@ -181,10 +376,11 @@ private fun DrawScope.drawDial(v: Float, min: Float, max: Float, step: Float, la
     // ticks and numbers
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = android.graphics.Paint.Align.CENTER
-        textSize = r * 0.13f
-        color = st.numbers.toArgb()
+        textSize = r * (if (band != null) 0.15f else 0.13f)
+        color = (if (band != null) st.bandText else st.numbers).toArgb()
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-        st.glow?.let { setShadowLayer(r * 0.05f, 0f, 0f, it.toArgb()) }
+        if (st.italic) textSkewX = -0.2f
+        st.glow?.let { if (band == null) setShadowLayer(r * 0.05f, 0f, 0f, it.toArgb()) }
     }
     val minor = step / 2f
     val decimals = step / labelDiv < 1f
@@ -195,12 +391,20 @@ private fun DrawScope.drawDial(v: Float, min: Float, max: Float, step: Float, la
         val major = i % 2 == 1 // ticks alternate major/minor from [min], which is a multiple of [step]
         val a = ang(x)
         val red = redFrom != null && x >= redFrom
-        val col = if (red) st.red else if (major) st.tickMajor else st.tickMinor
-        if (col.alpha > 0f) {
-            drawLine(col, pt(a, arcR - stroke * 0.9f), pt(a, arcR - stroke * (if (major) 2.6f else 1.7f)), if (major) 2.5f else 1.4f)
+        val col = if (red && band == null) st.red else if (major) st.tickMajor else st.tickMinor
+        val tickR = if (band != null) arcR - r * 0.13f else arcR
+        if (col.alpha > 0f) when (st.ticks) {
+            TickShape.LINE -> drawLine(col, pt(a, tickR - stroke * 0.9f), pt(a, tickR - stroke * (if (major) 2.6f else 1.7f)), if (major) 2.5f else 1.4f)
+            TickShape.DOT -> drawCircle(col, r * (if (major) 0.038f else 0.02f), pt(a, tickR - stroke * 0.6f))
+            TickShape.TRIANGLE -> if (major) {
+                val tip = pt(a, tickR - stroke * 2.4f)
+                val b1 = pt(a - 3.2f, tickR - stroke * 0.6f)
+                val b2 = pt(a + 3.2f, tickR - stroke * 0.6f)
+                drawPath(androidx.compose.ui.graphics.Path().apply { moveTo(tip.x, tip.y); lineTo(b1.x, b1.y); lineTo(b2.x, b2.y); close() }, col)
+            } else drawLine(col, pt(a, tickR - stroke * 0.9f), pt(a, tickR - stroke * 1.5f), 1.4f)
         }
         if (major && (step * 2 > (max - min) / 8 || (i / 2) % 2 == 0)) {
-            val p = pt(a, arcR - stroke * (if (st.minimal) 5.5f else 3.9f))
+            val p = pt(a, if (band != null) arcR else arcR - stroke * (if (st.minimal) 5.5f else 3.9f))
             val label = if (decimals) "%.1f".format(x / labelDiv) else kotlin.math.round(x / labelDiv).toInt().toString()
             drawContext.canvas.nativeCanvas.drawText(label, p.x, p.y + paint.textSize * 0.35f, paint)
         }
@@ -208,10 +412,93 @@ private fun DrawScope.drawDial(v: Float, min: Float, max: Float, step: Float, la
     // needle
     if (st.needle.alpha > 0f) {
         val na = ang(v)
-        drawLine(st.needle.copy(alpha = 0.35f), pt(na, r * 0.10f), pt(na, arcR - stroke * 0.3f), r * 0.05f, cap = StrokeCap.Round)
-        drawLine(st.needle, pt(na, r * 0.10f), pt(na, arcR - stroke * 0.3f), r * 0.022f, cap = StrokeCap.Round)
-        drawCircle(st.rim.takeIf { it.alpha > 0f } ?: Color(0xFF2A3150), r * 0.075f, c)
+        val w = r * st.needleWidth
+        val inner = if (st.shortNeedle) arcR - stroke * 4.5f else r * 0.10f
+        val tip = if (band != null) arcR + r * 0.08f else arcR - stroke * 0.3f
+        drawLine(st.needle.copy(alpha = 0.35f), pt(na, inner), pt(na, tip), w * 2.2f, cap = StrokeCap.Round)
+        drawLine(st.needle, pt(na, inner), pt(na, tip), w, cap = StrokeCap.Round)
+        if (st.pattern == FacePattern.SPARKLES) sparkle(pt(na, tip), r * 0.09f, Color.White)
+        if (!st.shortNeedle) {
+            val hub = st.hub ?: st.rim.takeIf { it.alpha > 0f } ?: Color(0xFF2A3150)
+            drawCircle(hub, r * 0.075f, c)
+            drawCircle(Color.White.copy(alpha = 0.18f), r * 0.03f, Offset(c.x - r * 0.02f, c.y - r * 0.02f))
+        }
     }
+    if (st.readout?.segments == false) drawCircle(st.tickMajor, r * 0.5f, c, style = Stroke(2.5f))
+}
+
+/** Face artwork, clipped to the face circle. */
+private fun DrawScope.facePattern(p: FacePattern, col: Color, c: Offset, r: Float) {
+    if (p == FacePattern.NONE) return
+    val clip = androidx.compose.ui.graphics.Path().apply { addOval(androidx.compose.ui.geometry.Rect(c, r - 2f)) }
+    drawContext.canvas.save()
+    drawContext.canvas.clipPath(clip)
+    val rnd = java.util.Random(7)
+    when (p) {
+        FacePattern.CARBON -> carbonWeave(c, r)
+        FacePattern.FLAMES -> repeat(6) { k ->
+            // tongues rising from the lower left towards the centre
+            val bx = c.x - r * 0.95f + k * r * 0.28f
+            val by = c.y + r
+            val h = r * (0.9f + 0.35f * ((k * 37) % 5) / 4f)
+            val lean = r * 0.35f
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(bx, by)
+                cubicTo(bx - r * 0.12f, by - h * 0.35f, bx + lean * 0.2f, by - h * 0.55f, bx + lean, by - h)
+                cubicTo(bx + lean * 0.45f, by - h * 0.62f, bx + r * 0.32f, by - h * 0.35f, bx + r * 0.22f, by)
+                close()
+            }
+            drawPath(path, col)
+        }
+        FacePattern.CIRCUIT -> repeat(22) {
+            var x = c.x + (rnd.nextFloat() - 0.5f) * r * 1.8f
+            var y = c.y + (rnd.nextFloat() - 0.5f) * r * 1.8f
+            val path = androidx.compose.ui.graphics.Path().apply { moveTo(x, y) }
+            drawCircle(col, r * 0.022f, Offset(x, y))
+            repeat(3) { seg ->
+                val len = r * (0.1f + rnd.nextFloat() * 0.25f)
+                if (seg % 2 == 0) { if (rnd.nextBoolean()) x += len else x -= len } else { y += if (rnd.nextBoolean()) len * 0.7f else -len * 0.7f; x += len * 0.7f }
+                path.lineTo(x, y)
+            }
+            drawPath(path, col, style = Stroke(r * 0.012f))
+            drawCircle(col, r * 0.03f, Offset(x, y), style = Stroke(r * 0.012f))
+        }
+        FacePattern.SPARKLES -> repeat(14) {
+            val a = rnd.nextFloat() * 6.283f
+            val d = r * (0.25f + rnd.nextFloat() * 0.7f)
+            sparkle(Offset(c.x + d * kotlin.math.cos(a), c.y + d * kotlin.math.sin(a)), r * (0.03f + rnd.nextFloat() * 0.05f), col)
+        }
+        FacePattern.CAT -> {
+            // a friendly cat face filling the left half of the dial, one ear poking up
+            drawArc(col, 90f, 180f, true, Offset(c.x - r, c.y - r), Size(r * 2, r * 2))
+            drawPath(androidx.compose.ui.graphics.Path().apply {
+                moveTo(c.x - r * 0.05f, c.y - r * 0.95f); lineTo(c.x + r * 0.45f, c.y - r * 0.55f); lineTo(c.x - r * 0.05f, c.y - r * 0.45f); close()
+            }, col)
+            val ink = Color(0xFF1A1B1F)
+            drawOval(ink, Offset(c.x - r * 0.62f, c.y - r * 0.32f), Size(r * 0.2f, r * 0.26f))
+            drawCircle(Color.White, r * 0.04f, Offset(c.x - r * 0.55f, c.y - r * 0.24f))
+            drawPath(androidx.compose.ui.graphics.Path().apply {
+                moveTo(c.x - r * 0.3f, c.y + r * 0.1f); lineTo(c.x - r * 0.16f, c.y + r * 0.1f); lineTo(c.x - r * 0.23f, c.y + r * 0.19f); close()
+            }, ink)
+            drawArc(ink, 0f, 180f, false, Offset(c.x - r * 0.43f, c.y + r * 0.12f), Size(r * 0.2f, r * 0.16f), style = Stroke(r * 0.025f))
+            drawArc(ink, 0f, 180f, false, Offset(c.x - r * 0.23f, c.y + r * 0.12f), Size(r * 0.2f, r * 0.16f), style = Stroke(r * 0.025f))
+            repeat(3) { k ->
+                val y = c.y + r * (0.05f + k * 0.08f)
+                drawLine(ink.copy(alpha = 0.6f), Offset(c.x - r * 0.95f, y - r * 0.04f * (1 - k)), Offset(c.x - r * 0.62f, y), r * 0.012f)
+            }
+        }
+        FacePattern.NONE -> Unit
+    }
+    drawContext.canvas.restore()
+}
+
+/** Four-point star glint. */
+private fun DrawScope.sparkle(p: Offset, s: Float, col: Color) {
+    val path = androidx.compose.ui.graphics.Path().apply {
+        moveTo(p.x, p.y - s); quadraticTo(p.x, p.y, p.x + s, p.y); quadraticTo(p.x, p.y, p.x, p.y + s)
+        quadraticTo(p.x, p.y, p.x - s, p.y); quadraticTo(p.x, p.y, p.x, p.y - s); close()
+    }
+    drawPath(path, col)
 }
 
 /** Twill weave hint for the carbon face: small alternating diagonal cells. */
@@ -266,12 +553,14 @@ fun StylePicker(
         Column(
             modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
                 .background(C.Card).border(1.dp, C.Purple, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.92f).dp)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
                 .padding(14.dp),
         ) {
             T(title, 16.sp, weight = FontWeight.SemiBold)
             androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
             val options: List<DialStyle?> = (if (plain != null) listOf(null) else emptyList<DialStyle?>()) + DialStyles
-            options.chunked(if (plain != null) 5 else 4).forEach { row ->
+            options.chunked(5).forEach { row ->
                 androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                     row.forEach { st ->
                         val on = (st?.id ?: "") == current

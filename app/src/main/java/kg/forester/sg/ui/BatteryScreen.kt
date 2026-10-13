@@ -79,7 +79,10 @@ fun BatteryScreen() {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Panel(Modifier.weight(0.9f).fillMaxHeight()) {
-                T("Сейчас", 13.sp, C.Sub)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    T("Сейчас", 13.sp, C.Sub, modifier = Modifier.weight(1f))
+                    InfoButton("Напряжение сейчас", "Сейчас")
+                }
                 Spacer(Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.Bottom) {
                     T(fmtF(e.batteryV, 2), 36.sp, weight = FontWeight.Bold)
@@ -123,6 +126,7 @@ fun BatteryScreen() {
                                 .clickable { week = w }.padding(horizontal = 12.dp, vertical = 6.dp)
                         ) { T(label, 12.sp, if (week == w) C.Text else C.Sub) }
                     }
+                    InfoButton("История напряжения")
                 }
                 Spacer(Modifier.height(6.dp))
                 LiveChart(
@@ -132,7 +136,10 @@ fun BatteryScreen() {
             }
         }
         Panel(Modifier.weight(0.9f).fillMaxWidth(), padding = 12.dp) {
-            T("Журнал аккумулятора (также пишется в logs/battery.csv)", 14.sp, weight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                T("Журнал аккумулятора (также пишется в logs/battery.csv)", 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                InfoButton("Журнал аккумулятора")
+            }
             LazyColumn {
                 items(events) { ev ->
                     val name = when (ev.type) {
@@ -161,7 +168,10 @@ fun BatteryScreen() {
 @Composable
 private fun VoltCard(title: String, v: Float?, verdict: Verdict, timeMs: Long, modifier: Modifier, extra: String? = null) {
     Panel(modifier.fillMaxHeight()) {
-        T(title, 13.sp, C.Sub)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            T(title, 13.sp, C.Sub, modifier = Modifier.weight(1f))
+            InfoButton(title)
+        }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.Bottom) {
             T(fmtF(v, 2), 36.sp, weight = FontWeight.Bold)

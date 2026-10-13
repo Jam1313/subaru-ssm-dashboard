@@ -91,7 +91,10 @@ fun LogScreen() {
         }
         Spacer(Modifier.width(12.dp))
         Panel(Modifier.weight(1f).fillMaxHeight()) {
-            T("Текущие значения", 16.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                T("Текущие значения", 16.sp, modifier = Modifier.weight(1f))
+                InfoButton("Текущие значения")
+            }
             Spacer(Modifier.height(8.dp))
             val rows = listOf(
                 "Обороты" to (e.rpm?.toString() ?: "—"),
