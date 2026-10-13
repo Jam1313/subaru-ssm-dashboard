@@ -130,9 +130,12 @@ class Settings(ctx: Context) {
         get() = p.getString("navPos", "left")!!
         set(v) { p.edit().putString("navPos", v).apply(); Repo.navPosition.value = v }
 
-    /** Diagnostic adapter: "kkl" (USB KKL cable), "op2" (Tactrix OpenPort 2.0 / clone), "elm_bt" (Bluetooth ELM327). */
+    /**
+     * Diagnostic adapter: "auto" (find it), "kkl" (USB KKL cable or OpenPort 1.3), "op2" (Tactrix OpenPort 2.0 /
+     * clone), "elm_usb", "elm_bt", "elm_wifi" (ELM327 by USB, Bluetooth or Wi-Fi).
+     */
     var adapter: String
-        get() = p.getString("adapter", "kkl")!!
+        get() = p.getString("adapter", "auto")!!
         set(v) = p.edit().putString("adapter", v).apply()
 
     /** Paired Bluetooth OBD adapter (ELM327) used when [adapter] is "elm_bt". */
@@ -143,6 +146,20 @@ class Settings(ctx: Context) {
     var btName: String
         get() = p.getString("btName", "")!!
         set(v) = p.edit().putString("btName", v).apply()
+
+    /** Parameters from the RomRaider list the user ticked on the «Датчики» screen, comma-separated ids. */
+    var watchIds: Set<String>
+        get() = p.getString("watch", "")!!.split(',').filter { it.isNotBlank() }.toSet()
+        set(v) { p.edit().putString("watch", v.joinToString(",")).apply(); Repo.watchVersion.value++ }
+
+    /** What a USB adapter turned out to be in "Auto": ELM327 speed, 0 = KKL, null = not asked yet. */
+    fun usbKind(id: String): Int? = if (p.contains("usb:$id")) p.getInt("usb:$id", 0) else null
+    fun setUsbKind(id: String, baud: Int) = p.edit().putInt("usb:$id", baud).apply()
+
+    /** Wi-Fi ELM327 address, "host:port"; almost all of them are 192.168.0.10:35000. */
+    var wifiHost: String
+        get() = p.getString("wifiHost", "192.168.0.10:35000")!!
+        set(v) = p.edit().putString("wifiHost", v).apply()
 
     /** Bus the ECU is on: "kline", "can" or "auto" (K-line first, then CAN). CAN needs the OpenPort. */
     var bus: String
@@ -307,6 +324,17 @@ object Repo {
     val carVersion = MutableStateFlow(0)
     /** How many parameters the ECU is polled for (fewer than all = some are not supported). */
     val pollAddresses = MutableStateFlow(0)
+    /** What the connected engine and transmission units can give from the RomRaider list. */
+    val rrAvailable = MutableStateFlow<List<kg.forester.sg.ssm.RrParam>>(emptyList())
+    /** Latest values of the ticked parameters, by id. */
+    val rrValues = MutableStateFlow<Map<String, Double>>(emptyMap())
+    /** Ticked parameters that are being read now (the rest are not supported or answered nothing). */
+    val rrPolled = MutableStateFlow<List<kg.forester.sg.ssm.RrParam>>(emptyList())
+    val watchVersion = MutableStateFlow(0)
+    /** The ECU answers only standard OBD-II (no SSM): basic parameters, no transmission data. */
+    val obdMode = MutableStateFlow(false)
+    /** What the automatic adapter search found, e.g. "USB 1A86:7523 → KKL". */
+    val adapterFound = MutableStateFlow("")
 
     fun init(ctx: Context) {
         if (!::db.isInitialized) {

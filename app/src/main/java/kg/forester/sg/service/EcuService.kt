@@ -23,6 +23,7 @@ import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
 import com.hoho.android.usbserial.driver.FtdiSerialDriver
 import com.hoho.android.usbserial.driver.ProbeTable
 import com.hoho.android.usbserial.driver.UsbSerialDriver
+import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import kg.forester.sg.MainActivity
 import kg.forester.sg.R
@@ -34,7 +35,14 @@ import kg.forester.sg.ssm.EcuParams
 import kg.forester.sg.ssm.Elm327
 import kg.forester.sg.ssm.ElmCanTransport
 import kg.forester.sg.ssm.ElmKLineTransport
+import kg.forester.sg.ssm.CanObd
+import kg.forester.sg.ssm.ElmObd
 import kg.forester.sg.ssm.KklTransport
+import kg.forester.sg.ssm.Obd2
+import kg.forester.sg.ssm.ObdLink
+import kg.forester.sg.ssm.RomRaider
+import kg.forester.sg.ssm.RrParam
+import kg.forester.sg.ssm.UsbStreams
 import kg.forester.sg.ssm.OpenPort13
 import kg.forester.sg.ssm.Op2CanTransport
 import kg.forester.sg.ssm.Op2KLineTransport
@@ -72,6 +80,8 @@ private val adapterProber = UsbSerialProber(UsbSerialProber.getDefaultProbeTable
 object EcuLink {
     val mutex = Mutex()
     @Volatile var client: SsmClient? = null
+    /** Set instead of [client] while the car is read over standard OBD-II. */
+    @Volatile var obd: Obd2? = null
 
     suspend fun <T> use(block: (SsmClient) -> T): T? = mutex.withLock {
         val c = client ?: return@withLock null
@@ -132,28 +142,39 @@ class EcuService : Service() {
         val usb = getSystemService(Context.USB_SERVICE) as UsbManager
         var noCableSince = System.currentTimeMillis()
         while (scope.isActive) {
-            if (Repo.settings.demo) { demoLoop(); continue }
-            if (Repo.settings.adapter == "elm_bt") { bluetoothSession(); delay(3000); continue }
+            val s = Repo.settings
+            if (s.demo) { demoLoop(); continue }
+            SsmTrace.enabled = s.traceEnabled
+            SsmTrace.polling = false
             tracker.tick(System.currentTimeMillis())
-            val wantOp2 = Repo.settings.adapter == "op2"
+            val kind = s.adapter
+            when (kind) {
+                "elm_bt" -> { bluetoothSession(s.btAddress, s.btName); delay(3000); continue }
+                "elm_wifi" -> { wifiSession(explicit = true); delay(3000); continue }
+            }
             val drivers = adapterProber.findAllDrivers(usb)
-            fun isOp2(d: UsbSerialDriver) = OpenPort2.matches(d.device.vendorId, d.device.productId)
-            fun isOp13(d: UsbSerialDriver) = OpenPort13.matches(d.device.vendorId, d.device.productId)
-            // "OpenPort" picked for an OpenPort 1.3: it is a K-line cable like a KKL, just use it as one
-            val driver = drivers.firstOrNull { isOp2(it) == wantOp2 }
-                ?: drivers.firstOrNull { wantOp2 && isOp13(it) }
+            logUsbDevices(usb, drivers)
+            val driver = pickDriver(kind, drivers)
             if (driver == null) {
-                Repo.link.value = LinkState.NO_CABLE
-                val other = drivers.firstOrNull()
-                Repo.linkMessage.value = when {
-                    other != null && wantOp2 -> "Найден KKL-кабель, а в настройках выбран OpenPort 2.0"
-                    other != null -> "Найден OpenPort 2.0: выберите его в Настройках → Адаптер"
-                    wantOp2 -> "OpenPort 2.0 не найден"
-                    else -> "Кабель KKL не найден"
-                }
                 if (!triedHostFix && System.currentTimeMillis() - noCableSince > 8000) {
                     triedHostFix = true
                     forceUsbHostMode()
+                }
+                if (kind == "auto") {
+                    // nothing on USB: a Wi-Fi ELM327 we are connected to, then a paired Bluetooth one
+                    if (wifiSession(explicit = false) || autoBluetooth()) { delay(1000); continue }
+                }
+                Repo.link.value = LinkState.NO_CABLE
+                Repo.adapterFound.value = ""
+                val other = drivers.firstOrNull()
+                Repo.linkMessage.value = when {
+                    kind == "auto" -> "Адаптер не найден: подключите USB-кабель или Wi-Fi/Bluetooth-адаптер " +
+                        "(Bluetooth сначала сопрягите в настройках Android)"
+                    other != null && kind == "op2" -> "Найден KKL-кабель, а в настройках выбран OpenPort 2.0"
+                    other != null -> "Найден OpenPort 2.0: выберите его в Настройках → Адаптер (или «Авто»)"
+                    kind == "op2" -> "OpenPort 2.0 не найден"
+                    kind == "elm_usb" -> "USB-адаптер ELM327 не найден"
+                    else -> "Кабель KKL не найден"
                 }
                 delay(2000)
                 continue
@@ -172,18 +193,50 @@ class EcuService : Service() {
                 delay(2000); continue
             }
             val port = driver.ports[0]
-            SsmTrace.enabled = Repo.settings.traceEnabled
-            SsmTrace.log("=== ${driver.javaClass.simpleName} %04X:%04X, адаптер ${Repo.settings.adapter}, шина ${Repo.settings.bus}"
+            SsmTrace.log("=== ${driver.javaClass.simpleName} %04X:%04X, адаптер $kind, шина ${s.bus}"
                 .format(driver.device.vendorId, driver.device.productId))
             var op2: OpenPort2? = null
+            var streams: UsbStreams? = null
             try {
                 port.open(conn)
-                if (isOp2(driver)) {
-                    op2 = OpenPort2(port).also { it.open() }
-                    SsmTrace.log("OpenPort firmware ${op2.firmware}")
-                    session { kline -> openOp2(op2, kline) }
-                } else {
-                    session(klineOnly = true) { _ -> KklTransport(port, openPort13 = isOp13(driver)).also { it.open() } }
+                val id = "%04X:%04X".format(driver.device.vendorId, driver.device.productId)
+                when {
+                    isOp2(driver) -> {
+                        Repo.adapterFound.value = "USB $id → OpenPort 2.0"
+                        op2 = OpenPort2(port).also { it.open() }
+                        SsmTrace.log("OpenPort firmware ${op2.firmware}")
+                        session(obd = { CanObd(openOp2(op2, false), "OpenPort 2.0") }) { kline -> openOp2(op2, kline) }
+                    }
+                    isOp13(driver) -> {
+                        Repo.adapterFound.value = "USB $id → OpenPort 1.3"
+                        session(klineOnly = true) { _ -> KklTransport(port, openPort13 = true).also { it.open() } }
+                    }
+                    else -> {
+                        // a bare KKL cable or an ELM327 behind the same USB chip: ask, and remember the answer
+                        val baud = when (kind) {
+                            "kkl" -> 0
+                            "elm_usb" -> UsbStreams.probeElm(port) ?: 0
+                            else -> when (val known = s.usbKind(id)) {
+                                null -> (UsbStreams.probeElm(port) ?: 0).also { s.setUsbKind(id, it) }
+                                0 -> UsbStreams.probeElm(port, quick = true)?.also { s.setUsbKind(id, it) } ?: 0
+                                else -> known
+                            }
+                        }
+                        if (baud > 0) {
+                            Repo.adapterFound.value = "USB $id → ELM327 ($baud бод)"
+                            port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                            streams = UsbStreams(port)
+                            // remembered as an ELM but silent now: another cable on the same chip, ask again next time
+                            if (!elmSession(Elm327(streams.input, streams.output, streams), "USB") && kind == "auto") s.setUsbKind(id, 0)
+                        } else if (kind == "elm_usb") {
+                            Repo.link.value = LinkState.ERROR
+                            Repo.linkMessage.value = "На USB не ELM327 (не отвечает на AT-команды). Это KKL-кабель? Выберите «Авто» или «KKL»"
+                            delay(3000)
+                        } else {
+                            Repo.adapterFound.value = "USB $id → KKL"
+                            session(klineOnly = true) { _ -> KklTransport(port).also { it.open() } }
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 SsmTrace.log("error: $e")
@@ -192,10 +245,38 @@ class EcuService : Service() {
             } finally {
                 EcuLink.client?.close()
                 EcuLink.client = null
+                streams?.close()
                 if (op2 != null) op2.close() else runCatching { port.close() }
                 logger?.close(); logger = null
             }
             delay(1000)
+        }
+    }
+
+    private fun isOp2(d: UsbSerialDriver) = OpenPort2.matches(d.device.vendorId, d.device.productId)
+    private fun isOp13(d: UsbSerialDriver) = OpenPort13.matches(d.device.vendorId, d.device.productId)
+
+    private fun pickDriver(kind: String, drivers: List<UsbSerialDriver>): UsbSerialDriver? = when (kind) {
+        // "OpenPort" picked for an OpenPort 1.3: it is a K-line cable like a KKL, just use it as one
+        "op2" -> drivers.firstOrNull { isOp2(it) } ?: drivers.firstOrNull { isOp13(it) }
+        "auto" -> drivers.firstOrNull { isOp2(it) } ?: drivers.firstOrNull { isOp13(it) } ?: drivers.firstOrNull()
+        else -> drivers.firstOrNull { !isOp2(it) }
+    }
+
+    private var lastUsbList = ""
+
+    /** Every USB device, recognised or not, once per change: shows in a sent log which cable someone has. */
+    private fun logUsbDevices(usb: UsbManager, drivers: List<UsbSerialDriver>) {
+        val known = drivers.map { it.device.deviceName }.toSet()
+        val list = usb.deviceList.values.joinToString("; ") { d ->
+            "%04X:%04X %s %s%s".format(
+                d.vendorId, d.productId, d.manufacturerName ?: "", d.productName ?: "",
+                if (d.deviceName in known) " [serial]" else "",
+            ).trim()
+        }
+        if (list != lastUsbList) {
+            lastUsbList = list
+            SsmTrace.log("USB: ${list.ifEmpty { "нет устройств" }}")
         }
     }
 
@@ -236,32 +317,31 @@ class EcuService : Service() {
         Repo.link.value = LinkState.NO_CABLE
     }
 
-    /** Bluetooth OBD adapter (ELM327 and clones) over the serial port profile. */
+    /** Bluetooth OBD adapter (ELM327 and clones) over the serial port profile. Returns false if it did not connect. */
     @SuppressLint("MissingPermission")
-    private suspend fun bluetoothSession() {
-        val addr = Repo.settings.btAddress
+    private suspend fun bluetoothSession(addr: String, label: String, quiet: Boolean = false): Boolean {
         if (addr.isEmpty()) {
             Repo.link.value = LinkState.NO_CABLE
             Repo.linkMessage.value = "Выберите Bluetooth-адаптер: Настройки → «Авто и адаптер»"
-            return
+            return false
         }
-        if (Build.VERSION.SDK_INT >= 31 &&
-            checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!btAllowed()) {
             Repo.link.value = LinkState.NO_PERMISSION
             Repo.linkMessage.value = "Нет разрешения на Bluetooth (Настройки → «Авто и адаптер»)"
-            return
+            return false
         }
         val bt = (getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
         if (bt == null || !bt.isEnabled) {
-            Repo.link.value = LinkState.NO_CABLE
-            Repo.linkMessage.value = "Bluetooth выключен"
-            return
+            if (!quiet) {
+                Repo.link.value = LinkState.NO_CABLE
+                Repo.linkMessage.value = "Bluetooth выключен"
+            }
+            return false
         }
-        Repo.link.value = LinkState.CONNECTING
-        Repo.linkMessage.value = "Подключение к ${Repo.settings.btName.ifEmpty { addr }}…"
-        SsmTrace.enabled = Repo.settings.traceEnabled
-        SsmTrace.log("=== Bluetooth $addr, шина ${Repo.settings.bus}")
+        val name = label.ifEmpty { addr }
+        if (!quiet) Repo.link.value = LinkState.CONNECTING
+        Repo.linkMessage.value = "Подключение к $name…"
+        SsmTrace.log("=== Bluetooth $name $addr, шина ${Repo.settings.bus}")
         val spp = java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         val dev = bt.getRemoteDevice(addr)
         runCatching { bt.cancelDiscovery() }
@@ -269,19 +349,111 @@ class EcuService : Service() {
             .recoverCatching { dev.createInsecureRfcommSocketToServiceRecord(spp).also { it.connect() } }
             .getOrElse { e ->
                 SsmTrace.log("bt connect: $e")
-                Repo.link.value = LinkState.NO_CABLE
-                Repo.linkMessage.value = "Адаптер ${Repo.settings.btName.ifEmpty { addr }} не отвечает (включено зажигание?)"
-                return
+                if (!quiet) {
+                    Repo.link.value = LinkState.NO_CABLE
+                    Repo.linkMessage.value = "Адаптер $name не отвечает (включено зажигание?)"
+                }
+                return false
             }
-        val elm = Elm327(sock.inputStream, sock.outputStream, sock)
+        Repo.adapterFound.value = "Bluetooth $name → ELM327"
+        elmSession(Elm327(sock.inputStream, sock.outputStream, sock), "Bluetooth")
+        return true
+    }
+
+    private fun btAllowed() = Build.VERSION.SDK_INT < 31 ||
+        checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * "Auto" without anything on USB: the chosen Bluetooth adapter, or else any paired device named like an
+     * OBD adapter (the one that answers is remembered).
+     */
+    @SuppressLint("MissingPermission")
+    private suspend fun autoBluetooth(): Boolean {
+        if (!btAllowed()) return false
+        val bt = (getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+        if (bt == null || !bt.isEnabled) return false
+        val s = Repo.settings
+        if (s.btAddress.isNotEmpty()) return bluetoothSession(s.btAddress, s.btName, quiet = true)
+        val candidates = runCatching { bt.bondedDevices.toList() }.getOrDefault(emptyList())
+            .filter { d -> OBD_NAMES.any { (d.name ?: "").uppercase().contains(it) } }
+        for (d in candidates) {
+            if (bluetoothSession(d.address, d.name ?: "", quiet = true)) {
+                s.btAddress = d.address; s.btName = d.name ?: d.address
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Wi-Fi ELM327: the head unit joins the adapter's own network, the adapter listens on TCP (192.168.0.10:35000
+     * on nearly all of them). The socket is bound to that Wi-Fi, which has no internet and is otherwise skipped
+     * by Android. With [explicit] false ("Auto") it is only tried when we are on the adapter's subnet.
+     */
+    private suspend fun wifiSession(explicit: Boolean): Boolean {
+        val (host, port) = Repo.settings.wifiHost.split(':').let { it[0].trim() to (it.getOrNull(1)?.trim()?.toIntOrNull() ?: 35000) }
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        @Suppress("DEPRECATION")
+        val wifi = cm.allNetworks.firstOrNull {
+            cm.getNetworkCapabilities(it)?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
+        }
+        if (wifi == null) {
+            if (explicit) {
+                Repo.link.value = LinkState.NO_CABLE
+                Repo.linkMessage.value = "Нет Wi-Fi: подключитесь к сети адаптера (обычно WiFi_OBDII, V-LINK…)"
+            }
+            return false
+        }
+        if (!explicit) {
+            val prefix = host.substringBeforeLast('.') + "."
+            val sameNet = cm.getLinkProperties(wifi)?.linkAddresses?.any { it.address.hostAddress?.startsWith(prefix) == true } == true
+            if (!sameNet) return false
+        }
+        Repo.link.value = LinkState.CONNECTING
+        Repo.linkMessage.value = "Подключение к Wi-Fi адаптеру $host:$port…"
+        SsmTrace.log("=== Wi-Fi $host:$port, шина ${Repo.settings.bus}")
+        val sock = runCatching {
+            wifi.socketFactory.createSocket().also {
+                it.connect(java.net.InetSocketAddress(host, port), 2000)
+                it.tcpNoDelay = true
+            }
+        }.getOrElse { e ->
+            SsmTrace.log("wifi connect: $e")
+            if (explicit) {
+                Repo.link.value = LinkState.NO_CABLE
+                Repo.linkMessage.value = "Wi-Fi адаптер $host:$port не отвечает"
+            }
+            return false
+        }
+        Repo.adapterFound.value = "Wi-Fi $host:$port → ELM327"
+        elmSession(Elm327(sock.getInputStream(), sock.getOutputStream(), sock), "Wi-Fi")
+        return true
+    }
+
+    /**
+     * An ELM327 on any link: SSM on the K-line or CAN first, standard OBD-II when the car does not answer SSM.
+     * Returns false if the adapter did not answer as an ELM327 at all.
+     */
+    private suspend fun elmSession(elm: Elm327, via: String): Boolean {
         try {
-            elm.open()
-            SsmTrace.log("ELM: ${elm.version}")
-            session { kline -> if (kline) ElmKLineTransport(elm).also { it.open() } else ElmCanTransport(elm).also { it.open() } }
+            try {
+                elm.open()
+            } catch (e: Exception) {
+                SsmTrace.log("ELM ($via) does not answer: $e")
+                Repo.link.value = LinkState.ERROR
+                Repo.linkMessage.value = "Адаптер не отвечает как ELM327"
+                return false
+            }
+            SsmTrace.log("ELM ($via): ${elm.version}")
+            session(obd = { ElmObd(elm).takeIf { it.open() } }) { kline ->
+                if (kline) ElmKLineTransport(elm).also { it.open() } else ElmCanTransport(elm).also { it.open() }
+            }
+            return true
         } catch (e: Exception) {
             SsmTrace.log("error: $e")
             Repo.link.value = LinkState.ERROR
             Repo.linkMessage.value = e.message ?: "Ошибка связи"
+            return true
         } finally {
             EcuLink.client?.close()
             EcuLink.client = null
@@ -295,9 +467,14 @@ class EcuService : Service() {
 
     /**
      * One adapter session: find the bus the ECU answers on, init it, then poll until the cable or ECU goes away.
-     * [open] makes a transport for the K-line (true) or CAN (false).
+     * [open] makes a transport for the K-line (true) or CAN (false). [obd], when the adapter can do it, makes a
+     * standard OBD-II link that is tried after a full round of silence on SSM.
      */
-    private suspend fun session(klineOnly: Boolean = false, open: (Boolean) -> SsmTransport) {
+    private suspend fun session(
+        klineOnly: Boolean = false,
+        obd: (() -> ObdLink?)? = null,
+        open: (Boolean) -> SsmTransport,
+    ) {
         val buses = when {
             klineOnly -> listOf(true) // a KKL cable has no CAN
             Repo.settings.bus == "kline" -> listOf(true)
@@ -306,6 +483,7 @@ class EcuService : Service() {
         }
         var busIdx = 0
         var lineMode = 0
+        var silentRounds = 0
         var transport: SsmTransport? = null
         var transportKline = true
         while (scope.isActive) {
@@ -323,17 +501,31 @@ class EcuService : Service() {
                 Repo.link.value = LinkState.NO_ECU
                 Repo.linkMessage.value = "ЭБУ не отвечает (${client.transport.name}). Зажигание включено?"
                 tracker.tick(System.currentTimeMillis())
+                // next: other DTR/RTS levels for a cable with a chip inside, else the other bus
                 val modes = transport.lineModes
-                if (modes > 1) {
-                    // a cable with a chip inside may want other DTR/RTS levels; once round all, wait as usual
+                val roundDone = if (modes > 1) {
                     transport.setLineMode(++lineMode)
-                    delay(if (lineMode % modes != 0) 300 else 3000)
+                    lineMode % modes == 0
+                } else {
+                    busIdx++
+                    busIdx % buses.size == 0
+                }
+                if (roundDone) silentRounds++
+                if (roundDone && obd != null && (silentRounds == 1 || silentRounds % 3 == 0)) {
+                    // the OBD link sets the adapter up its own way; SSM starts afresh after it
+                    transport.close()
+                    transport = null
+                    EcuLink.client = null
+                    Repo.linkMessage.value = "SSM молчит, пробую стандартный OBD-II…"
+                    val link = runCatching { obd() }.onFailure { SsmTrace.log("obd: $it") }.getOrNull()
+                    if (link != null && obdSession(link)) silentRounds = 0
                     continue
                 }
-                busIdx++
-                delay(if (buses.size > 1 && busIdx % buses.size != 0) 300 else 3000)
+                delay(if (roundDone) 3000 else 300)
                 continue
             }
+            silentRounds = 0
+            Repo.obdMode.value = false
             Repo.ecuInit.value = init
             Repo.link.value = LinkState.CONNECTED
             Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
@@ -346,11 +538,14 @@ class EcuService : Service() {
                 continue
             }
             Repo.pollAddresses.value = addrs.size
+            ecuWatch.setup(init)
+            tcuWatch.clear()
             val afSensor = EcuParams.reported(init, EcuParams.AF_SENSOR)
             var failures = 0
             var cycle = 0
             tcuAddrs = null
             tcuNextTryMs = 0
+            SsmTrace.polling = true
             while (scope.isActive && failures < 5) {
                 val raw = EcuLink.mutex.withLock { client.read(addrs) }
                 val now = System.currentTimeMillis()
@@ -364,25 +559,148 @@ class EcuService : Service() {
                 // SSM answers any address; an A/F byte from an ECU without the wideband sensor would fake
                 // "enrichment" in the fuel calculation
                 if (!afSensor) snap = snap.copy(lambda = null)
-                Repo.live.value = snap
-                history.addLast(snap)
-                while (history.size > 240) history.removeFirst()
-                Repo.history.value = history.toList()
-                battery.process(snap)
-                tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
-                knock.process(snap)
+                ecuWatch.poll(client)
+                onSnapshot(snap, now)
                 if (++cycle % 3 == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
-                if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
-                    val l = logger ?: CsvLogger(this).also { logger = it; Repo.logFile.value = it.file.name }
-                    l.write(snap, Repo.gps.value, Repo.trip.value.instLh, Repo.tcu.value)
-                } else if (logger != null && (snap.rpm ?: 0) == 0) {
-                    logger?.close(); logger = null
-                }
-                updateNotification()
             }
+            SsmTrace.polling = false
+            SsmTrace.log("ECU silent, polling stopped")
             Repo.link.value = LinkState.NO_ECU
             Repo.linkMessage.value = "Связь с ЭБУ потеряна"
             logger?.close(); logger = null
+        }
+    }
+
+    /** Everything a fresh sample feeds: live values, charts, battery, trip and fuel, knock, CSV log. */
+    private fun onSnapshot(snap: EcuSnapshot, now: Long) {
+        Repo.live.value = snap
+        history.addLast(snap)
+        while (history.size > 240) history.removeFirst()
+        Repo.history.value = history.toList()
+        battery.process(snap)
+        tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
+        knock.process(snap)
+        if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
+            // the ticked parameters are extra columns: a new file when the choice changes
+            val extras = Repo.rrPolled.value
+            if (logger != null && logger?.extras != extras) { logger?.close(); logger = null }
+            val l = logger ?: CsvLogger(this, extras).also { logger = it; Repo.logFile.value = it.file.name }
+            l.write(snap, Repo.gps.value, Repo.trip.value.instLh, Repo.tcu.value, Repo.rrValues.value)
+        } else if (logger != null && (snap.rpm ?: 0) == 0) {
+            logger?.close(); logger = null
+        }
+        updateNotification()
+    }
+
+    /** Standard OBD-II polling until the ECU goes silent. Returns false if the ECU did not answer at all. */
+    private suspend fun obdSession(link: ObdLink): Boolean {
+        val obd = Obd2(link)
+        try {
+            if (EcuLink.mutex.withLock { runCatching { obd.init() }.getOrDefault(false) } != true) return false
+            EcuLink.obd = obd
+            ecuWatch.clear(); tcuWatch.clear()
+            Repo.obdMode.value = true
+            Repo.ecuInit.value = null
+            Repo.tcuStatus.value = "АКПП: недоступна в режиме OBD-II"
+            Repo.link.value = LinkState.CONNECTED
+            Repo.linkMessage.value = "OBD-II · ${link.name}: основные параметры (SSM не ответил)"
+            Repo.pollAddresses.value = obd.polledCount
+            var failures = 0
+            SsmTrace.polling = true
+            while (scope.isActive && failures < 5) {
+                val now = System.currentTimeMillis()
+                val snap = EcuLink.mutex.withLock { runCatching { obd.poll(now) }.getOrNull() }
+                if (snap == null) {
+                    failures++
+                    tracker.tick(now)
+                    continue
+                }
+                failures = 0
+                onSnapshot(snap, now)
+                // a fast CAN adapter would go round 100 times a second: 5 a second is plenty
+                delay((200 - (System.currentTimeMillis() - now)).coerceAtLeast(0))
+            }
+            Repo.link.value = LinkState.NO_ECU
+            Repo.linkMessage.value = "Связь с ЭБУ потеряна"
+            return true
+        } finally {
+            SsmTrace.polling = false
+            EcuLink.obd = null
+            Repo.obdMode.value = false
+            logger?.close(); logger = null
+            runCatching { link.close() }
+        }
+    }
+
+    private var ecuAvail: List<RrParam> = emptyList()
+    private var tcuAvail: List<RrParam> = emptyList()
+    private val ecuWatch = Watch(SsmClient.ECU, tcu = false)
+    private val tcuWatch = Watch(SsmClient.TCU, tcu = true)
+
+    private fun publishWatch() {
+        Repo.rrAvailable.value = ecuAvail + tcuAvail
+        Repo.rrPolled.value = ecuWatch.params + tcuWatch.params
+    }
+
+    /**
+     * The parameters ticked on the «Датчики» screen that one unit has, read in a request of their own after the
+     * regular one: an address this ECU does not know can then only cost these, not the gauges.
+     */
+    private inner class Watch(private val dest: Int, private val tcu: Boolean) {
+        var params: List<RrParam> = emptyList()
+            private set
+        private var avail: List<RrParam> = emptyList()
+        private var all: List<RrParam> = emptyList()
+        private var addrs = IntArray(0)
+        private var version = -1
+        private var fails = 0
+
+        fun setup(init: EcuInit) {
+            all = RomRaider.load(this@EcuService)
+            avail = RomRaider.available(this@EcuService, init, tcu)
+            if (tcu) tcuAvail = avail else ecuAvail = avail
+            SsmTrace.log("RomRaider: ${avail.size} parameters for ${if (tcu) "TCU" else "ECU"} ROM ${init.romId}")
+            version = -1
+            params = emptyList()
+            publishWatch()
+        }
+
+        fun clear() {
+            avail = emptyList(); params = emptyList(); addrs = IntArray(0)
+            if (tcu) tcuAvail = emptyList() else ecuAvail = emptyList()
+            publishWatch()
+        }
+
+        suspend fun poll(client: SsmClient) {
+            if (version != Repo.watchVersion.value) {
+                version = Repo.watchVersion.value
+                val ids = Repo.settings.watchIds
+                params = avail.filter { it.id in ids }
+                addrs = RomRaider.readList(params, all)
+                fails = 0
+                publishWatch()
+            }
+            if (addrs.isEmpty()) return
+            val raw = EcuLink.mutex.withLock { client.read(addrs, dest) }
+            if (raw == null) {
+                if (++fails >= 3) prune(client)
+                return
+            }
+            fails = 0
+            Repo.rrValues.value = Repo.rrValues.value + RomRaider.decode(params, addrs, raw, all)
+        }
+
+        /** The unit keeps refusing the request: keep only the parameters that answer on their own. */
+        private suspend fun prune(client: SsmClient) {
+            val ok = params.filter { p ->
+                val a = RomRaider.readList(listOf(p), all)
+                a.isNotEmpty() && EcuLink.mutex.withLock { client.read(a, dest) } != null
+            }
+            SsmTrace.log("RomRaider: dropped ${(params - ok.toSet()).joinToString(" ") { it.id }}")
+            params = ok
+            addrs = RomRaider.readList(params, all)
+            fails = 0
+            publishWatch()
         }
     }
 
@@ -426,12 +744,14 @@ class EcuService : Service() {
                 return
             }
             Repo.tcuInit.value = init
+            tcuWatch.setup(init)
             addrs = TcuParams.supported(init)
             tcuAddrs = addrs
             Repo.tcuStatus.value = "АКПП: ROM ${init.romId}"
         }
         if (addrs.isEmpty()) return
         val raw = EcuLink.mutex.withLock { client.read(addrs, SsmClient.TCU) } ?: return
+        tcuWatch.poll(client)
         val t = TcuParams.decode(addrs, raw, now)
         Repo.tcu.value = t
         tcuHistory.addLast(t)
@@ -539,6 +859,8 @@ class EcuService : Service() {
         const val ACTION_USB_PERMISSION = "kg.forester.sg.USB_PERMISSION"
         const val ACTION_RESET_TRIP = "kg.forester.sg.RESET_TRIP"
         const val ACTION_START_GPS = "kg.forester.sg.START_GPS"
+        /** Paired Bluetooth devices worth trying in "Auto". */
+        private val OBD_NAMES = listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE", "ICAR", "OBDLINK", "CARISTA", "VEEPEAK")
 
         fun start(ctx: Context, action: String? = null) {
             val i = Intent(ctx, EcuService::class.java).setAction(action)
@@ -567,7 +889,7 @@ class BootReceiver : BroadcastReceiver() {
 }
 
 /** One CSV file per engine run in Android/data/kg.forester.sg/files/logs. */
-class CsvLogger(ctx: Context) {
+class CsvLogger(ctx: Context, val extras: List<RrParam> = emptyList()) {
     val file: File
     private val w: FileWriter
     private var lines = 0
@@ -581,11 +903,12 @@ class CsvLogger(ctx: Context) {
             "time,rpm,speed_kmh,coolant_c,intake_c,maf_gs,throttle_pct,battery_v,inj_pw_ms,timing_deg," +
                 "knock_deg,atm_kpa,boost_kpa,af_corr_pct,af_learn_pct,afr,wgdc_pct,fuel_lh," +
                 "gps_speed_kmh,gps_alt_m,pedal_pct,map_kpa,avcs_deg,alt_duty_pct,gear,atf_c,turbine_rpm,lockup_pct," +
-                "transfer_pct,front_wheel_kmh,rear_wheel_kmh,fuel_sensor_v,fuel_sensor_ohm\n"
+                "transfer_pct,front_wheel_kmh,rear_wheel_kmh,fuel_sensor_v,fuel_sensor_ohm" +
+                extras.joinToString("") { p -> "," + "${p.id} ${p.nameEn} ${p.units}".trim().replace(',', ' ') } + "\n"
         )
     }
 
-    fun write(s: kg.forester.sg.ssm.EcuSnapshot, g: GpsFix?, lh: Double, t: TcuSnapshot?) {
+    fun write(s: kg.forester.sg.ssm.EcuSnapshot, g: GpsFix?, lh: Double, t: TcuSnapshot?, extra: Map<String, Double> = emptyMap()) {
         fun f(x: Float?) = x?.let { "%.2f".format(Locale.US, it) } ?: ""
         w.write(
             listOf(
@@ -598,7 +921,12 @@ class CsvLogger(ctx: Context) {
                 t?.gear?.toString() ?: "", t?.atfC?.toString() ?: "", t?.turbineRpm?.toString() ?: "", f(t?.lockUpPct),
                 f(t?.transferPct), t?.frontWheelKmh?.toString() ?: "", t?.rearWheelKmh?.toString() ?: "",
                 f(s.fuelSensorV), f(s.fuelSensorOhm),
-            ).joinToString(",") + "\n"
+            ).joinToString(",") + extras.joinToString("") { p ->
+                "," + (extra[p.id]?.let { v ->
+                    if (kotlin.math.abs(v) >= 1e7) "%.6g".format(Locale.US, v)
+                    else "%.4f".format(Locale.US, v).trimEnd('0').trimEnd('.')
+                } ?: "")
+            } + "\n"
         )
         if (++lines % 20 == 0) w.flush()
     }

@@ -89,9 +89,10 @@ fun T(
     weight: FontWeight = FontWeight.Normal,
     modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE,
+    textAlign: androidx.compose.ui.text.style.TextAlign? = null,
 ) = Text(
     text, modifier = modifier, maxLines = maxLines, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-    style = TextStyle(fontSize = size, color = color, fontWeight = weight),
+    style = TextStyle(fontSize = size, color = color, fontWeight = weight, textAlign = textAlign ?: androidx.compose.ui.text.style.TextAlign.Unspecified),
 )
 
 @Composable

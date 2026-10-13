@@ -47,7 +47,24 @@ import kg.forester.sg.data.CarModels
 import kg.forester.sg.data.Repo
 import kg.forester.sg.ssm.SsmTrace
 
-private val adapters = listOf("kkl" to "KKL-кабель", "op2" to "OpenPort 2.0", "elm_bt" to "Bluetooth OBD")
+private val adapters = listOf(
+    "auto" to "Авто", "kkl" to "KKL-кабель", "op2" to "OpenPort 2.0",
+    "elm_usb" to "ELM327 USB", "elm_bt" to "ELM327 Bluetooth", "elm_wifi" to "ELM327 Wi-Fi",
+)
+
+private fun adapterNote(k: String) = when (k) {
+    "auto" -> "Приложение само найдёт адаптер: USB (KKL, OpenPort 1.3/2.0, ELM327), Wi-Fi ELM327, к сети которого " +
+        "подключена магнитола, или сопряжённый Bluetooth-адаптер. Если ЭБУ не отвечает по протоколу Subaru (SSM), " +
+        "ELM327 и OpenPort 2.0 переходят на стандартный OBD-II: основные параметры и ошибки."
+    "op2" -> "Tactrix OpenPort 2.0 или китайский клон. Умеет K-Line и CAN, а без SSM — стандартный OBD-II по CAN."
+    "elm_usb" -> "ELM327 с USB-шнуром. SSM по CAN (SH 2009+); K-Line только у оригинальных ELM327 v1.4+. " +
+        "Если SSM не отвечает — стандартный OBD-II."
+    "elm_bt" -> "Bluetooth-свисток ELM327. SSM по CAN (SH 2009+); K-Line только у оригинальных ELM327 v1.4+, многие " +
+        "клоны не умеют. Если SSM не отвечает — стандартный OBD-II. Данные обновляются примерно раз в секунду."
+    "elm_wifi" -> "Wi-Fi ELM327: подключите магнитолу к сети адаптера (WiFi_OBDII, V-LINK…), адрес почти всегда " +
+        "192.168.0.10:35000. Если SSM не отвечает — стандартный OBD-II."
+    else -> "Простой USB KKL (VAG-COM 409.1, CH340/FTDI), K+CAN Commander или Tactrix OpenPort 1.3. Только K-Line."
+}
 private val gearboxes = listOf("at" to "Автомат (АКПП)", "mt" to "Механика")
 private val buses = listOf("auto" to "Авто", "kline" to "K-Line", "can" to "CAN")
 
@@ -60,6 +77,11 @@ fun CarAdapterSettings() {
     val msg by Repo.linkMessage.collectAsState()
     val init by Repo.ecuInit.collectAsState()
     val polled by Repo.pollAddresses.collectAsState()
+    val obdMode by Repo.obdMode.collectAsState()
+    val found by Repo.adapterFound.collectAsState()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var wifiHost by remember { mutableStateOf(s.wifiHost) }
+    var saved by remember { mutableStateOf("") }
     val scale by Repo.uiScale.collectAsState()
     var adapter by remember { mutableStateOf(s.adapter) }
     var bus by remember { mutableStateOf(s.bus) }
@@ -164,22 +186,19 @@ fun CarAdapterSettings() {
         Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
             PanelTitle(Lucide.Usb, "Адаптер")
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 adapters.forEach { (k, l) -> Chip(l, adapter == k, { adapter = k; s.adapter = k }) }
             }
             Spacer(Modifier.height(6.dp))
-            T(
-                when (adapter) {
-                    "op2" -> "Tactrix OpenPort 2.0 или китайский клон. Умеет K-Line и CAN."
-                    "elm_bt" -> "Bluetooth-свисток ELM327 (β). CAN работает (SH 2009+ и новее). K-Line только у оригинальных " +
-                        "ELM327 v1.4+, многие клоны не умеют. Данные обновляются примерно раз в секунду."
-                    else -> "Простой USB KKL (VAG-COM 409.1, CH340/FTDI) или Tactrix OpenPort 1.3. Только K-Line."
-                },
-                12.sp, C.Sub,
-            )
-            if (adapter == "elm_bt") {
+            T(adapterNote(adapter), 12.sp, C.Sub)
+            if (adapter == "elm_bt" || adapter == "auto") {
                 Spacer(Modifier.height(10.dp))
+                if (adapter == "auto") T("Bluetooth-адаптер (не обязательно: в «Авто» подойдёт любой сопряжённый OBD/ELM/V-LINK)", 12.sp, C.Sub)
                 BluetoothPicker()
+            }
+            if (adapter == "elm_wifi" || adapter == "auto") {
+                Spacer(Modifier.height(10.dp))
+                TextBox("Адрес Wi-Fi адаптера (IP:порт)", wifiHost) { wifiHost = it; s.wifiHost = it.trim() }
             }
             Spacer(Modifier.height(14.dp))
             val multiBus = adapter != "kkl"
@@ -198,18 +217,43 @@ fun CarAdapterSettings() {
             )
             Spacer(Modifier.height(14.dp))
             InfoLine("Связь", msg)
+            if (found.isNotEmpty()) InfoLine("Адаптер", found)
             InfoLine("SSM ID / ROM ID", init?.let { "${it.ssmId} / ${it.romId}" } ?: "—")
-            InfoLine("Параметров опрашивается", if (polled > 0) "$polled из 23" else "—")
+            InfoLine("Параметров опрашивается", when {
+                polled <= 0 -> "—"
+                obdMode -> "$polled (OBD-II)"
+                else -> "$polled (SSM)"
+            })
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     T("Журнал обмена (для тестов)", 15.sp)
-                    T("Пишет всё, что идёт через адаптер, в ${SsmTrace.path ?: "logs/ssm_trace.txt"}. Пришлите файл, если не работает.", 11.sp, C.Sub)
+                    T("Последние минуты обмена с адаптером приложение помнит всегда: если что-то не работает, нажмите " +
+                        "«Отправить журнал» (Telegram, почта…) или сохраните его в Загрузки. Переключатель дополнительно " +
+                        "пишет всё в файл ${SsmTrace.path ?: "logs/ssm_trace.txt"}.", 11.sp, C.Sub)
                 }
                 Switch(trace, { trace = it; s.traceEnabled = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
             }
             Spacer(Modifier.height(8.dp))
-            ActionButton("Очистить журнал", true) { SsmTrace.clear() }
+            fun header() = "Машина: ${s.carModel} «${s.carTitle} ${s.carSub}», коробка ${s.gearbox}; адаптер ${s.adapter}, " +
+                "шина ${s.bus}; найден: ${found.ifEmpty { "—" }}; связь: $msg; ROM ${init?.romId ?: "—"}"
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) {
+                    ActionButton("Отправить журнал", true) {
+                        runCatching { SsmTrace.share(ctx, header()) }.onFailure {
+                            saved = SsmTrace.saveToDownloads(ctx, header())?.let { p -> "Отправить не вышло, сохранено: $p" } ?: "Не удалось"
+                        }
+                    }
+                }
+                Box(Modifier.weight(1f)) {
+                    ActionButton("Сохранить в Загрузки", true) {
+                        saved = SsmTrace.saveToDownloads(ctx, header())?.let { p -> "Сохранено: $p" } ?: "Не удалось сохранить"
+                    }
+                }
+            }
+            if (saved.isNotEmpty()) { Spacer(Modifier.height(4.dp)); T(saved, 11.sp, C.Sub) }
+            Spacer(Modifier.height(8.dp))
+            ActionButton("Очистить журнал", true) { SsmTrace.clear(); saved = "" }
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -258,9 +302,11 @@ fun FirstRunSetup(onDone: () -> Unit) {
             Spacer(Modifier.height(14.dp))
             T("Адаптер", 15.sp)
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 adapters.forEach { (k, l) -> Chip(l, adapter == k, { adapter = k }) }
             }
+            Spacer(Modifier.height(4.dp))
+            T(if (adapter == "auto") "Не знаете, какой у вас адаптер, — оставьте «Авто»." else adapterNote(adapter), 12.sp, C.Sub)
             Spacer(Modifier.height(18.dp))
             ActionButton("Готово", true) {
                 s.applyModel(CarModels.byId(model))
@@ -356,9 +402,9 @@ private fun ColourPicker(start: Int, onApply: (Int) -> Unit) {
 @Composable
 private fun InfoLine(k: String, v: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        T(k, 13.sp, C.Sub, modifier = Modifier.weight(1f))
+        T(k, 13.sp, C.Sub, modifier = Modifier.width(180.dp))
         Spacer(Modifier.width(8.dp))
-        T(v, 13.sp)
+        T(v, 13.sp, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
     }
 }
 

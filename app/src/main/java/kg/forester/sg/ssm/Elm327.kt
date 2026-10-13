@@ -17,10 +17,17 @@ class Elm327(private val input: InputStream, private val output: OutputStream, p
         private set
 
     fun open() {
+        // wake it up and let the answer to the empty line (a prompt, "?" or a repeat) arrive, however slow the link
         output.write("\r".toByteArray()); output.flush()
-        Thread.sleep(200)
+        val deadline = System.currentTimeMillis() + 1500
+        while (System.currentTimeMillis() < deadline) {
+            if (input.available() > 0) { if (input.read() == '>'.code) break } else Thread.sleep(10)
+        }
+        Thread.sleep(50)
         drain()
-        version = cmd("ATZ", 4000).lines().lastOrNull { it.contains("ELM", true) }?.trim() ?: "?"
+        version = cmd("ATZ", 4000).lines().lastOrNull { it.contains("ELM", true) || it.contains("STN", true) }?.trim() ?: "?"
+        Thread.sleep(100) // some clones print a second banner after the reset
+        drain()
         cmd("ATE0"); cmd("ATL0"); cmd("ATS0")
         cmd("ATAT1") // adaptive timing
         cmd("ATST FF") // wait up to ~1 s for an answer
@@ -29,6 +36,7 @@ class Elm327(private val input: InputStream, private val output: OutputStream, p
     /** Sends one line and returns everything up to the prompt, without the prompt. */
     @Synchronized
     fun cmd(line: String, timeoutMs: Long = 2500): String {
+        drain() // a late or unasked-for answer must not be taken for this one's
         SsmTrace.log(">> $line")
         output.write((line + "\r").toByteArray(Charsets.US_ASCII))
         output.flush()
@@ -53,7 +61,9 @@ class Elm327(private val input: InputStream, private val output: OutputStream, p
     }
 
     private fun drain() {
-        while (input.available() > 0) input.read()
+        var stale = 0
+        while (input.available() > 0) { input.read(); stale++ }
+        if (stale > 0) SsmTrace.log("(dropped $stale stale bytes)")
     }
 
     fun close() {
@@ -67,8 +77,10 @@ class Elm327(private val input: InputStream, private val output: OutputStream, p
 
         fun hex(b: ByteArray) = b.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
 
+        /** Hex text to bytes; anything that is not hex (an "OK", a message) gives an empty array. */
         fun bytes(h: String): ByteArray {
             val s = h.filter { it.isLetterOrDigit() }
+            if (s.any { it !in "0123456789ABCDEFabcdef" }) return ByteArray(0)
             return ByteArray(s.length / 2) { i -> s.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
         }
     }
@@ -105,9 +117,9 @@ class ElmCanTransport(private val elm: Elm327) : SsmTransport {
         if (lines.any { it.length > 2 && it[1] == ':' }) {
             val len = lines.first().takeIf { !it.contains(':') }?.toIntOrNull(16) ?: return null
             val data = lines.filter { it.contains(':') }.joinToString("") { it.substringAfter(':') }
-            return Elm327.bytes(data).copyOf(len)
+            return Elm327.bytes(data).takeIf { it.size >= len }?.copyOf(len)
         }
-        return Elm327.bytes(lines.first())
+        return Elm327.bytes(lines.first()).takeIf { it.isNotEmpty() }
     }
 
     override fun close() {}

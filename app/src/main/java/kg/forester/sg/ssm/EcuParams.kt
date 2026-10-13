@@ -27,6 +27,8 @@ data class EcuSnapshot(
     /** Fuel level sender, only on ECUs that report it (not the SG). */
     val fuelSensorV: Float? = null,
     val fuelSensorOhm: Float? = null,
+    /** Fuel level in percent of the tank, from OBD-II (PID 2F). */
+    val fuelLevelPct: Float? = null,
 ) {
     val afr: Float? get() = lambda?.let { it * 14.7f }
 

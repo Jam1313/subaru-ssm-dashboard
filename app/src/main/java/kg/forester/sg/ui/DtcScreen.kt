@@ -43,6 +43,7 @@ import kg.forester.sg.ssm.EcuInit
 import kg.forester.sg.ssm.SsmClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
@@ -98,6 +99,25 @@ object DtcRepo {
         }
     }
 
+    /**
+     * Standard OBD-II codes (when the car is read without SSM): stored ones count as current and memorized,
+     * pending ones as current only. Descriptions come from the SSM table where the code is the same.
+     */
+    suspend fun readObd(ctx: Context): List<DtcHit>? {
+        val (stored, pending) = withObd { it.readDtcs() } ?: return null
+        val known = ecuDefs(ctx).associateBy { it.code }
+        fun def(code: String) = known[code] ?: DtcDef(code, "", 0, 0, 0)
+        return stored.map { DtcHit(def(it), current = true, memorized = true) } +
+            (pending - stored.toSet()).map { DtcHit(def(it), current = true, memorized = false) }
+    }
+
+    suspend fun clearObd(): Boolean = withObd { it.clearDtcs() } == true
+
+    private suspend fun <T> withObd(block: (kg.forester.sg.ssm.Obd2) -> T): T? = EcuLink.mutex.withLock {
+        val o = EcuLink.obd ?: return@withLock null
+        runCatching { block(o) }.getOrNull()
+    }
+
     /** SSM2 "clear memory": write 0x40 to 0x000060 (also resets learned values). */
     suspend fun clear(dest: Int): Boolean = EcuLink.use { it.write(0x000060, 0x40, dest) } != null
 }
@@ -109,7 +129,9 @@ fun DtcScreen() {
     val link by Repo.link.collectAsState()
     val ecuInit by Repo.ecuInit.collectAsState()
     val tcuInit by Repo.tcuInit.collectAsState()
+    val obdMode by Repo.obdMode.collectAsState()
     var unitTcu by remember { mutableStateOf(false) }
+    if (obdMode && unitTcu) unitTcu = false
     val init = if (unitTcu) tcuInit else ecuInit
     val dest = if (unitTcu) SsmClient.TCU else SsmClient.ECU
     val defs = if (unitTcu) DtcRepo.tcuDefs(ctx, tcuInit) else DtcRepo.ecuDefs(ctx)
@@ -121,11 +143,11 @@ fun DtcScreen() {
     fun readNow() {
         busy = true; status = "Чтение…"
         scope.launch {
-            val r = withContext(Dispatchers.IO) { DtcRepo.read(defs, dest) }
+            val r = withContext(Dispatchers.IO) { if (obdMode) DtcRepo.readObd(ctx) else DtcRepo.read(defs, dest) }
             hits = r
             status = when {
                 r == null -> "Не удалось прочитать (нет связи с ЭБУ)"
-                defs.isEmpty() -> "Таблица кодов ошибок не загружена"
+                !obdMode && defs.isEmpty() -> "Таблица кодов ошибок не загружена"
                 r.isEmpty() -> "Ошибок нет"
                 else -> "Найдено: ${r.size}"
             }
@@ -139,13 +161,16 @@ fun DtcScreen() {
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("Двигатель", !unitTcu, { unitTcu = false; hits = null; status = "Нажмите «Прочитать ошибки»" }, modifier = Modifier.weight(1f))
-                Chip("АКПП", unitTcu, { unitTcu = true; hits = null; status = "Нажмите «Прочитать ошибки»" }, modifier = Modifier.weight(1f))
+                Chip("АКПП", unitTcu, {
+                    if (!obdMode) { unitTcu = true; hits = null; status = "Нажмите «Прочитать ошибки»" }
+                }, modifier = Modifier.weight(1f))
             }
             Spacer(Modifier.height(12.dp))
             T("Связь: " + if (link == LinkState.CONNECTED) "есть" else "нет", 14.sp, if (link == LinkState.CONNECTED) C.Green else C.Orange)
             T("SSM ID: ${init?.ssmId ?: "—"}", 13.sp, C.Sub)
             T("ROM ID: ${init?.romId ?: "—"}", 13.sp, C.Sub)
-            T("Кодов в таблице: ${defs.size}", 13.sp, C.Sub)
+            if (obdMode) T("Режим OBD-II: стандартные коды, АКПП недоступна", 13.sp, C.Sub)
+            else T("Кодов в таблице: ${defs.size}", 13.sp, C.Sub)
             Spacer(Modifier.height(20.dp))
             ActionButton("Прочитать ошибки", !busy) { readNow() }
             Spacer(Modifier.height(10.dp))
@@ -188,7 +213,7 @@ fun DtcScreen() {
                 TextButton({
                     confirmClear = false; busy = true; status = "Сброс…"
                     scope.launch {
-                        val ok = withContext(Dispatchers.IO) { DtcRepo.clear(dest) }
+                        val ok = withContext(Dispatchers.IO) { if (obdMode) DtcRepo.clearObd() else DtcRepo.clear(dest) }
                         status = if (ok) "Команда сброса принята. Выключите зажигание на 5–10 секунд и включите снова, затем прочитайте ошибки." else "Сброс не удался"
                         busy = false
                     }

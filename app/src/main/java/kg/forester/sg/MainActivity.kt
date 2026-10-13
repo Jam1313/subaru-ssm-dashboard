@@ -75,6 +75,7 @@ enum class Screen(val title: String, val icon: ImageVector) {
     Gearbox("АКПП", Lucide.Cog),
     Battery("АКБ", Lucide.BatteryCharging),
     Dtc("Ошибки", Lucide.TriangleAlert),
+    Sensors("Датчики", Lucide.ListChecks),
     Log("Лог", Lucide.FileText),
     Apps("Приложения", Lucide.LayoutGrid),
     Settings("Настройки", Lucide.SlidersHorizontal),
@@ -282,6 +283,7 @@ fun App() {
                     Screen.Gearbox -> kg.forester.sg.ui.TransmissionScreen()
                     Screen.Battery -> kg.forester.sg.ui.BatteryScreen()
                     Screen.Dtc -> DtcScreen()
+                    Screen.Sensors -> kg.forester.sg.ui.SensorsScreen()
                     Screen.Log -> LogScreen()
                     Screen.Apps -> kg.forester.sg.ui.AppsScreen()
                     Screen.Settings -> SettingsScreen()

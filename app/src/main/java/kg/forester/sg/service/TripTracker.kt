@@ -140,7 +140,10 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
             pendingFuel += dFuel // written to the settings every 30 s, not 4 times a second (flash wear)
         }
         addToBucket(now, dFuel, dKm)
-        if (e.fuelSensorV != null || e.fuelSensorOhm != null) {
+        if (e.fuelLevelPct != null && s.tankL > 0) {
+            // OBD-II gives the level in percent already
+            sensorLeftL = e.fuelLevelPct / 100.0 * s.tankL
+        } else if (e.fuelSensorV != null || e.fuelSensorOhm != null) {
             val known = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL - pendingFuel).coerceAtLeast(0.0) else null
             sensorLeftL = sensorCal.process(e.fuelSensorV, e.fuelSensorOhm, known, speed < 1, s.tankL, now)
         }
