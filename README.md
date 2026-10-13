@@ -169,6 +169,7 @@ Root **не нужен**. Он используется только по жел
 Поддерживаемые USB-чипы (через [usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android)):
 - **CH340 / CH341** (проверено: `1a86:7523`);
 - FTDI FT232;
+- **Tactrix OpenPort 1.3** (M/S/U, `0403:CC48`–`CC4A`): работает как KKL-кабель, в настройках выбери «KKL»;
 - Prolific PL2303;
 - Silicon Labs CP210x.
 

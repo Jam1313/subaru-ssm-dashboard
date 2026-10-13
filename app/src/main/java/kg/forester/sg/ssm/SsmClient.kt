@@ -108,15 +108,26 @@ abstract class KLineTransport : SsmTransport {
     }
 }
 
-/** Plain USB KKL cable (CH340/FTDI/PL2303/CP210x): the K-line is the serial port itself, 4800 8N1. */
-class KklTransport(private val port: UsbSerialPort) : KLineTransport() {
-    override val name = "KKL, K-Line"
+/** Tactrix OpenPort 1.3 (M, S and U versions): an FTDI K-line cable with Tactrix product ids. */
+object OpenPort13 {
+    const val VID = 0x0403
+    val PIDS = intArrayOf(0xCC48, 0xCC49, 0xCC4A)
+
+    fun matches(vid: Int, pid: Int) = vid == VID && pid in PIDS
+}
+
+/**
+ * Plain USB KKL cable (CH340/FTDI/PL2303/CP210x) or OpenPort 1.3: the K-line is the serial port itself, 4800 8N1.
+ * The OpenPort 1.3 gets RTS cleared, as RomRaider does with it.
+ */
+class KklTransport(private val port: UsbSerialPort, private val openPort13: Boolean = false) : KLineTransport() {
+    override val name = if (openPort13) "OpenPort 1.3, K-Line" else "KKL, K-Line"
     private var io: SerialInputOutputManager? = null
 
     fun open() {
         port.setParameters(4800, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
         runCatching { port.dtr = true }
-        runCatching { port.rts = true }
+        runCatching { port.rts = !openPort13 }
         io = SerialInputOutputManager(port, object : SerialInputOutputManager.Listener {
             override fun onNewData(data: ByteArray) = onBytes(data)
             override fun onRunError(e: Exception) {

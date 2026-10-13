@@ -9,6 +9,10 @@
     <usb-device vendor-id="1659" product-id="8963" />
     <!-- CP210x -->
     <usb-device vendor-id="4292" product-id="60000" />
+    <!-- Tactrix OpenPort 1.3 M / S / U (FTDI) -->
+    <usb-device vendor-id="1027" product-id="52296" />
+    <usb-device vendor-id="1027" product-id="52297" />
+    <usb-device vendor-id="1027" product-id="52298" />
     <!-- Tactrix OpenPort 2.0 and clones -->
     <usb-device vendor-id="1027" product-id="52299" />
     <usb-device vendor-id="1027" product-id="52300" />

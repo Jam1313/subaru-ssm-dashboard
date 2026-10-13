@@ -173,7 +173,7 @@ fun CarAdapterSettings() {
                     "op2" -> "Tactrix OpenPort 2.0 или китайский клон. Умеет K-Line и CAN."
                     "elm_bt" -> "Bluetooth-свисток ELM327 (β). CAN работает (SH 2009+ и новее). K-Line только у оригинальных " +
                         "ELM327 v1.4+, многие клоны не умеют. Данные обновляются примерно раз в секунду."
-                    else -> "Простой USB KKL (VAG-COM 409.1, CH340/FTDI). Только K-Line."
+                    else -> "Простой USB KKL (VAG-COM 409.1, CH340/FTDI) или Tactrix OpenPort 1.3. Только K-Line."
                 },
                 12.sp, C.Sub,
             )

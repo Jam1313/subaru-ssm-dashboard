@@ -20,7 +20,9 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
 import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
+import com.hoho.android.usbserial.driver.FtdiSerialDriver
 import com.hoho.android.usbserial.driver.ProbeTable
+import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import kg.forester.sg.MainActivity
 import kg.forester.sg.R
@@ -33,6 +35,7 @@ import kg.forester.sg.ssm.Elm327
 import kg.forester.sg.ssm.ElmCanTransport
 import kg.forester.sg.ssm.ElmKLineTransport
 import kg.forester.sg.ssm.KklTransport
+import kg.forester.sg.ssm.OpenPort13
 import kg.forester.sg.ssm.Op2CanTransport
 import kg.forester.sg.ssm.Op2KLineTransport
 import kg.forester.sg.ssm.OpenPort2
@@ -59,9 +62,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Stock KKL chips plus the OpenPort 2.0 (a CDC-ACM device with Tactrix ids). */
+/** Stock KKL chips plus the Tactrix cables: OpenPort 2.0 (CDC-ACM) and OpenPort 1.3 (FTDI), both with their own ids. */
 private val adapterProber = UsbSerialProber(UsbSerialProber.getDefaultProbeTable().apply {
     OpenPort2.PIDS.forEach { addProduct(OpenPort2.VID, it, CdcAcmSerialDriver::class.java) }
+    OpenPort13.PIDS.forEach { addProduct(OpenPort13.VID, it, FtdiSerialDriver::class.java) }
 })
 
 /** Shared access to the ECU for one-off requests (DTC read/clear) between poll cycles. */
@@ -133,7 +137,11 @@ class EcuService : Service() {
             tracker.tick(System.currentTimeMillis())
             val wantOp2 = Repo.settings.adapter == "op2"
             val drivers = adapterProber.findAllDrivers(usb)
-            val driver = drivers.firstOrNull { OpenPort2.matches(it.device.vendorId, it.device.productId) == wantOp2 }
+            fun isOp2(d: UsbSerialDriver) = OpenPort2.matches(d.device.vendorId, d.device.productId)
+            fun isOp13(d: UsbSerialDriver) = OpenPort13.matches(d.device.vendorId, d.device.productId)
+            // "OpenPort" picked for an OpenPort 1.3: it is a K-line cable like a KKL, just use it as one
+            val driver = drivers.firstOrNull { isOp2(it) == wantOp2 }
+                ?: drivers.firstOrNull { wantOp2 && isOp13(it) }
             if (driver == null) {
                 Repo.link.value = LinkState.NO_CABLE
                 val other = drivers.firstOrNull()
@@ -170,12 +178,12 @@ class EcuService : Service() {
             var op2: OpenPort2? = null
             try {
                 port.open(conn)
-                if (wantOp2) {
+                if (isOp2(driver)) {
                     op2 = OpenPort2(port).also { it.open() }
                     SsmTrace.log("OpenPort firmware ${op2.firmware}")
                     session { kline -> openOp2(op2, kline) }
                 } else {
-                    session { _ -> KklTransport(port).also { it.open() } }
+                    session(klineOnly = true) { _ -> KklTransport(port, openPort13 = isOp13(driver)).also { it.open() } }
                 }
             } catch (e: Exception) {
                 SsmTrace.log("error: $e")
@@ -289,9 +297,9 @@ class EcuService : Service() {
      * One adapter session: find the bus the ECU answers on, init it, then poll until the cable or ECU goes away.
      * [open] makes a transport for the K-line (true) or CAN (false).
      */
-    private suspend fun session(open: (Boolean) -> SsmTransport) {
+    private suspend fun session(klineOnly: Boolean = false, open: (Boolean) -> SsmTransport) {
         val buses = when {
-            Repo.settings.adapter == "kkl" -> listOf(true) // a KKL cable has no CAN
+            klineOnly -> listOf(true) // a KKL cable has no CAN
             Repo.settings.bus == "kline" -> listOf(true)
             Repo.settings.bus == "can" -> listOf(false)
             else -> listOf(true, false)
