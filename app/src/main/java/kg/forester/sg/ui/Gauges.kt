@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.asImageBitmap
+import com.composables.icons.lucide.ImagePlus
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -80,6 +83,7 @@ data class DialStyle(
     val hub: Color? = null,            // needle cap; null = rim colour
     val needleWidth: Float = 0.022f,   // of the radius
     val shortNeedle: Boolean = false,  // only the tip near the scale (Hot Pursuit)
+    val image: String? = null,         // user picture under the face (see GaugeImages)
 )
 
 private val WarmLcd = Readout(Color(0xFFB9A46A), Color(0xFF1B1608), Color(0x2A1B1608), Color(0xFF6B5A2A))
@@ -248,7 +252,19 @@ val DialStyles = listOf(
     ),
 )
 
-fun dialStyle(id: String) = DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()
+/** Look for a user picture: the picture shows through a dark vignette, neon pink/cyan scale for contrast. */
+private val PhotoStyle = DialStyle(
+    "photo", "Своя картинка",
+    face = listOf(Color(0x80000000), Color(0x26000000), Color(0x99000000)), rim = Color(0xFFFF4FD8), track = Color(0x55FFFFFF),
+    arc = listOf(Color(0xFFFF4FD8), Color(0xFF22D3EE), Color(0xFFFF4FD8)), red = Color(0xFFFF3B3B),
+    tickMajor = Color.White, tickMinor = Color(0xCCFFFFFF), numbers = Color.White,
+    value = Color.White, unit = Color(0xFFFFC2F2), needle = Color(0xFF22D3EE), glow = Color(0xFFFF4FD8),
+)
+
+/** Style by id; "photo:<file>" is the user-picture look with that picture. */
+fun dialStyle(id: String) =
+    if (id.startsWith("photo:")) PhotoStyle.copy(id = id, image = id.removePrefix("photo:"))
+    else DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()
 
 private val SegmentFont = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(kg.forester.sg.R.font.dseg7_bold_italic))
 
@@ -265,8 +281,10 @@ fun Dial(
 ) {
     val v by animateFloatAsState((value ?: min).coerceIn(min, max), tween(240), label = "dial")
     val text = value?.let { format.format(it) } ?: "—"
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val photo = remember(style.image) { style.image?.let { kg.forester.sg.data.GaugeImages.bitmap(ctx, it)?.asImageBitmap() } }
     Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style) }
+        Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style, photo) }
         val ro = style.readout
         if (ro != null) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -319,7 +337,10 @@ private fun ReadoutBox(text: String, ro: Readout, width: androidx.compose.ui.uni
 }
 
 /** The scale runs [min]..[max]; the lit arc starts at 0 when the scale has both signs (trims, timing). */
-private fun DrawScope.drawDial(v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle) {
+private fun DrawScope.drawDial(
+    v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle,
+    photo: androidx.compose.ui.graphics.ImageBitmap? = null,
+) {
     val r = size.minDimension / 2f * (if (st.outer != null) 0.9f else 1f)
     val c = center
     val sweep = st.sweep
@@ -343,6 +364,16 @@ private fun DrawScope.drawDial(v: Float, min: Float, max: Float, step: Float, la
     // face
     if (!st.minimal) {
         st.glow?.let { drawCircle(Brush.radialGradient(listOf(it.copy(alpha = 0.22f), Color.Transparent), c, r * 1.08f), r * 1.08f, c) }
+        if (photo != null) {
+            val clip = androidx.compose.ui.graphics.Path().apply { addOval(androidx.compose.ui.geometry.Rect(c, r)) }
+            drawContext.canvas.save()
+            drawContext.canvas.clipPath(clip)
+            drawImage(
+                photo, dstOffset = androidx.compose.ui.unit.IntOffset((c.x - r).toInt(), (c.y - r).toInt()),
+                dstSize = androidx.compose.ui.unit.IntSize((r * 2).toInt(), (r * 2).toInt()),
+            )
+            drawContext.canvas.restore()
+        }
         drawCircle(Brush.radialGradient(st.face, c, r), r, c)
         facePattern(st.pattern, st.patternColor, c, r)
         if (st.rim.alpha > 0f) drawCircle(st.rim, r - 1.5f, c, style = Stroke(if (st.glow != null) 2.5f else 1.5f))
@@ -530,7 +561,7 @@ fun DialStylePicker(which: String, modifier: Modifier, onClose: () -> Unit) {
     val s = kg.forester.sg.data.Repo.settings
     StylePicker(
         if (which == "tach") "Дизайн тахометра" else "Дизайн спидометра",
-        if (which == "tach") s.tachStyle else s.speedoStyle, plain = null, modifier,
+        if (which == "tach") s.tachStyle else s.speedoStyle, plain = null, modifier, target = which,
         preview = { st, m ->
             if (which == "tach") Dial(3600f, 7000f, 1000f, 1000f, "об/мин", null, 6000f, m, st)
             else Dial(96f, 200f, 20f, 1f, "км/ч", null, null, m, st)
@@ -540,16 +571,27 @@ fun DialStylePicker(which: String, modifier: Modifier, onClose: () -> Unit) {
     )
 }
 
+private const val PICK = "pick"
+
+/** Opens the gallery for a gauge picture; the result is applied by GaugeImages.onPicked (see MainActivity). */
+val LocalPickGaugeImage = androidx.compose.runtime.staticCompositionLocalOf<(target: String) -> Unit> { {} }
+
 /**
- * Pop-up with a live [preview] of every gauge design; [plain] (if given) is the name of the card's normal look,
+ * Pop-up with a live [preview] of every gauge design, plus "own picture"; [plain] (if given) is the name of the card's normal look,
  * offered first and picked as "".
  */
 @Composable
 fun StylePicker(
-    title: String, current: String, plain: String?, modifier: Modifier,
+    title: String, current: String, plain: String?, modifier: Modifier, target: String,
     preview: @Composable (DialStyle, Modifier) -> Unit, onPick: (String) -> Unit, onClose: () -> Unit,
 ) {
-    androidx.compose.ui.window.Popup(onDismissRequest = onClose, alignment = Alignment.Center) {
+    val pickPicture = LocalPickGaugeImage.current
+    // a dialog, not a Popup: a popup anchored near the top of the screen gets shifted on screen while its touch
+    // area stays put, so taps landed on the wrong design
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
         Column(
             modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
                 .background(C.Card).border(1.dp, C.Purple, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
@@ -559,16 +601,19 @@ fun StylePicker(
         ) {
             T(title, 16.sp, weight = FontWeight.SemiBold)
             androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
-            val options: List<DialStyle?> = (if (plain != null) listOf(null) else emptyList<DialStyle?>()) + DialStyles
+            // "" = the card's plain look, PICK = choose a picture; a picture already in use is offered too
+            val options: List<String> = (if (plain != null) listOf("") else emptyList()) + DialStyles.map { it.id } +
+                listOfNotNull(current.takeIf { it.startsWith("photo:") }) + PICK
             options.chunked(5).forEach { row ->
                 androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-                    row.forEach { st ->
-                        val on = (st?.id ?: "") == current
+                    row.forEach { id ->
+                        val st = if (id.isEmpty() || id == PICK) null else dialStyle(id)
+                        val on = id == current
                         Column(
                             Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
                                 .background(if (on) C.Purple.copy(alpha = 0.25f) else Color.Transparent)
                                 .border(if (on) 2.dp else 1.dp, if (on) C.Purple else C.Border, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                                .clickable { onPick(st?.id ?: ""); onClose() }
+                                .clickable { if (id == PICK) pickPicture(target) else onPick(id); onClose() }
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
@@ -576,10 +621,18 @@ fun StylePicker(
                                 Modifier.size(112.dp).background(Color(0xFF0B0F1C), androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (st != null) preview(st, Modifier.fillMaxSize().padding(4.dp))
-                                else T("— — —", 22.sp, C.Violet, FontWeight.Bold)
+                                when {
+                                    st != null -> preview(st, Modifier.fillMaxSize().padding(4.dp))
+                                    id == PICK -> androidx.compose.material3.Icon(
+                                        com.composables.icons.lucide.Lucide.ImagePlus, null, tint = C.Violet, modifier = Modifier.size(40.dp),
+                                    )
+                                    else -> T("— — —", 22.sp, C.Violet, FontWeight.Bold)
+                                }
                             }
-                            T(st?.name ?: plain ?: "", 12.sp, if (on) C.Text else C.Sub, maxLines = 1)
+                            T(
+                                when { id == PICK -> "Своя картинка…"; st != null -> st.name; else -> plain ?: "" },
+                                12.sp, if (on) C.Text else C.Sub, maxLines = 1,
+                            )
                         }
                     }
                 }

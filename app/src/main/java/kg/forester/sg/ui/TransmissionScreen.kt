@@ -53,7 +53,7 @@ val TcuCards: CardNames = linkedMapOf(
     "chartWheels" to ("График: скорость колёс" to Lucide.ChartLine),
 )
 
-private val TcuEdit = BoardEdit(TcuBoard, gaugeable = setOf("atf", "lockup", "line"))
+private val TcuEdit = BoardEdit(TcuBoard, gaugeable = setOf("atf", "lockup", "line"), rowWeight = ::tcuRowWeight)
 
 /** Row heights: big cards 1.1, charts 1.2, small tiles 0.55 (or 1.1 once shown as a needle). */
 private fun tcuRowWeight(t: TileCfg) = when {

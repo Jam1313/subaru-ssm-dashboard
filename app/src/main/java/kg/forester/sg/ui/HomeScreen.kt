@@ -81,10 +81,9 @@ fun HomeScreen() {
     val styles by Repo.dialStyles.collectAsState()
     val longPress = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { edit = true }) }
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (edit) HomeEditBar { edit = false }
-        // the "cluster": tachometer, the car on the road, speedometer
-        if (clusterW > 0f) Panel(Modifier.weight(clusterW).fillMaxWidth().then(longPress), padding = 0.dp) {
+    // the "cluster": tachometer, the car on the road, speedometer
+    val cluster: @Composable (Modifier) -> Unit = { m ->
+        Panel(m.then(longPress), padding = 0.dp) {
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                 // dials as big as the block is tall, but never wider than ~27 % each; the car gets the room between
                 val d = minOf(maxHeight - 20.dp, (maxWidth - 28.dp) * 0.27f)
@@ -113,6 +112,25 @@ fun HomeScreen() {
                 else Box(Modifier.matchParentSize().border(2.dp, C.Purple, RoundedCornerShape(14.dp)))
             }
         }
+    }
+
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (edit) HomeEditBar { edit = false }
+        if (kg.forester.sg.data.HomeLayout.board.isFree(layout)) {
+            // free layout: the 3D block stays in its place as a background, the cards can go anywhere, over it too
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                Column(Modifier.fillMaxSize()) {
+                    if (clusterW > 0f) cluster(Modifier.weight(clusterW).fillMaxWidth())
+                    Spacer(Modifier.weight(3f))
+                }
+                FreeArea(
+                    HomeEdit, kg.forester.sg.data.HomeLayout.parse(layout).filter { it.on }, edit, HomeTileInfo, longPress,
+                    Modifier.fillMaxSize(), backgroundPress = false,
+                ) { t, m -> HomeTile(t.id, t.style, e, ts, gps, tcu, m) }
+            }
+            return@Column
+        }
+        if (clusterW > 0f) cluster(Modifier.weight(clusterW).fillMaxWidth())
         rows.forEach { row ->
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { t ->

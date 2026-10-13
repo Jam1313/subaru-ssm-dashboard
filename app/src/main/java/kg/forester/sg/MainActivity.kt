@@ -102,12 +102,23 @@ class MainActivity : ComponentActivity() {
         requestPermissions(perms.toTypedArray(), 1)
         EcuService.start(this)
         setContent {
-            ScaledDensity {
-                Box(Modifier.fillMaxSize()) {
-                    App()
-                    var setup by remember { mutableStateOf(!Repo.settings.setupDone) }
-                    if (setup) kg.forester.sg.ui.FirstRunSetup { setup = false }
-                    Splash()
+            // one gallery launcher for gauge pictures at the root, so the result survives the closed picker dialog
+            val pickGauge = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.GetContent()
+            ) { kg.forester.sg.data.GaugeImages.onPicked(this, it) }
+            androidx.compose.runtime.CompositionLocalProvider(
+                kg.forester.sg.ui.LocalPickGaugeImage provides { target ->
+                    kg.forester.sg.data.GaugeImages.setTarget(this, target)
+                    pickGauge.launch("image/*")
+                },
+            ) {
+                ScaledDensity {
+                    Box(Modifier.fillMaxSize()) {
+                        App()
+                        var setup by remember { mutableStateOf(!Repo.settings.setupDone) }
+                        if (setup) kg.forester.sg.ui.FirstRunSetup { setup = false }
+                        Splash()
+                    }
                 }
             }
         }

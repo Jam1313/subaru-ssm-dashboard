@@ -39,12 +39,12 @@ private fun niceScale(min: Float, max: Float): Triple<Float, Float, Float> {
     return Triple(floor(min / step) * step, ceil(max / step) * step, step)
 }
 
-/** [m] as a needle gauge in [style], as large as the card allows, with the card title and "i" on top. */
+/** [m] as a needle gauge in [style], as large as the card allows, with the card title and "i" on top; no card frame. */
 @Composable
 fun NeedleCard(m: CardValue, style: DialStyle, modifier: Modifier) {
     val (lo, hi, step) = niceScale(m.min, m.max)
     val div = if (hi >= 1000f) 1000f else 1f // rpm: numbers in thousands like the tachometer
-    Panel(modifier, padding = 8.dp) {
+    androidx.compose.foundation.layout.Column(modifier.padding(4.dp)) {
         CardTitle(m.icon, m.title, m.info)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Box(Modifier.padding(2.dp).aspectRatio(1f, matchHeightConstraintsFirst = maxHeight < maxWidth)) {

@@ -74,6 +74,7 @@ val DriveCards: CardNames = linkedMapOf(
 private val DriveEdit = BoardEdit(
     DriveBoard,
     gaugeable = setOf("pedal", "throttle", "boost", "load", "rpm", "avcs", "injDuty", "maf", "throttleMotor", "wgdc"),
+    rowWeight = ::driveRowWeight,
 )
 
 /** Row heights: gauges 0.9, charts 1.2, small tiles 0.55; a row with a needle gauge gets 1.3 so the dial is readable. */
