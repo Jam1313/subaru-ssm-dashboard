@@ -253,7 +253,9 @@ object RomRaider {
             forUnit(p.target) && p.kind == RrParam.Kind.STD && p.addr < 0 && p.expr != null && p.deps.all { it in ids }
         }
         val ext = if (tcu) emptyList() else byRom[init.romId.uppercase()].orEmpty().filter { it.expr != null }
-        return std + calculated + ext
+        // the driver's own addresses (engine unit only), for ROMs this base has no extended parameters for
+        val own = if (tcu) emptyList() else kg.forester.sg.data.CustomParams.list().map { it.toParam() }.filter { it.expr != null }
+        return std + calculated + ext + own
     }
 
     private fun capOk(p: RrParam, init: EcuInit) = p.capByte < 0 || init.supports(p.capByte, p.capBit)

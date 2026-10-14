@@ -475,40 +475,7 @@ private fun TopBar(screen: Screen) {
 }
 
 @Composable
-private fun BottomBar() {
-    val e by Repo.live.collectAsState()
-    val ts by Repo.trip.collectAsState()
-    val gps by Repo.gps.collectAsState()
-    val tank = Repo.settings.tankL
-    Row(
-        Modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(14.dp)).background(C.Card)
-            .border(1.dp, C.Border, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BottomItem(Lucide.Fuel, "Топливо", "${fmt(ts.rangeKm, 0)} км", if (tank > 0) ((ts.fuelLeftL ?: 0.0) / tank).toFloat() else null, C.Accent, Modifier.weight(1f))
-        BottomItem(Lucide.Thermometer, "Темп. ОЖ", "${e.coolantC ?: "—"}°C", ((e.coolantC ?: 0) / 110f), Brush.horizontalGradient(listOf(C.Blue, C.Violet)), Modifier.weight(1f))
-        BottomItem(Lucide.BatteryCharging, "Напряжение", "${fmt(e.batteryV?.toDouble())} V", (((e.batteryV ?: 10f) - 10f) / 5f), Brush.horizontalGradient(listOf(C.Green, C.Green)), Modifier.weight(1f))
-        BottomItem(Lucide.Wind, "Впуск", "${e.intakeC ?: "—"}°C", null, null, Modifier.weight(0.7f))
-        val alt = gps?.altitudeM ?: e.atmKpa?.let { 44330.0 * (1 - Math.pow(it / 101.325, 0.1903)) }
-        BottomItem(Lucide.Mountain, "Высота", "${fmt(alt, 0)} м", null, null, Modifier.weight(0.7f))
-    }
-}
-
-@Composable
-private fun BottomItem(icon: ImageVector, label: String, value: String, frac: Float?, brush: Brush?, modifier: Modifier) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = C.Sub, modifier = Modifier.size(26.dp))
-        Spacer(Modifier.width(10.dp))
-        Column {
-            T(label, 12.sp, C.Sub)
-            T(value, 16.sp, weight = FontWeight.SemiBold)
-        }
-        if (frac != null && brush != null && !frac.isNaN()) {
-            Spacer(Modifier.width(10.dp))
-            ProgressBar(frac, brush, Modifier.width(90.dp), 6.dp)
-        }
-    }
-}
+private fun BottomBar() = kg.forester.sg.ui.BottomStatusBar()
 
 @Composable
 private fun SubaruLogo(modifier: Modifier) {

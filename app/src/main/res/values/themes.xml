@@ -6,4 +6,6 @@
         <item name="android:navigationBarColor">@android:color/black</item>
     </style>
     <string name="app_name">Subaru Dashboard</string>
+    <string name="split_service_label">Subaru Dashboard: разделение экрана</string>
+    <string name="split_service_description">Нужна только для кнопок быстрого запуска «рядом»: открывает навигатор или другое приложение в половине экрана рядом с приборами без root. Служба не читает содержимое экрана.</string>
 </resources>

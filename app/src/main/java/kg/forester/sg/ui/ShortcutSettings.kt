@@ -60,6 +60,8 @@ fun ShortcutSettings() {
             PanelTitle(Lucide.LayoutGrid, "Кнопки быстрого запуска")
             Spacer(Modifier.height(4.dp))
             T("Появляются в боковой панели и внизу компактного режима. «Рядом» — открыть в половине экрана рядом с приборами.", 12.sp, C.Sub)
+            Spacer(Modifier.height(8.dp))
+            SplitServiceRow()
             Spacer(Modifier.height(10.dp))
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(items, key = { it.id }) { sc ->
@@ -204,4 +206,37 @@ private fun SmallIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, ena
         Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = if (enabled) C.Sub else C.Border, modifier = Modifier.size(18.dp)) }
+}
+
+/**
+ * «Рядом» without root needs our accessibility service (it only turns split screen on and off): its state and a
+ * button to the Android settings, re-checked when coming back from there.
+ */
+@Composable
+private fun SplitServiceRow() {
+    val ctx = LocalContext.current
+    var resumed by remember { mutableStateOf(0) }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) resumed++ }
+        owner.lifecycle.addObserver(o)
+        onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    val on = remember(resumed) { kg.forester.sg.service.SplitService.enabled(ctx) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            T("«Рядом» без root: " + if (on) "включено" else "выключено", 13.sp, if (on) C.Green else C.Orange)
+            T("Служба специальных возможностей «Subaru Dashboard: разделение экрана» только включает и выключает " +
+                "разделение экрана. Приборы встают в одну половину, приложение — в другую.", 11.sp, C.Sub)
+        }
+        if (!on) {
+            Spacer(Modifier.width(8.dp))
+            Chip("Включить", false, {
+                runCatching {
+                    ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            })
+        }
+    }
 }

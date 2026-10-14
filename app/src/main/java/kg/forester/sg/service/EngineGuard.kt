@@ -71,20 +71,24 @@ class EngineGuard {
     private val coolant = ArrayDeque<Pair<Long, Int>>()
     private var maintenanceChecked = 0L
     private var features = -1
+    private var custom = -1
     private var pendingHours = 0.0
 
     /** The RomRaider parameters the guard reads, chosen from what this ROM has (first match wins). */
     private fun chooseRoles(list: List<RrParam>) {
-        fun pick(vararg ids: String) = ids.firstNotNullOfOrNull { id -> list.firstOrNull { it.id == id } }
+        // the driver's own address for a role comes first: it is there because the base had none (or a wrong one)
+        val own = kg.forester.sg.data.CustomParams.roles()
+        fun pick(role: String, vararg ids: String) =
+            (listOfNotNull(own[role]) + ids).firstNotNullOfOrNull { id -> list.firstOrNull { it.id == id } }
         val knock = Repo.settings.feature("knock")
         roles = listOfNotNull(
-            pick("P90", "E31", "E96", "E111", "E1")?.takeIf { knock }?.let { "iam" to it },
-            pick("E39", "E94", "E102", "E10")?.takeIf { knock }?.let { "fbkc" to it },
-            pick("P91", "E41", "E95", "E101", "E12")?.takeIf { knock }?.let { "flkc" to it },
-            pick("E36", "E90", "E120", "E6")?.let { "target" to it },
-            pick("P122")?.let { "oil" to it },
-            pick("P172")?.let { "latG" to it },
-            pick("P171")?.let { "yaw" to it },
+            pick("iam", "P90", "E31", "E96", "E111", "E1")?.takeIf { knock }?.let { "iam" to it },
+            pick("fbkc", "E39", "E94", "E102", "E10")?.takeIf { knock }?.let { "fbkc" to it },
+            pick("flkc", "P91", "E41", "E95", "E101", "E12")?.takeIf { knock }?.let { "flkc" to it },
+            pick("target", "E36", "E90", "E120", "E6")?.let { "target" to it },
+            pick("oil", "P122")?.let { "oil" to it },
+            pick("latG", "P172")?.let { "latG" to it },
+            pick("yaw", "P171")?.let { "yaw" to it },
         ).toMap()
         Repo.internalWatch.value = roles.values.map { it.id }.toSet()
     }
@@ -100,8 +104,8 @@ class EngineGuard {
 
     fun process(e: EcuSnapshot, t: TcuSnapshot?, now: Long) {
         val list = Repo.rrAvailable.value
-        if (list !== avail || features != Repo.featureVersion.value) {
-            avail = list; features = Repo.featureVersion.value; chooseRoles(list)
+        if (list !== avail || features != Repo.featureVersion.value || custom != Repo.customVersion.value) {
+            avail = list; features = Repo.featureVersion.value; custom = Repo.customVersion.value; chooseRoles(list)
         }
         val s = Repo.settings
         val fKnock = s.feature("knock"); val fTurbo = s.feature("turbo"); val fWarm = s.feature("warmup")

@@ -603,7 +603,11 @@ object RefillLogic {
             // Litres put in since the previous full tank (this one + partial refills in between).
             val partials = Repo.db.refills().takeWhile { !it.full }.sumOf { it.liters }
             val actual = liters + partials
-            if (s.hadFullRefill && computed >= 20 && actual >= 15) {
+            if (s.hadFullRefill && computed >= 20 && actual >= 15 && actual / computed !in 0.5..2.0) {
+                // twice off is not a calibration error but bad data (e.g. a junk MAF reading counted as 250 l/h)
+                note = "Расчёт (${fmt(computed)} л) слишком далёк от факта (${fmt(actual)} л): похоже на сбой данных, " +
+                    "калибровка пропущена. Счёт начат заново с этого бака."
+            } else if (s.hadFullRefill && computed >= 20 && actual >= 15) {
                 // "Full" is never exactly full: only long intervals are trusted, one step is at most ±25 %
                 // and the coefficient as a whole stays within 0.7…1.4, so a bad refill can't run away.
                 val ratio = (actual / computed).coerceIn(0.8, 1.25)

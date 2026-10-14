@@ -2,6 +2,10 @@ package kg.forester.sg.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -357,10 +361,55 @@ fun SensorSlotCard(k: Int, info: String, m: Modifier) {
     val avail by Repo.rrAvailable.collectAsState()
     val values by Repo.rrValues.collectAsState()
     Repo.watchVersion.collectAsState().value
+    Repo.slotVersion.collectAsState().value
+    val chosen = Repo.settings.slot(k)
+    if (chosen.isNotEmpty()) {
+        val ind = Metrics.of(chosen, avail)
+        val v = ind?.read(rememberMetricCtx())
+        Card(m, ind?.icon ?: Lucide.ListChecks, ind?.title ?: chosen.removePrefix("rr:"), info) {
+            if (ind == null) T("Параметр появится, когда приложение подключится к машине", 11.sp, C.Sub, maxLines = 3)
+            else FitValue(ind.text(v), ind.unit, 30f, Modifier.fillMaxSize(), if (ind.warn(v)) C.Orange else androidx.compose.ui.graphics.Color.White)
+        }
+        return
+    }
     val ticked = avail.filter { it.id in Repo.settings.watchIds }
     val p = ticked.getOrNull(k - 1)
     Card(m, Lucide.ListChecks, p?.name ?: "Датчик $k", info) {
-        if (p == null) T("Отметьте параметр на экране «Датчики» — он появится здесь ($k-й по списку)", 11.sp, C.Sub, maxLines = 3)
+        if (p == null) T("Выберите показатель кнопкой со списком в режиме редактирования (долгое нажатие) " +
+            "или отметьте параметр на экране «Датчики» — $k-й по списку появится здесь", 11.sp, C.Sub, maxLines = 4)
         else FitValue(p.text(values[p.id]), p.unitsRu, 30f, Modifier.fillMaxSize())
+    }
+}
+
+/** Pick what the «Датчик [k]» card shows: any value of the app or a parameter ticked on «Датчики». */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun SlotPicker(k: Int, onClose: () -> Unit) {
+    val avail by Repo.rrAvailable.collectAsState()
+    Repo.slotVersion.collectAsState().value
+    val chosen = Repo.settings.slot(k)
+    androidx.compose.ui.window.Dialog(onClose, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier.width(760.dp).heightIn(max = 560.dp).clip(RoundedCornerShape(16.dp)).background(C.Card)
+                .border(1.dp, C.Border, RoundedCornerShape(16.dp)).padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T("Датчик $k: что показывать", 18.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Chip("По списку «Датчики»", chosen.isEmpty(), { Repo.settings.setSlot(k, "") })
+                Spacer(Modifier.width(8.dp))
+                Chip("Готово", true, onClose)
+            }
+            Spacer(Modifier.height(8.dp))
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Metrics.all(avail, Repo.settings.watchIds).groupBy { it.group }.forEach { (group, list) ->
+                    T(group, 12.sp, C.Sub, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        list.forEach { ind -> Chip(ind.title, ind.id == chosen, { Repo.settings.setSlot(k, ind.id) }, ind.icon) }
+                    }
+                }
+            }
+        }
     }
 }

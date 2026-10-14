@@ -73,15 +73,37 @@ object DtcRepo {
         out
     }
 
+    /** Every OBD-II-style code (engine and transmission share it); also the descriptions for plain OBD-II. */
     fun ecuDefs(ctx: Context) = load(ctx, "ssm_dtc.json")
 
-    /** TCU init byte 37 bit 7 selects Subaru 2-digit codes vs OBD-II codes. */
-    fun tcuDefs(ctx: Context, init: EcuInit?): List<DtcDef> {
-        val twoDigit = init?.supports(37, 7) ?: false
-        return load(ctx, if (twoDigit) "tcu_dtc_2digit.json" else "tcu_dtc_obd.json")
+    /**
+     * The codes [init]'s unit keeps, picked like FreeSSM (SSMFlagbyteDefinitionsInterface::setupDiagnosticCodes),
+     * the same way for the engine and the transmission: flag byte 37 bit 7 = Subaru 2-digit codes at 0x8E–0x97 /
+     * 0xA4–0xAD; otherwise OBD-II codes, each block only when its flag bit says the unit has it. Reading a block
+     * the unit does not have returns ordinary RAM: codes "in memory" with the check engine lamp off that never clear.
+     */
+    fun defs(ctx: Context, init: EcuInit): List<DtcDef> =
+        if (init.supports(37, 7)) load(ctx, "ssm_dtc_2digit.json")
+        else ecuDefs(ctx).filter { d -> obdBlockFlags(d.tmpAddr).any { (b, bit) -> init.supports(b, bit) } }
+
+    /** Flag bits (in [EcuInit.supports] numbering) that enable the OBD-II code block holding [tmp]. */
+    private fun obdBlockFlags(tmp: Int): List<Pair<Int, Int>> = when (tmp) {
+        in 0x8E..0xAD -> listOf(37 to 4, 37 to 6)
+        in 0xF0..0xF3 -> listOf(36 to 0)
+        in 0x123..0x12A -> listOf(47 to 7)
+        in 0x150..0x154 -> listOf(47 to 6)
+        in 0x160..0x164 -> listOf(47 to 5)
+        in 0x174..0x17A -> listOf(47 to 4)
+        in 0x1C1..0x1C6, in 0x20A..0x20D -> listOf(58 to 6)
+        in 0x263..0x267 -> listOf(58 to 5)
+        // blocks only RomRaider lists (0x2A6–0x2A9, 0x2B6): newest CAN ECUs, assumed to come with the 0x263 block
+        else -> listOf(58 to 5)
     }
 
-    /** Reads every status byte the table refers to (in chunks) and returns the set bits. */
+    /**
+     * Reads every status byte the table refers to (in chunks) and returns the set bits. A set bit no definition
+     * explains is shown as "???" with its address, like FreeSSM does: better a question than a silent miss.
+     */
     suspend fun read(defs: List<DtcDef>, dest: Int): List<DtcHit>? {
         if (defs.isEmpty()) return emptyList()
         val addrs = (defs.map { it.tmpAddr } + defs.map { it.memAddr }).distinct().sorted()
@@ -92,11 +114,23 @@ object DtcRepo {
         }
         // 0xFF = address not implemented by this unit (returns junk), ignore it
         fun bits(a: Int) = values[a]?.takeIf { it != 0xFF } ?: 0
-        return defs.mapNotNull { def ->
+        val known = defs.mapNotNull { def ->
             val cur = bits(def.tmpAddr) shr def.bit and 1 == 1
             val mem = bits(def.memAddr) shr def.bit and 1 == 1
             if (cur || mem) DtcHit(def, cur, mem) else null
         }
+        val defined = defs.flatMap { listOf(it.tmpAddr to it.bit, it.memAddr to it.bit) }.toSet()
+        val pairs = defs.map { it.tmpAddr to it.memAddr }.distinct()
+        val unknown = pairs.filter { it.first != 0xA2 }.flatMap { (tmp, mem) -> // 0xA2/0xC2: bits FreeSSM ignores
+            (0..7).mapNotNull { bit ->
+                val cur = bits(tmp) shr bit and 1 == 1 && (tmp to bit) !in defined
+                val stored = bits(mem) shr bit and 1 == 1 && (mem to bit) !in defined
+                if (!cur && !stored) null
+                else DtcHit(DtcDef("???", "Unknown code: 0x%02X/0x%02X bit %d".format(tmp, mem, bit), tmp, mem, bit,
+                    "Код без описания в таблице: 0x%02X/0x%02X, бит %d".format(tmp, mem, bit)), cur, stored)
+            }
+        }
+        return known + unknown
     }
 
     /**
@@ -118,8 +152,11 @@ object DtcRepo {
         runCatching { block(o) }.getOrNull()
     }
 
-    /** SSM2 "clear memory": write 0x40 to 0x000060 (also resets learned values). */
-    suspend fun clear(dest: Int): Boolean = EcuLink.use { it.write(0x000060, 0x40, dest) } != null
+    /**
+     * SSM2 "clear memory": write 0x40 to 0x000060 (also resets learned values); the unit echoes the byte it took.
+     * The codes are gone only after the ignition has been off for a few seconds (FreeSSM asks for the same).
+     */
+    suspend fun clear(dest: Int): Boolean = EcuLink.use { it.write(0x000060, 0x40, dest) } == 0x40
 }
 
 @Composable
@@ -134,7 +171,7 @@ fun DtcScreen() {
     if (obdMode && unitTcu) unitTcu = false
     val init = if (unitTcu) tcuInit else ecuInit
     val dest = if (unitTcu) SsmClient.TCU else SsmClient.ECU
-    val defs = if (unitTcu) DtcRepo.tcuDefs(ctx, tcuInit) else DtcRepo.ecuDefs(ctx)
+    val defs = remember(init, unitTcu) { init?.let { DtcRepo.defs(ctx, it) } ?: emptyList() }
     var hits by remember { mutableStateOf<List<DtcHit>?>(null) }
     var status by remember { mutableStateOf("Нажмите «Прочитать ошибки»") }
     var busy by remember { mutableStateOf(false) }
@@ -147,7 +184,8 @@ fun DtcScreen() {
             hits = r
             status = when {
                 r == null -> "Не удалось прочитать (нет связи с ЭБУ)"
-                !obdMode && defs.isEmpty() -> "Таблица кодов ошибок не загружена"
+                !obdMode && init == null -> if (unitTcu) "Блок АКПП не ответил" else "Нет связи с ЭБУ"
+                !obdMode && defs.isEmpty() -> "Блок не сообщает, где хранит коды ошибок"
                 r.isEmpty() -> "Ошибок нет"
                 else -> "Найдено: ${r.size}"
             }
@@ -170,13 +208,28 @@ fun DtcScreen() {
             T("SSM ID: ${init?.ssmId ?: "—"}", 13.sp, C.Sub)
             T("ROM ID: ${init?.romId ?: "—"}", 13.sp, C.Sub)
             if (obdMode) T("Режим OBD-II: стандартные коды, АКПП недоступна", 13.sp, C.Sub)
-            else T("Кодов в таблице: ${defs.size}", 13.sp, C.Sub)
+            else if (init != null) T(
+                (if (init!!.supports(37, 7)) "Коды Subaru (2-значные)" else "Коды OBD-II") + ", в таблице: ${defs.size}", 13.sp, C.Sub,
+            )
             Spacer(Modifier.height(20.dp))
             ActionButton("Прочитать ошибки", !busy) { readNow() }
             Spacer(Modifier.height(10.dp))
             ActionButton("Сбросить ошибки", !busy, danger = true) { confirmClear = true }
             Spacer(Modifier.height(16.dp))
             T(status, 14.sp)
+            if (unitTcu) {
+                val tcu by Repo.tcu.collectAsState()
+                val tcuStatus by Repo.tcuStatus.collectAsState()
+                if (tcuInit == null && tcuStatus.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    T(tcuStatus, 12.sp, C.Orange)
+                }
+                if (tcu?.fwdFuse == true) {
+                    Spacer(Modifier.height(8.dp))
+                    T("В держатель FWD вставлен предохранитель: блок АКПП отключил задний мост, на приборке горит лампа FWD. " +
+                        "Это режим, а не неисправность, кода ошибки в памяти не будет.", 12.sp, C.Orange)
+                }
+            }
             Spacer(Modifier.weight(1f))
             T("Сброс стирает и адаптации ЭБУ (топливные коррекции, обучение детонации и холостого хода). После сброса выключите зажигание на 5–10 с.", 11.sp, C.Sub)
         }
@@ -214,7 +267,9 @@ fun DtcScreen() {
                     confirmClear = false; busy = true; status = "Сброс…"
                     scope.launch {
                         val ok = withContext(Dispatchers.IO) { if (obdMode) DtcRepo.clearObd() else DtcRepo.clear(dest) }
-                        status = if (ok) "Команда сброса принята. Выключите зажигание на 5–10 секунд и включите снова, затем прочитайте ошибки." else "Сброс не удался"
+                        hits = null
+                        status = if (ok) "Блок принял команду. Теперь выключите зажигание минимум на 5–10 секунд, включите снова, " +
+                            "дождитесь связи и прочитайте ошибки: до этого коды могут ещё показываться." else "Блок не подтвердил сброс"
                         busy = false
                     }
                 }) { Text("Сбросить") }

@@ -66,7 +66,7 @@ val HomeTileInfo: Map<String, Pair<String, androidx.compose.ui.graphics.vector.I
     "speedo" to ("Спидометр" to Lucide.Gauge),
     "car3d" to ("3D-машина" to Lucide.Car),
     "minimap" to ("Мини-карта" to Lucide.Map),
-) + ExtraCards
+) + ExtraCards + kg.forester.sg.data.MORE_VALUES.mapNotNull { id -> Metrics.of(id, emptyList())?.let { id to (it.title to it.icon) } }
 
 @Composable
 fun HomeScreen() {
@@ -124,8 +124,10 @@ fun HomeScreen() {
         }
     }
 
+    var tip by remember { mutableStateOf(!Repo.settings.homeTipSeen) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (edit) HomeEditBar { edit = false }
+        else if (tip) HomeTip { tip = false; Repo.settings.homeTipSeen = true }
         if (kg.forester.sg.data.HomeLayout.board.isFree(layout)) {
             // free layout: the 3D car, the tachometer and the speedometer are cards like the others, anything can
             // go anywhere and over anything
@@ -212,6 +214,13 @@ private fun HomeTile(
         "atf" -> BarCard(st, "home.$id", icon, title, tcu?.atfC?.toFloat(), 0f, 130f, "°C", "%.0f", m, warnAbove = 110f)
         "per100" -> BarCard(st, "home.$id", icon, "Расход", ts.instPer100?.toFloat(), 0f, 30f, "л/100", "%.1f", m)
         "range" -> BarCard(st, "home.$id", icon, title, ts.rangeKm?.toFloat(), 0f, 800f, "км", "%.0f", m)
+        else -> {
+            // any other value of the common catalogue
+            val ind = Metrics.of(id, emptyList()) ?: return
+            val v = ind.read(rememberMetricCtx())
+            BarCard(st, "home.$id", icon, title, v, ind.min, ind.max, ind.unit, ind.format, m,
+                warnAbove = ind.warnAbove, warnBelow = ind.warnBelow)
+        }
     }
 }
 
@@ -320,3 +329,21 @@ private fun RangeBar(fraction: Float, range: Pair<Float, Float>?, brush: Brush, 
 
 /** Size of the car in the 3D card, kept in its style as "scale:0.6" (1 = as large as fits). */
 fun carScaleOf(style: String) = style.removePrefix("scale:").toFloatOrNull()?.coerceIn(0.3f, 1f) ?: 1f
+
+/** Shown once: the screen and the bottom bar are the driver's to arrange, and how. */
+@Composable
+private fun HomeTip(onClose: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Purple.copy(alpha = 0.18f))
+            .border(1.dp, C.Purple, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Icon(Lucide.Lightbulb, null, tint = C.Violet, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        T("Экран настраивается: нажмите и удерживайте любой виджет — можно убрать лишнее, добавить нужное, сделать " +
+            "крупнее или выбрать «Просто». Нижняя панель тоже: удерживайте её, чтобы выбрать показатели.", 13.sp,
+            modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(10.dp))
+        Chip("Понятно", true, onClose)
+    }
+}

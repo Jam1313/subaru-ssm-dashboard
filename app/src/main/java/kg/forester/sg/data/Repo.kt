@@ -140,6 +140,20 @@ class Settings(ctx: Context) {
         get() = p.getString("navPos", "left")!!
         set(v) { p.edit().putString("navPos", v).apply(); Repo.navPosition.value = v }
 
+    /** Value shown by the «Датчик k» card ("" = the k-th parameter ticked on «Датчики»). */
+    fun slot(k: Int): String = p.getString("slot$k", "")!!
+    fun setSlot(k: Int, id: String) { p.edit().putString("slot$k", id).apply(); Repo.slotVersion.value++ }
+
+    /** The one-time tip on the home screen (how to customise it) was closed. */
+    var homeTipSeen: Boolean
+        get() = p.getBoolean("homeTipSeen", false)
+        set(v) = p.edit().putBoolean("homeTipSeen", v).apply()
+
+    /** What the bottom bar shows: "id:bar,…" (see BottomBarCfg); "" = nothing. */
+    var bottomBar: String
+        get() = p.getString("bottomBar", null) ?: kg.forester.sg.ui.BottomBarCfg.DEFAULT
+        set(v) { p.edit().putString("bottomBar", v).apply(); Repo.bottomBar.value = v }
+
     /**
      * Diagnostic adapter: "auto" (find it), "kkl" (USB KKL cable or OpenPort 1.3), "op2" (Tactrix OpenPort 2.0 /
      * clone), "elm_usb", "elm_bt", "elm_wifi" (ELM327 by USB, Bluetooth or Wi-Fi).
@@ -158,6 +172,11 @@ class Settings(ctx: Context) {
         set(v) = p.edit().putString("btName", v).apply()
 
     /** Parameters from the RomRaider list the user ticked on the «Датчики» screen, comma-separated ids. */
+    /** The driver's own ECU addresses (JSON, see CustomParams). */
+    var customParams: String
+        get() = p.getString("customParams", "[]")!!
+        set(v) = p.edit().putString("customParams", v).apply()
+
     var watchIds: Set<String>
         get() = p.getString("watch", "")!!.split(',').filter { it.isNotBlank() }.toSet()
         set(v) { p.edit().putString("watch", v.joinToString(",")).apply(); Repo.watchVersion.value++ }
@@ -436,6 +455,9 @@ object Repo {
     val battery = MutableStateFlow(BatteryState())
     val knock = MutableStateFlow(KnockStats())
     val navPosition = MutableStateFlow("left")
+    val bottomBar = MutableStateFlow("")
+    val slotVersion = MutableStateFlow(0)
+    val customVersion = MutableStateFlow(0)
     val uiScale = MutableStateFlow(0)
     val car3d = MutableStateFlow("SG")
     val carPaint = MutableStateFlow("chameleon")
@@ -482,6 +504,7 @@ object Repo {
             db = Db(ctx.applicationContext)
             settings = Settings(ctx.applicationContext)
             navPosition.value = settings.navPosition
+            bottomBar.value = settings.bottomBar
             uiScale.value = settings.uiScale
             car3d.value = settings.car3d
             carPaint.value = settings.carPaint

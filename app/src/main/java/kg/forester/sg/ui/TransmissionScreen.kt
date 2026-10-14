@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import kg.forester.sg.data.Repo
 import kg.forester.sg.data.TcuBoard
 import kg.forester.sg.data.TileCfg
+import kg.forester.sg.ssm.LockState
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /** Cards of the "АКПП" screen, for the "add" menu. */
@@ -71,8 +72,9 @@ fun TransmissionScreen() {
     val status by Repo.tcuStatus.collectAsState()
 
     val rpm = e.rpm ?: 0
-    val slip = t?.turbineRpm?.let { tr -> if (rpm > 800) ((rpm - tr) * 100f / rpm) else null }
-    val locked = (t?.lockUpPct ?: 0f) > 60f
+    val slip = t?.slipPct
+    val lock = t?.lock ?: LockState.UNKNOWN
+    val locked = lock == LockState.LOCKED || lock == LockState.SLIPPING
 
     BoardScreen(TcuEdit, TcuCards, ::tcuRowWeight) { cfg, m ->
         val info = "tcu.${cfg.id}"
@@ -127,12 +129,14 @@ fun TransmissionScreen() {
             "converter" -> Panel(m) {
                 CardHeader(Lucide.Lock, "Гидротрансформатор", C.Blue, info)
                 Spacer(Modifier.height(10.dp))
-                val known = t?.lockUpPct != null
-                val (stText, stColor) = when {
-                    !known -> "нет данных" to C.Gray
-                    locked -> "заблокирован" to C.Green
-                    else -> "разблокирован" to C.Blue
+                val stColor = when (lock) {
+                    LockState.UNKNOWN -> C.Gray
+                    LockState.OPEN -> C.Blue
+                    LockState.ENGAGING -> C.Violet
+                    LockState.LOCKED -> C.Green
+                    LockState.SLIPPING -> C.Orange
                 }
+                val stText = lock.text
                 Row(Modifier.clip(RoundedCornerShape(8.dp)).background(stColor.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (locked) Lucide.Lock else Lucide.LockOpen, null, tint = stColor, modifier = Modifier.size(14.dp))
@@ -142,7 +146,8 @@ fun TransmissionScreen() {
                 Spacer(Modifier.height(8.dp))
                 ConvRow(Lucide.Gauge, "Двигатель", if (rpm > 0) "$rpm" else "—", "об/мин")
                 ConvRow(Lucide.Fan, "Турбина", t?.turbineRpm?.toString() ?: "—", "об/мин")
-                ConvRow(Lucide.Percent, "Проскальзывание", fmtF(slip, 0), "%", if ((slip ?: 0f) > 15 && locked) C.Orange else C.Text)
+                ConvRow(Lucide.Percent, "Проскальзывание", fmtF(slip, 0), "%", if (lock == LockState.SLIPPING) C.Orange else C.Text)
+                ConvRow(Lucide.Lock, "Команда блокировки", fmtF(t?.lockUpPct, 0), "%")
                 Spacer(Modifier.weight(1f))
                 if (status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Lucide.Info, null, tint = if (t == null) C.Orange else C.Sub, modifier = Modifier.size(13.dp))
@@ -152,7 +157,7 @@ fun TransmissionScreen() {
             }
             "lockup" -> Small(Lucide.Lock, "Блокировка (Lock-up)", t?.lockUpPct, "%")
             "line" -> Small(Lucide.ArrowDownUp, "Давление в линии", t?.linePressurePct, "%")
-            "awd" -> AwdTile(t?.transferPct, t?.frontWheelKmh, t?.rearWheelKmh, m)
+            "awd" -> AwdTile(t?.transferPct, t?.frontWheelKmh, t?.rearWheelKmh, t?.fwdFuse == true, m)
             "wheels" -> Tile(Lucide.CarFront, "Колёса перед / зад", "${t?.frontWheelKmh ?: "—"} / ${t?.rearWheelKmh ?: "—"}", "км/ч", m, info)
             "chartAtf" -> ChartCard(
                 "Температура ATF, °C",
@@ -231,11 +236,12 @@ private fun ConvRow(icon: ImageVector, label: String, value: String, unit: Strin
  * checked against logs from a real car (transfer_pct and the wheel speeds are in the CSV).
  */
 @Composable
-private fun AwdTile(duty: Float?, front: Int?, rear: Int?, modifier: Modifier) {
+private fun AwdTile(duty: Float?, front: Int?, rear: Int?, fwd: Boolean, modifier: Modifier) {
     Repo.carVersion.collectAsState().value
     val vtd = Repo.settings.awd == "vtd"
     // MP-T: 0 % = front only, 100 % = locked ≈ 50:50. VTD: centre diff 45:55, the clutch locks it towards 50:50.
-    val rearShare = duty?.let { d ->
+    // FWD fuse in: the TCU keeps the rear axle off on purpose, the split would only be noise
+    val rearShare = duty?.takeIf { !fwd }?.let { d ->
         val e = d.coerceIn(0f, 100f) / 100f
         (if (vtd) 55f - 5f * e else 50f * e).roundToInt()
     }
@@ -259,7 +265,8 @@ private fun AwdTile(duty: Float?, front: Int?, rear: Int?, modifier: Modifier) {
                     T(" β", 11.sp, C.Sub, modifier = Modifier.padding(bottom = 3.dp))
                 }
             }
-            if (slip) T("передние буксуют", 11.sp, C.Orange, maxLines = 1)
+            if (fwd) T("FWD: вставлен предохранитель, задний мост отключён", 11.sp, C.Orange, maxLines = 1)
+            else if (slip) T("передние буксуют", 11.sp, C.Orange, maxLines = 1)
         }
     }
     InfoButton("Муфта полного привода", "tcu.awd", Modifier.align(Alignment.TopEnd))

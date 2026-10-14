@@ -40,10 +40,11 @@ import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ListChecks
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Activity
+import com.composables.icons.lucide.Plus
 import kg.forester.sg.data.Repo
 import kg.forester.sg.ssm.RrParam
 
-private val filters = listOf("all" to "Все", "ecu" to "Двигатель", "tcu" to "АКПП", "sw" to "Переключатели", "ext" to "Расширенные")
+private val filters = listOf("all" to "Все", "ecu" to "Двигатель", "tcu" to "АКПП", "sw" to "Переключатели", "ext" to "Расширенные", "own" to "Свои")
 
 /**
  * Every parameter of the RomRaider logger definitions this car's units have, like a laptop logger:
@@ -75,7 +76,12 @@ fun SensorsScreen() {
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Panel(Modifier.weight(1f).fillMaxHeight()) {
-            PanelTitle(Lucide.ListChecks, "Все параметры ЭБУ")
+            var own by remember { mutableStateOf(false) }
+            PanelTitle(Lucide.ListChecks, "Все параметры ЭБУ") {
+                Chip("Свой адрес", false, { own = true }, Lucide.Plus)
+                Spacer(Modifier.width(6.dp))
+            }
+            if (own) CustomParamsDialog { own = false }
             Spacer(Modifier.height(4.dp))
             T(
                 when {
@@ -107,6 +113,7 @@ fun SensorsScreen() {
                     "tcu" -> p.target == 2
                     "sw" -> p.kind == RrParam.Kind.SWITCH
                     "ext" -> p.kind == RrParam.Kind.EXT
+                    "own" -> p.desc == "свой адрес"
                     else -> true
                 } && (q.isEmpty() || p.name.lowercase().contains(q) || p.nameEn.lowercase().contains(q) || p.id.lowercase() == q)
             }

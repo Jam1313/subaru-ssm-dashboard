@@ -54,6 +54,7 @@ import kg.forester.sg.ssm.toHex
 import kg.forester.sg.ssm.TcuParams
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
+import kg.forester.sg.ssm.LockState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -98,6 +99,7 @@ class EcuService : Service() {
     private val tracker by lazy { TripTracker(this) { knock.reset(it); guard.newTrip(it) } }
     private val battery by lazy { BatteryMonitor(this) }
     private val history = ArrayDeque<EcuSnapshot>()
+    private var mafDropLogged = false
     private val tcuHistory = ArrayDeque<TcuSnapshot>()
     private var tcuAddrs: IntArray? = null
     private var tcuNextTryMs = 0L
@@ -106,6 +108,16 @@ class EcuService : Service() {
     private var triedHostFix = false
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** After ACC sleep: GPS again (it often stalls) and the dashboard on screen if the driver wants it. */
+    private val wakeWatch by lazy {
+        WakeWatch(this) {
+            scope.launch(Dispatchers.Main) {
+                runCatching { startGps() }
+                WakeWatch.openApp(this@EcuService)
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -120,6 +132,7 @@ class EcuService : Service() {
         Voice.start(this)
         Fyt.bind(this)
         pollJob = scope.launch { pollLoop() }
+        wakeWatch.start(scope)
         scope.launch(Dispatchers.Main) {
             while (isActive) { delay(30_000); runCatching { gpsWatchdog() } }
         }
@@ -140,6 +153,7 @@ class EcuService : Service() {
     }
 
     override fun onDestroy() {
+        wakeWatch.stop()
         scope.launch { tracker.shutdown() }
         logger?.close()
         scope.cancel()
@@ -190,7 +204,8 @@ class EcuService : Service() {
             noCableSince = System.currentTimeMillis()
             if (!usb.hasPermission(driver.device)) {
                 Repo.link.value = LinkState.NO_PERMISSION
-                Repo.linkMessage.value = "Нет разрешения на USB"
+                Repo.linkMessage.value = "Нет разрешения на USB: нажмите «OK» в окне Android (лучше с галочкой «по умолчанию»). " +
+                    "Окна нет — отключите и снова подключите кабель"
                 requestUsbPermission(usb, driver.device)
                 delay(3000)
                 continue
@@ -283,7 +298,12 @@ class EcuService : Service() {
     }
 
     private fun isOp2(d: UsbSerialDriver) = OpenPort2.matches(d.device.vendorId, d.device.productId)
-    private fun isOp13(d: UsbSerialDriver) = OpenPort13.matches(d.device.vendorId, d.device.productId)
+    /**
+     * By its ids, or by its name: an FTDI chip whose product id got wiped to 0000 (seen on an OpenPort 1.3,
+     * typical of the FTDI driver "bricking" clone chips) still says "Tactrix OpenPort 1.3" and wants its RTS cleared.
+     */
+    private fun isOp13(d: UsbSerialDriver) = OpenPort13.matches(d.device.vendorId, d.device.productId) ||
+        (d.device.vendorId == OpenPort13.VID && runCatching { d.device.productName }.getOrNull()?.contains("OpenPort 1.3", true) == true)
 
     private fun pickDriver(kind: String, drivers: List<UsbSerialDriver>): UsbSerialDriver? = when (kind) {
         // "OpenPort" picked for an OpenPort 1.3: it is a K-line cable like a KKL, just use it as one
@@ -328,7 +348,7 @@ class EcuService : Service() {
             knock.process(snap, record = false)
             extras(snap, now)
             if (Repo.settings.gearbox != "mt") {
-                Repo.tcu.value = tcu
+                Repo.tcu.value = lockUp(tcu, snap.rpm, now)
                 Repo.tcuStatus.value = "АКПП: демо"
                 tcuHistory.addLast(tcu)
                 while (tcuHistory.size > 120) tcuHistory.removeFirst()
@@ -545,7 +565,9 @@ class EcuService : Service() {
             val init = EcuLink.mutex.withLock { client.init() }
             if (init == null) {
                 Repo.link.value = LinkState.NO_ECU
-                Repo.linkMessage.value = "ЭБУ не отвечает (${client.transport.name}). Зажигание включено?"
+                // other makes (Nissan Consult, Toyota…) never answer SSM: say so instead of letting them wait
+                Repo.linkMessage.value = "ЭБУ не отвечает (${client.transport.name}). Зажигание включено? " +
+                    "Приложение работает только с Subaru (протокол SSM)"
                 tracker.tick(System.currentTimeMillis())
                 // next: other DTR/RTS levels for a cable with a chip inside, else the other bus
                 val modes = transport.lineModes
@@ -586,6 +608,10 @@ class EcuService : Service() {
             Repo.pollAddresses.value = addrs.size
             ecuWatch.setup(init)
             tcuWatch.clear()
+            // an engine without a turbo (no wastegate in the init) on the untouched factory screen: no empty boost cards
+            if (Repo.settings.homeTiles.isEmpty() && !EcuParams.reported(init, EcuParams.WGDC)) {
+                Repo.settings.homeTiles = kg.forester.sg.data.HomeLayout.atmoDefault()
+            }
             val afSensor = EcuParams.reported(init, EcuParams.AF_SENSOR)
             val skip = EcuParams.unsupported(init, addrs)
             if (skip.isNotEmpty()) SsmTrace.log("not supported by this ECU, ignored: ${skip.joinToString(" ") { "%02X".format(it) }}")
@@ -620,7 +646,12 @@ class EcuService : Service() {
     }
 
     /** Everything a fresh sample feeds: live values, charts, battery, trip and fuel, knock, CSV log. */
-    private fun onSnapshot(snap: EcuSnapshot, now: Long) {
+    private fun onSnapshot(read: EcuSnapshot, now: Long) {
+        val snap = read.saneMaf()
+        if (snap !== read && !mafDropLogged) {
+            mafDropLogged = true
+            SsmTrace.log("MAF %.2f g/s at %s rpm is impossible, ignored".format(read.mafGs, read.rpm))
+        }
         Repo.live.value = snap
         history.addLast(snap)
         while (history.size > 240) history.removeFirst()
@@ -717,6 +748,8 @@ class EcuService : Service() {
         fun setup(init: EcuInit) {
             all = RomRaider.load(this@EcuService)
             avail = RomRaider.available(this@EcuService, init, tcu)
+            this.init = init
+            custom = Repo.customVersion.value
             if (tcu) tcuAvail = avail else ecuAvail = avail
             SsmTrace.log("RomRaider: ${avail.size} parameters for ${if (tcu) "TCU" else "ECU"} ROM ${init.romId}")
             version = -1
@@ -731,8 +764,16 @@ class EcuService : Service() {
         }
 
         private var internal: Set<String> = emptySet()
+        private var init: EcuInit? = null
+        private var custom = 0
 
         suspend fun poll(client: SsmClient) {
+            // own addresses added or edited while connected: the list of what this unit has changes
+            if (custom != Repo.customVersion.value) {
+                custom = Repo.customVersion.value
+                init?.let { avail = RomRaider.available(this@EcuService, it, tcu); if (tcu) tcuAvail = avail else ecuAvail = avail }
+                version = -1
+            }
             if (version != Repo.watchVersion.value || internal != Repo.internalWatch.value) {
                 version = Repo.watchVersion.value
                 internal = Repo.internalWatch.value
@@ -801,7 +842,8 @@ class EcuService : Service() {
             if (now < tcuNextTryMs) return
             val init = EcuLink.mutex.withLock { client.init(SsmClient.TCU) }
             if (init == null) {
-                Repo.tcuStatus.value = "АКПП не отвечает"
+                Repo.tcuStatus.value = "Блок АКПП не отвечает по SSM: у механики и некоторых старых Subaru его нет на " +
+                    "диагностической линии, а через часть Bluetooth-адаптеров он недоступен (надёжнее KKL-кабель)"
                 tcuNextTryMs = now + 60_000
                 return
             }
@@ -823,11 +865,31 @@ class EcuService : Service() {
         }
         val raw = EcuLink.mutex.withLock { client.read(addrs, SsmClient.TCU) } ?: return
         tcuWatch.poll(client)
-        val t = TcuParams.decode(addrs, raw, now)
+        val t = lockUp(TcuParams.decode(addrs, raw, now), Repo.live.value.rpm, now)
         Repo.tcu.value = t
         tcuHistory.addLast(t)
         while (tcuHistory.size > 120) tcuHistory.removeFirst()
         Repo.tcuHistory.value = tcuHistory.toList()
+    }
+
+    private var lockSlipSinceMs = 0L
+
+    /**
+     * Converter slip from the engine and turbine speeds, and the lock-up state checked against it: a TCU that
+     * keeps commanding lock-up while the clutch still slips for seconds gets a warning (worn clutch, tired ATF).
+     */
+    private fun lockUp(t: TcuSnapshot, rpm: Int?, now: Long): TcuSnapshot {
+        val slip = t.turbineRpm?.let { tr -> if (rpm != null && rpm > 800) (rpm - tr) * 100f / rpm else null }
+        val slipping = (t.lockUpPct ?: 0f) > 60f && (slip ?: 0f) > 10f && (rpm ?: 0) > 1200
+        if (!slipping) lockSlipSinceMs = 0L else if (lockSlipSinceMs == 0L) lockSlipSinceMs = now
+        val lock = LockState.of(t.lockUpPct, slip, if (lockSlipSinceMs == 0L) 0L else now - lockSlipSinceMs)
+        if (lock == LockState.SLIPPING && Repo.settings.feature("atf")) {
+            Alerts.raise(
+                "lockSlip", "Гидротрансформатор не держит блокировку: проскальзывание %.0f %% при команде %.0f %%. Проверьте ATF и ошибки АКПП"
+                    .format(slip, t.lockUpPct), Alerts.Level.WARN, 30 * 60_000L,
+            )
+        }
+        return t.copy(slipPct = slip, lock = lock)
     }
 
     private fun forceUsbHostMode() {
@@ -1019,12 +1081,8 @@ class BootReceiver : BroadcastReceiver() {
         Repo.init(context)
         val s = Repo.settings
         if (s.autostartService || s.autostartApp) EcuService.start(context)
-        if (s.autostartApp) {
-            // allowed from the background only with "display over other apps" (Android 10+); without it this is a no-op
-            runCatching {
-                context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-        }
+        // allowed from the background only with "display over other apps" (Android 10+)
+        WakeWatch.openApp(context)
     }
 }
 

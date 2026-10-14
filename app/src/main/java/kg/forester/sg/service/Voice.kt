@@ -229,15 +229,20 @@ object Voice {
         if (i != null) runCatching { app.startActivity(i) }
     }
 
+    /**
+     * On FYT units (Teyes, many FLY and others) the volume is the MCU's, like the knob: Android's stream volume
+     * changes nothing there. Elsewhere the music stream, and if that didn't move, the stream the system picks.
+     */
     private fun volume(steps: Int) {
-        val am = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        repeat(kotlin.math.abs(steps)) {
-            am.adjustStreamVolume(
-                AudioManager.STREAM_MUSIC, if (steps > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
-                AudioManager.FLAG_SHOW_UI,
-            )
-        }
         say(if (steps > 0) "Громче" else "Тише")
+        if (Fyt.volumeStep(steps)) return
+        val am = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val dir = if (steps > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+        val before = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        repeat(kotlin.math.abs(steps)) { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, AudioManager.FLAG_SHOW_UI) }
+        if (am.getStreamVolume(AudioManager.STREAM_MUSIC) == before) {
+            repeat(kotlin.math.abs(steps)) { am.adjustSuggestedStreamVolume(dir, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI) }
+        }
     }
 
     /** The head unit's own music, radio or Bluetooth audio is what plays now. */

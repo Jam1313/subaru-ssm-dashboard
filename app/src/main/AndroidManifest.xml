@@ -59,6 +59,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:resizeableActivity="true"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout">
             <intent-filter>
@@ -91,6 +92,20 @@
             <intent-filter>
                 <action android:name="com.fyt.launcher.music" />
             </intent-filter>
+        </service>
+
+        <!-- split screen without root: the accessibility "toggle split screen" global action, nothing else -->
+        <service
+            android:name=".service.SplitService"
+            android:exported="false"
+            android:label="@string/split_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/split_service" />
         </service>
 
         <receiver

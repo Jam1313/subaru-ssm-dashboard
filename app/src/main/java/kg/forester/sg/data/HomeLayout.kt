@@ -98,6 +98,12 @@ class Board(
     }
 }
 
+/** Values of the common catalogue (ui/Metrics.kt) offered as home cards since 0.9-beta12. */
+val MORE_VALUES = listOf(
+    "rpm", "speed", "oil", "load", "injDuty", "tripAvg", "tripFuel", "fuelLeft", "iamV", "fbkc", "flkc",
+    "gaugeKpa", "targetBoost", "gear", "lockupPct", "slip", "transfer", "altitude",
+)
+
 /** Engine guard, performance and sensor cards (see ui/ExtraCards.kt), offered on the home and "Динамика" boards. */
 val EXTRA_CARDS = listOf("gmeter", "incline", "iam", "btarget", "peaks", "run", "turbo", "tyres", "service") + (1..6).map { "s$it" }
 
@@ -113,12 +119,32 @@ object HomeLayout {
             "inj", "wgdc", "fuel", "boost", "gps",
         ).map { TileCfg(it, true) } + listOf(
             "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range", "tach", "speedo", "car3d", "minimap",
-        ).map { TileCfg(it, false) } + EXTRA_CARDS.map { TileCfg(it, false) },
+        ).map { TileCfg(it, false) } + EXTRA_CARDS.map { TileCfg(it, false) } + MORE_VALUES.map { TileCfg(it, false) },
         freeOnly = setOf("car3d"),
     )
 
     fun parse(s: String) = board.parse(s)
     fun rows(list: List<TileCfg>) = board.rows(list)
+
+    /** The factory layout for an engine without a turbo: boost and wastegate give way to range and ATF. */
+    fun atmoDefault(): String = board.format(board.defaults.map {
+        when (it.id) {
+            "wgdc" -> it.copy(on = false)
+            "boost" -> it.copy(on = false)
+            "range", "atf" -> it.copy(on = true)
+            else -> it
+        }
+    }.sortedBy { if (it.id == "range" || it.id == "atf") board.defaults.indexOfFirst { d -> d.id == "wgdc" } else board.defaults.indexOf(it) })
+
+    /**
+     * "Просто": a large 3D block with the dials and five big numbers that matter while driving, for those who
+     * find the factory screen too busy. [turbo] picks boost over ATF.
+     */
+    fun simple(turbo: Boolean, automatic: Boolean): String {
+        val picks = listOf("coolant", "battery", "per100", "range", if (turbo) "boost" else if (automatic) "atf" else "intake")
+        val list = picks.map { TileCfg(it, true) } + board.defaults.filter { it.id !in picks }.map { it.copy(on = false) }
+        return board.format(list)
+    }
 
     fun clusterWeight(size: Int) = when (size) {
         0 -> 0f

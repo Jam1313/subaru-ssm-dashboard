@@ -14,7 +14,31 @@ data class TcuSnapshot(
     val brakeClutchPct: Float? = null,
     /** Selector position: "P/N", "R", "D", "3", "2", "1". */
     val range: String? = null,
+    /** Fuse in the FWD holder (RomRaider S83): the TCU keeps the rear axle off and the FWD lamp is lit. */
+    val fwdFuse: Boolean? = null,
+    /** Engine vs turbine speed, % (needs the engine rpm, filled in by the service). */
+    val slipPct: Float? = null,
+    val lock: LockState = LockState.UNKNOWN,
 )
+
+/**
+ * Torque converter lock-up: what the TCU commands (duty) checked against what happens (slip). [SLIPPING] = the
+ * TCU has been asking for lock-up for a few seconds and the clutch still slips: worn clutch or tired ATF.
+ */
+enum class LockState(val text: String) {
+    UNKNOWN("нет данных"), OPEN("разблокирован"), ENGAGING("блокируется"), LOCKED("заблокирован"), SLIPPING("не держит");
+
+    companion object {
+        /** Duty under 10 % = open; over 60 % with under ~3 % slip = locked; in between = engaging. */
+        fun of(duty: Float?, slip: Float?, slippingForMs: Long): LockState = when {
+            duty == null -> UNKNOWN
+            duty < 10f -> OPEN
+            duty > 60f && slip != null && slip > 10f && slippingForMs >= 3000 -> SLIPPING
+            duty > 60f && (slip == null || slip < 3f) -> LOCKED
+            else -> ENGAGING
+        }
+    }
+}
 
 object TcuParams {
     const val FRONT_SPEED = 0x48
@@ -28,6 +52,8 @@ object TcuParams {
     const val REAR_SPEED = 0x51
     const val ATF_NEW = 0x56
     const val RANGE = 0x6B
+    /** Switch byte with the FWD fuse input in bit 0 (RomRaider S83, init byte 28 bit 0). */
+    const val FWD = 0x6A
 
     /** (address, ecubyteindex, ecubit) from RomRaider/FreeSSM. */
     private val all = listOf(
@@ -41,7 +67,9 @@ object TcuParams {
         val known = all.filter { it.second - 8 < init.capabilities.size }
         if (known.isEmpty()) return (all.map { it.first } + RANGE).toIntArray()
         // Range switch byte isn't in the capability table; verified on this car (bit1 R, bit2 D, bit3 3, bit4 2, bit5 1).
-        return (known.filter { init.supports(it.second, it.third) }.map { it.first } + RANGE).toIntArray()
+        // the FWD switch only where the init lists it: a unit without it may refuse the whole request
+        val fwd = if (init.supports(28, 0)) listOf(FWD) else emptyList()
+        return (known.filter { init.supports(it.second, it.third) }.map { it.first } + RANGE + fwd).toIntArray()
     }
 
     fun decode(addrs: IntArray, raw: ByteArray, now: Long): TcuSnapshot {
@@ -59,6 +87,7 @@ object TcuParams {
             frontWheelKmh = v[FRONT_SPEED],
             rearWheelKmh = v[REAR_SPEED],
             brakeClutchPct = v[BRAKE_CLUTCH]?.let { it / 2f },
+            fwdFuse = v[FWD]?.let { it and 1 == 1 },
             range = v[RANGE]?.let {
                 when {
                     it and 0x02 != 0 -> "R"

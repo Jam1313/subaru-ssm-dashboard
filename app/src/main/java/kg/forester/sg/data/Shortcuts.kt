@@ -93,8 +93,9 @@ object Shortcuts {
 
     /**
      * Opens the app. Split mode puts it in the left half (split-screen primary) and our app takes the
-     * other half; needs root on this head unit (am start --windowingMode 3). Without root it falls back to
-     * launching adjacent / full screen.
+     * other half with root (am start --windowingMode 3). Without root: launched adjacent if split screen is
+     * already on, else split screen is turned on through our accessibility service (our app goes to the first
+     * half, the other app to the second); with the service off it opens full screen and says how to enable it.
      */
     fun launch(ctx: Context, s: Shortcut) {
         val pm = ctx.packageManager
@@ -112,7 +113,19 @@ object Shortcuts {
             """.trimIndent()
             val ok = runCatching { Runtime.getRuntime().exec(arrayOf("su", "-c", script)).waitFor() == 0 }.getOrDefault(false)
             if (ok) return
-            intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+            intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NEW_TASK)
+            val inSplit = (ctx as? android.app.Activity)?.isInMultiWindowMode == true
+            if (!inSplit) {
+                if (kg.forester.sg.service.SplitService.toggleSplit()) {
+                    // give the system a moment to dock our window before the other app takes the free half
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ runCatching { ctx.startActivity(intent) } }, 700)
+                    return
+                }
+                kg.forester.sg.service.Alerts.raise(
+                    "splitHelp", "Чтобы открывать «рядом» без root, включите службу «Subaru Dashboard: разделение экрана» " +
+                        "в Настройки → Кнопки быстрого запуска", kg.forester.sg.service.Alerts.Level.INFO, 24 * 3600_000L, speak = false,
+                )
+            }
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { ctx.startActivity(intent) }
@@ -121,7 +134,9 @@ object Shortcuts {
     /** Leaves split screen: closes the left window (the app keeps running in background) so ours goes full screen. */
     fun exitSplit(ctx: Context) {
         val script = "id=${'$'}(am stack list | awk '/^Stack id=/{id=${'$'}2; sub(\"id=\",\"\",id)} /mWindowingMode=split-screen-primary/{print id; exit}'); [ -n \"${'$'}id\" ] && am stack remove ${'$'}id"
-        runCatching { Runtime.getRuntime().exec(arrayOf("su", "-c", script)).waitFor() }
+        val ok = runCatching { Runtime.getRuntime().exec(arrayOf("su", "-c", script)).waitFor() == 0 }.getOrDefault(false)
+        // without root the same accessibility action turns split screen off again
+        if (!ok && (ctx as? android.app.Activity)?.isInMultiWindowMode == true) kg.forester.sg.service.SplitService.toggleSplit()
     }
 
     fun isInstalled(ctx: Context, pkg: String): Boolean =

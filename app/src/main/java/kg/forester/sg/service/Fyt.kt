@@ -74,14 +74,19 @@ object Fyt {
     private const val M_MAIN = 0
     private const val M_RADIO = 1
     private const val M_BT = 2
+    /** Sound module: the master volume lives in the MCU, Android's stream volume doesn't move it on these units. */
+    private const val M_SOUND = 4
 
     val music = MutableStateFlow(MusicState())
     val radio = MutableStateFlow(RadioState())
     val appId = MutableStateFlow(0) // current audio source: 1 radio, 3 BT music, 8 music player
+    /** Master volume as the MCU reports it (update U_VOL = 2), -1 = unknown. */
+    val volume = MutableStateFlow(-1)
 
     private var main: IBinder? = null
     private var radioModule: IBinder? = null
     private var bt: IBinder? = null
+    private var sound: IBinder? = null
     private var app: Context? = null
     private val handler = Handler(Looper.getMainLooper())
     private var stations: Map<String, Pair<String, String>> = emptyMap() // "102.90" -> (id, name)
@@ -149,6 +154,12 @@ object Fyt {
         }
     }
 
+    private val soundCb = object : Callback() {
+        override fun onUpdate(code: Int, ints: IntArray?, strs: Array<String?>?) {
+            if (code == 2) volume.value = ints?.getOrNull(0) ?: -1
+        }
+    }
+
     private var btState = MusicState(source = "bt")
 
     private val btCb = object : Callback() {
@@ -174,10 +185,11 @@ object Fyt {
             main = module(tk, M_MAIN)?.also { register(it, mainCb, 0) }
             radioModule = module(tk, M_RADIO)?.also { m -> listOf(0, 1, 3).forEach { register(m, radioCb, it) } }
             bt = module(tk, M_BT)?.also { m -> listOf(0, 1, 2, 13, 28).forEach { register(m, btCb, it) } }
+            sound = module(tk, M_SOUND)?.also { register(it, soundCb, 2) }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            main = null; radioModule = null; bt = null
+            main = null; radioModule = null; bt = null; sound = null
             handler.postDelayed({ app?.let { bind(it) } }, 3000)
         }
     }
@@ -247,6 +259,24 @@ object Fyt {
                 it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT); runCatching { ctx.startActivity(it) }
             }
         }, 900)
+    }
+
+    /**
+     * Master volume [steps] up (+) or down (−) through the MCU, like the knob; false when the sound module isn't
+     * there (not an FYT unit, service not bound yet). Command 0 with -1 / -2 = one step up / down, -3 / -4 = mute
+     * on / off; -6 shows the volume bar.
+     */
+    fun volumeStep(steps: Int): Boolean {
+        val m = sound ?: return false
+        repeat(kotlin.math.abs(steps)) { cmd(m, 0, intArrayOf(if (steps > 0) -1 else -2)) }
+        cmd(m, 0, intArrayOf(-6))
+        return true
+    }
+
+    fun mute(on: Boolean): Boolean {
+        val m = sound ?: return false
+        cmd(m, 0, intArrayOf(if (on) -3 else -4))
+        return true
     }
 
     fun radioSeek(up: Boolean) { ensureRadio(); cmd(radioModule, if (up) 5 else 6) }

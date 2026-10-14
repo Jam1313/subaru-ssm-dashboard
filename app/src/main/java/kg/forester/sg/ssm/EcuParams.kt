@@ -49,6 +49,16 @@ data class EcuSnapshot(
     /** Injector duty cycle (batch: one injection per 2 revolutions). */
     val injDutyPct: Float?
         get() = if (injPwMs != null && rpm != null) injPwMs * rpm / 1200f else null
+
+    /**
+     * Drops a MAF reading no engine of these cars can pull: a 2.5 l at 2.5 bar absolute takes ~3.8 g per rev
+     * (0.063 g/s per rpm), plus a margin for idle. A garbled answer or an address this ROM keeps elsewhere
+     * (0xFFFF = 655 g/s) would otherwise show 200+ l/h at idle and spoil the trip, refills and calibration.
+     */
+    fun saneMaf(): EcuSnapshot {
+        val maf = mafGs ?: return this
+        return if (maf > (rpm ?: 0) * 0.07f + 15f || maf > 400f) copy(mafGs = null) else this
+    }
 }
 
 /**

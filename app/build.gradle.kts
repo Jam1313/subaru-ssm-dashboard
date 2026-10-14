@@ -67,4 +67,5 @@ dependencies {
     implementation(files("libs/sherpa-onnx-1.13.8-arm.aar"))
     // unpacking the downloaded voice (.tar.bz2)
     implementation("org.apache.commons:commons-compress:1.21")
+    testImplementation("junit:junit:4.13.2")
 }
