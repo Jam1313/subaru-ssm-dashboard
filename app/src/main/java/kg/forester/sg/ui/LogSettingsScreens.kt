@@ -353,7 +353,10 @@ private fun UpdateSettings() {
                 release = r?.takeIf { kg.forester.sg.data.Updater.isNewer(it.tag, current) }
                 status = when {
                     r == null -> "Не удалось проверить: нет интернета или GitHub недоступен"
-                    release == null -> "У вас последняя версия (${r.tag.removePrefix("v")})"
+                    // the installed one, not the release found: a build newer than the last release says so
+                    release == null && kg.forester.sg.data.Updater.isNewer(current, r.tag) ->
+                        "У вас $current, новее опубликованной (${r.tag.removePrefix("v")})"
+                    release == null -> "У вас последняя версия ($current)"
                     else -> "Доступна версия ${r.tag.removePrefix("v")}"
                 }
             }
