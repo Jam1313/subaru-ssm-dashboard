@@ -16,6 +16,9 @@ data class TcuSnapshot(
     val range: String? = null,
     /** Fuse in the FWD holder (RomRaider S83): the TCU keeps the rear axle off and the FWD lamp is lit. */
     val fwdFuse: Boolean? = null,
+    /** AT OIL TEMP lamp on (RomRaider S106) and the TCU's diagnosis lamp output (S104). */
+    val atfLamp: Boolean? = null,
+    val diagLamp: Boolean? = null,
     /** Engine vs turbine speed, % (needs the engine rpm, filled in by the service). */
     val slipPct: Float? = null,
     val lock: LockState = LockState.UNKNOWN,
@@ -54,6 +57,8 @@ object TcuParams {
     const val RANGE = 0x6B
     /** Switch byte with the FWD fuse input in bit 0 (RomRaider S83, init byte 28 bit 0). */
     const val FWD = 0x6A
+    /** Lamp outputs: bit 1 AT OIL TEMP (RomRaider S106), bit 3 diagnosis lamp (S104); init byte 31. */
+    const val LAMPS = 0x6D
 
     /** (address, ecubyteindex, ecubit) from RomRaider/FreeSSM. */
     private val all = listOf(
@@ -69,7 +74,8 @@ object TcuParams {
         // Range switch byte isn't in the capability table; verified on this car (bit1 R, bit2 D, bit3 3, bit4 2, bit5 1).
         // the FWD switch only where the init lists it: a unit without it may refuse the whole request
         val fwd = if (init.supports(28, 0)) listOf(FWD) else emptyList()
-        return (known.filter { init.supports(it.second, it.third) }.map { it.first } + RANGE + fwd).toIntArray()
+        val lamps = if (init.supports(31, 1) || init.supports(31, 3)) listOf(LAMPS) else emptyList()
+        return (known.filter { init.supports(it.second, it.third) }.map { it.first } + RANGE + fwd + lamps).toIntArray()
     }
 
     fun decode(addrs: IntArray, raw: ByteArray, now: Long): TcuSnapshot {
@@ -88,6 +94,8 @@ object TcuParams {
             rearWheelKmh = v[REAR_SPEED],
             brakeClutchPct = v[BRAKE_CLUTCH]?.let { it / 2f },
             fwdFuse = v[FWD]?.let { it and 1 == 1 },
+            atfLamp = v[LAMPS]?.let { it shr 1 and 1 == 1 },
+            diagLamp = v[LAMPS]?.let { it shr 3 and 1 == 1 },
             range = v[RANGE]?.let {
                 when {
                     it and 0x02 != 0 -> "R"

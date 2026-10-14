@@ -609,6 +609,7 @@ class EcuService : Service() {
                 continue
             }
             Repo.pollAddresses.value = addrs.size
+            runCatching { connectChecks(client, init) }.onFailure { SsmTrace.log("connect checks: $it") }
             ecuWatch.setup(init)
             tcuWatch.clear()
             // an engine without a turbo (no wastegate in the init) on the untouched factory screen: no empty boost cards
@@ -836,6 +837,34 @@ class EcuService : Service() {
         val ok = full.filter { a -> EcuLink.mutex.withLock { client.read(intArrayOf(a)) } != null }.toIntArray()
         SsmTrace.log("probed: ${ok.joinToString(" ") { "%02X".format(it) }}")
         return ok.takeIf { it.isNotEmpty() && works(it) }
+    }
+
+    /**
+     * Once per connection, only where the init says the ECU has it (FreeSSM's flag bytes, + 8 in our numbering):
+     * the VIN (byte 36 bit 0: a 3-byte pointer at 0xDA, 17 ASCII bytes there) and the test mode connectors
+     * (byte 11 bit 5: 0x61 bit 5). Joined green connectors make the check engine lamp blink and store false codes.
+     */
+    private suspend fun connectChecks(client: SsmClient, init: EcuInit) {
+        Repo.vin.value = ""
+        if (init.supports(44, 0)) {
+            val p = EcuLink.mutex.withLock { client.read(intArrayOf(0xDA, 0xDB, 0xDC)) }
+            if (p != null && p.size == 3) {
+                val at = ((p[0].toInt() and 0xFF) shl 16) or ((p[1].toInt() and 0xFF) shl 8) or (p[2].toInt() and 0xFF)
+                val raw = EcuLink.mutex.withLock { client.read(IntArray(17) { at + it }) }
+                val vin = raw?.map { (it.toInt() and 0xFF).toChar() }?.joinToString("")?.trim()
+                if (vin != null && vin.length == 17 && vin.all { it.isLetterOrDigit() }) Repo.vin.value = vin
+                SsmTrace.log("VIN: ${vin ?: "—"}")
+            }
+        }
+        if (init.supports(19, 5)) {
+            val t = EcuLink.mutex.withLock { client.read(intArrayOf(0x61)) }
+            if (t != null && t.isNotEmpty() && (t[0].toInt() shr 5) and 1 == 1) {
+                Alerts.raise(
+                    "testMode", "Замкнуты разъёмы тест-режима (зелёные, под рулём): «чек» мигает и ЭБУ может записать " +
+                        "ложные ошибки. Разъедините их, если не проводите диагностику", Alerts.Level.WARN, 60 * 60_000L,
+                )
+            }
+        }
     }
 
     /** The transmission unit answers at 0x18 on the same K-line; poll it every few ECU cycles. */

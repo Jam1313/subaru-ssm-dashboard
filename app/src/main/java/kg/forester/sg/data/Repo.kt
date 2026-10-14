@@ -458,6 +458,8 @@ object Repo {
     val bottomBar = MutableStateFlow("")
     val slotVersion = MutableStateFlow(0)
     val customVersion = MutableStateFlow(0)
+    /** VIN read from the ECU at connect ("" = not available). */
+    val vin = MutableStateFlow("")
     val uiScale = MutableStateFlow(0)
     val car3d = MutableStateFlow("SG")
     val carPaint = MutableStateFlow("chameleon")

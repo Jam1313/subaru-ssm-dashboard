@@ -73,6 +73,24 @@ object DtcRepo {
         out
     }
 
+    @Volatile private var hints: Map<String, String>? = null
+
+    /**
+     * What to check first for [code] (assets/dtc_hints.json): Subaru specifics from the service manuals, TSBs and
+     * forums, otherwise plain OBD-II logic. 2-digit codes mean different things on the engine and the
+     * transmission unit, so the key is the unit too: "ECU" for P-codes, "ECU2" / "TCU" for the 2-digit ones.
+     */
+    fun hint(ctx: Context, code: String, tcu: Boolean, twoDigit: Boolean): String? {
+        val m = hints ?: synchronized(this) {
+            hints ?: runCatching {
+                val a = org.json.JSONObject(ctx.assets.open("dtc_hints.json").bufferedReader().readText()).getJSONArray("hints")
+                (0 until a.length()).associate { i -> a.getJSONObject(i).let { "${it.getString("unit")}/${it.getString("code")}" to it.getString("ru") } }
+            }.getOrDefault(emptyMap()).also { hints = it }
+        }
+        val unit = if (!twoDigit) "ECU" else if (tcu) "TCU" else "ECU2"
+        return m["$unit/$code"]
+    }
+
     /** Every OBD-II-style code (engine and transmission share it); also the descriptions for plain OBD-II. */
     fun ecuDefs(ctx: Context) = load(ctx, "ssm_dtc.json")
 
@@ -195,7 +213,7 @@ fun DtcScreen() {
 
     Row(Modifier.fillMaxSize()) {
         Panel(Modifier.width(320.dp).fillMaxHeight()) {
-            PanelTitle(Lucide.TriangleAlert, "Коды ошибок")
+            PanelTitle(Lucide.TriangleAlert, "Коды ошибок") { InfoButton("Коды без сканера", "dtc.manual") }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("Двигатель", !unitTcu, { unitTcu = false; hits = null; status = "Нажмите «Прочитать ошибки»" }, modifier = Modifier.weight(1f))
@@ -207,6 +225,9 @@ fun DtcScreen() {
             T("Связь: " + if (link == LinkState.CONNECTED) "есть" else "нет", 14.sp, if (link == LinkState.CONNECTED) C.Green else C.Orange)
             T("SSM ID: ${init?.ssmId ?: "—"}", 13.sp, C.Sub)
             T("ROM ID: ${init?.romId ?: "—"}", 13.sp, C.Sub)
+            init?.let { i -> kg.forester.sg.ssm.EcuIds.car(ctx, i.romId)?.let { T(it, 13.sp, C.Sub) } }
+            val vin by Repo.vin.collectAsState()
+            if (!unitTcu && vin.isNotEmpty()) T("VIN: $vin", 13.sp, C.Sub)
             if (obdMode) T("Режим OBD-II: стандартные коды, АКПП недоступна", 13.sp, C.Sub)
             else if (init != null) T(
                 (if (init!!.supports(37, 7)) "Коды Subaru (2-значные)" else "Коды OBD-II") + ", в таблице: ${defs.size}", 13.sp, C.Sub,
@@ -223,6 +244,11 @@ fun DtcScreen() {
                 if (tcuInit == null && tcuStatus.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     T(tcuStatus, 12.sp, C.Orange)
+                }
+                if (tcu?.atfLamp == true || tcu?.diagLamp == true) {
+                    Spacer(Modifier.height(8.dp))
+                    T("Лампа AT OIL TEMP горит. Горит постоянно — перегрев ATF. Мигает после пуска (16 вспышек) — блок " +
+                        "АКПП записал неисправность: прочитайте ошибки здесь.", 12.sp, C.Orange)
                 }
                 if (tcu?.fwdFuse == true) {
                     Spacer(Modifier.height(8.dp))
@@ -243,6 +269,8 @@ fun DtcScreen() {
                         Column(Modifier.weight(2.4f)) {
                             T(h.def.descRu.ifBlank { h.def.desc }, 14.sp)
                             if (h.def.descRu.isNotBlank()) T(h.def.desc, 11.sp, C.Sub)
+                            val twoDigit = !h.def.code.startsWith("P") && !h.def.code.startsWith("U") && !h.def.code.startsWith("C") && !h.def.code.startsWith("B")
+                            DtcRepo.hint(ctx, h.def.code, unitTcu, twoDigit)?.let { T("Что проверить: $it", 12.sp, C.Violet) }
                         }
                         T(if (h.current) "да" else "—", 14.sp, if (h.current) C.Red else C.Sub, modifier = Modifier.weight(0.5f))
                         T(if (h.memorized) "да" else "—", 14.sp, modifier = Modifier.weight(0.5f))
