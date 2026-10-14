@@ -213,7 +213,14 @@ fun DtcScreen() {
 
     Row(Modifier.fillMaxSize()) {
         Panel(Modifier.width(320.dp).fillMaxHeight()) {
-            PanelTitle(Lucide.TriangleAlert, "Коды ошибок") { InfoButton("Коды без сканера", "dtc.manual") }
+            var manual by remember { mutableStateOf(false) }
+            PanelTitle(Lucide.TriangleAlert, "Коды ошибок") {
+                Box(
+                    Modifier.clip(RoundedCornerShape(8.dp)).background(C.CardHi).clickable { manual = true }
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                ) { T("Без сканера", 11.sp, C.Sub) }
+            }
+            if (manual) InfoTexts.byKey["dtc.manual"]?.let { InfoDialog("Коды без сканера", it) { manual = false } }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("Двигатель", !unitTcu, { unitTcu = false; hits = null; status = "Нажмите «Прочитать ошибки»" }, modifier = Modifier.weight(1f))
