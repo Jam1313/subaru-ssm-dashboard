@@ -94,6 +94,17 @@
             </intent-filter>
         </service>
 
+        <!-- other players' media sessions for voice (shuffle, repeat, "что играет"): needs «Доступ к уведомлениям» -->
+        <service
+            android:name=".service.MediaListener"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- split screen without root: the accessibility "toggle split screen" global action, nothing else -->
         <service
             android:name=".service.SplitService"

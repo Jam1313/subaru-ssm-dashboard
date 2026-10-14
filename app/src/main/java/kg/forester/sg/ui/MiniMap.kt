@@ -495,7 +495,7 @@ fun MapAppChooser() {
  * Opens the app chosen in the settings; by default the "Навигатор" shortcut (with its split screen),
  * otherwise whatever app handles a map link.
  */
-private fun openNavigator(ctx: Context) {
+fun openNavigator(ctx: Context) {
     val chosen = Repo.settings.mapApp
     val shortcuts = Shortcuts.list.value
     if (chosen.isNotEmpty()) {

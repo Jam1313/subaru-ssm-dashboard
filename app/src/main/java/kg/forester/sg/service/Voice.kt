@@ -158,11 +158,11 @@ object Voice {
         lastHeard.value = text
         android.util.Log.i("Voice", "heard: $text")
         val words = text.split(" ").filter { it.isNotBlank() }
-        val wake = wakeWord(app)
-        val wakeIdx = words.indexOfFirst { similar(it, wake) }
+        // the name also when the recogniser splits it in two ("форе стер") or hears a known variant
+        val wakeAt = Commands.wakeEnd(words, wakeWord(app))
         val now = SystemClock.elapsedRealtime()
         val command = when {
-            wakeIdx >= 0 -> words.drop(wakeIdx + 1).joinToString(" ")
+            wakeAt >= 0 -> words.drop(wakeAt).joinToString(" ")
             now < armedUntil -> text
             else -> return
         }
@@ -176,50 +176,275 @@ object Voice {
         execute(command)
     }
 
+    /** "Поехали" without a place: the next phrase (within 8 s, no name needed) is where to. */
+    private var awaitingDestination = false
+
     private fun execute(cmd: String) {
-        val c = cmd.lowercase()
-        // custom buttons: label or voice phrase
-        val sc: Shortcut? = Shortcuts.list.value.firstOrNull { s ->
-            listOf(s.label, s.phrase).filter { it.isNotBlank() }.any { phraseMatches(c, it.lowercase()) }
+        if (awaitingDestination) {
+            awaitingDestination = false
+            val c = Commands.parse(cmd)
+            if (c?.intent == VoiceIntent.CANCEL) { say("Хорошо"); return }
+            val dest = c?.takeIf { it.intent.name.startsWith("NAV_") && it.query != null }?.query ?: cmd
+            say("Ищу: $dest")
+            Nav.search(app, Nav.pkg(app, c?.app), dest, route = true)
+            return
         }
-        when {
-            listOf("поехали", "маршрут", "едем", "проложи", "найди").any { c.startsWith(it) } -> {
-                val q = c.substringAfter(' ', "").removePrefix("на ").removePrefix("в ").removePrefix("до ").trim()
-                if (q.isNotEmpty()) navigateTo(q) else say("Не расслышал адрес")
-            }
-            sc != null -> { say(sc.label); Shortcuts.launch(app, sc) }
-            "весь экран" in c || "на весь" in c -> { say("Весь экран"); Shortcuts.exitSplit(app) }
-            "громче" in c -> volume(+2)
-            "тише" in c -> volume(-2)
-            // the head unit's own player / radio / BT get FYT commands; anything else playing (Yandex Music,
-            // Spotify, VK…) gets the standard media keys, which go to the app that plays now
-            "следующ" in c || "дальше" in c || "далее" in c -> { if (fytPlaying()) Fyt.next() else mediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, ""); say("Следующий") }
-            "предыдущ" in c || "назад" in c -> { if (fytPlaying()) Fyt.prev() else mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, ""); say("Предыдущий") }
-            "пауза" in c || "стоп" in c -> { if (Fyt.music.value.playing) Fyt.playPause() else mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE, ""); say("Пауза") }
-            "играй" in c || "продолж" in c || "включи музыку" in c -> {
-                if (otherAppPlaying() || !Fyt.present(app)) mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "") else if (!Fyt.music.value.playing) Fyt.playPause()
-                say("Играю")
-            }
-            "радио" in c -> { Fyt.ensureRadio(); go(VoiceTarget.MEDIA, "Радио") }
-            "расход" in c -> go(VoiceTarget.FUEL, "Расход")
-            "коробк" in c || "акпп" in c -> go(VoiceTarget.GEARBOX, "АКПП")
-            "аккумулятор" in c || "батаре" in c -> go(VoiceTarget.BATTERY, "Аккумулятор")
-            "ошибк" in c -> go(VoiceTarget.DTC, "Ошибки")
-            "динамик" in c || "наддув" in c -> go(VoiceTarget.DRIVE, "Динамика")
-            "главн" in c || "приборы" in c -> go(VoiceTarget.HOME, "Главная")
-            "медиа" in c || "плеер" in c -> go(VoiceTarget.MEDIA, "Медиа")
-            else -> say("Не понял: $cmd")
+        // the driver's own buttons first, when the whole command is their name ("навигатор", "открой музыку");
+        // their own voice phrase may stand anywhere in the command
+        shortcutFor(cmd)?.let { say(it.label); Shortcuts.launch(app, it); return }
+        val c = Commands.parse(cmd) ?: run { say("Не понял: $cmd"); return }
+        android.util.Log.i("Voice", "command: $c")
+        run(c)
+    }
+
+    private val OPEN_WORDS = setOf("открой", "запусти", "покажи", "включи")
+
+    private fun shortcutFor(cmd: String): Shortcut? {
+        val cw = cmd.lowercase().split(" ").filter { it.isNotBlank() && it !in OPEN_WORDS }
+        return Shortcuts.list.value.firstOrNull { s ->
+            val lw = s.label.lowercase().split(" ").filter { it.isNotBlank() }
+            (lw.size == cw.size && lw.indices.all { similar(cw[it], lw[it]) }) ||
+                (s.phrase.isNotBlank() && phraseMatches(cmd.lowercase(), s.phrase.lowercase()))
         }
     }
 
-    /** Opens Yandex Navigator search for the spoken address, next to the dashboard. */
-    private fun navigateTo(query: String) {
-        say("Ищу: $query")
-        val nav = Shortcuts.list.value.firstOrNull { it.pkg.startsWith("ru.yandex.yandexnavi") }
-        if (nav != null) Shortcuts.launch(app, nav)
-        val i = Intent(Intent.ACTION_VIEW, Uri.parse("yandexnavi://map_search?text=" + Uri.encode(query)))
-            .setPackage("ru.yandex.yandexnavi").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { app.startActivity(i) }
+    private fun run(c: VoiceCommand) {
+        when (c.intent) {
+            // --- music: the head unit's own player / radio / BT get FYT commands; anything else playing (Yandex
+            // Music, Spotify, VK…) gets the standard media keys, which go to the app that plays now
+            VoiceIntent.NEXT, VoiceIntent.DISLIKE -> { if (fytPlaying()) Fyt.next() else mediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, ""); say("Следующий") }
+            VoiceIntent.PREV -> { if (fytPlaying()) Fyt.prev() else mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, ""); say("Предыдущий") }
+            VoiceIntent.PAUSE -> {
+                if (Fyt.music.value.playing) Fyt.playPause() else if (fytPlaying()) Fyt.mute(true) else mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE, "")
+                say("Пауза")
+            }
+            VoiceIntent.PLAY -> {
+                if (otherAppPlaying() || !Fyt.present(app)) mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "") else if (!Fyt.music.value.playing) Fyt.playPause()
+                Fyt.mute(false)
+                say("Играю")
+            }
+            VoiceIntent.RESTART -> {
+                MediaSessions.controller(app)?.transportControls?.seekTo(0) ?: mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, "")
+                say("Сначала")
+            }
+            VoiceIntent.REWIND, VoiceIntent.FORWARD -> {
+                val sign = if (c.intent == VoiceIntent.FORWARD) 1 else -1
+                val ctl = MediaSessions.controller(app)
+                val pos = ctl?.playbackState?.position
+                if (ctl != null && pos != null) ctl.transportControls.seekTo((pos + sign * (c.number ?: 15) * 1000L).coerceAtLeast(0))
+                else mediaKey(if (sign > 0) KeyEvent.KEYCODE_MEDIA_FAST_FORWARD else KeyEvent.KEYCODE_MEDIA_REWIND, "")
+                say(if (sign > 0) "Вперёд" else "Назад")
+            }
+            VoiceIntent.SHUFFLE_ON, VoiceIntent.SHUFFLE_OFF ->
+                say(if (MediaSessions.shuffle(app, c.intent == VoiceIntent.SHUFFLE_ON)) (if (c.intent == VoiceIntent.SHUFFLE_ON) "Перемешиваю" else "По порядку") else needSessions())
+            VoiceIntent.REPEAT_ON, VoiceIntent.REPEAT_OFF -> {
+                val mode = if (c.intent == VoiceIntent.REPEAT_OFF) 0 else if (c.target == "one") 1 else 2
+                say(if (MediaSessions.repeat(app, mode)) (if (mode == 0) "Без повтора" else "Повтор") else needSessions())
+            }
+            VoiceIntent.LIKE -> {
+                val ctl = MediaSessions.controller(app)
+                if (ctl != null) { ctl.transportControls.setRating(android.media.Rating.newHeartRating(true)); say("Нравится") } else say(needSessions())
+            }
+            VoiceIntent.WHAT_PLAYING -> speak(
+                when {
+                    Fyt.appId.value == 1 && fytPlaying() -> Fyt.radio.value.let { r -> r.name.ifBlank { r.freqText + " " + r.bandText } }
+                    Fyt.music.value.playing -> listOf(Fyt.music.value.artist, Fyt.music.value.title).filter { it.isNotBlank() }.joinToString(" — ")
+                    else -> MediaSessions.nowPlaying(app) ?: if (MediaSessions.allowed(app)) "Ничего не играет" else needSessions()
+                },
+            )
+            VoiceIntent.PLAY_QUERY -> playFromSearch(c)
+            VoiceIntent.MEDIA_APP -> c.app?.let { openApp(it) } ?: say("Не нашёл приложение")
+            VoiceIntent.SOURCE_BT -> { Fyt.source(3); say("Bluetooth") }
+            VoiceIntent.SOURCE_USB -> { Fyt.source(8); Fyt.openMusic(); say("Музыка") }
+            // --- volume
+            VoiceIntent.VOLUME_UP -> volume(c.number ?: 2)
+            VoiceIntent.VOLUME_DOWN -> volume(-(c.number ?: 2))
+            VoiceIntent.VOLUME_SET -> setVolume(c.number ?: 10, c.percent)
+            VoiceIntent.MUTE, VoiceIntent.UNMUTE -> muteMusic(c.intent == VoiceIntent.MUTE)
+            // --- head unit radio
+            VoiceIntent.RADIO -> { Fyt.ensureRadio(); go(VoiceTarget.MEDIA, "Радио") }
+            VoiceIntent.RADIO_NEXT -> { Fyt.radioPreset(true); say("Следующая станция") }
+            VoiceIntent.RADIO_PREV -> { Fyt.radioPreset(false); say("Предыдущая станция") }
+            VoiceIntent.RADIO_SEEK -> { Fyt.radioSeek((c.number ?: 1) > 0); say("Ищу станцию") }
+            VoiceIntent.RADIO_BAND -> { Fyt.radioBand(); say("Диапазон") }
+            VoiceIntent.RADIO_FREQ, VoiceIntent.RADIO_PRESET, VoiceIntent.RADIO_NAME -> {
+                // choosing a station directly needs a radio command code we don't have yet
+                Fyt.ensureRadio(); go(VoiceTarget.MEDIA, "Радио")
+                speak("Станцию по номеру пока не умею: скажите «следующая станция»")
+            }
+            // --- navigation
+            VoiceIntent.NAV_ROUTE -> {
+                val q = c.query
+                if (q == null) { awaitingDestination = true; armedUntil = SystemClock.elapsedRealtime() + 8000; beep(); say("Куда едем?") }
+                else {
+                    say("Ищу: $q" + (c.via?.let { " (через $it — добавьте в навигаторе)" } ?: ""))
+                    Nav.search(app, Nav.pkg(app, c.app), q, route = true)
+                }
+            }
+            VoiceIntent.NAV_SEARCH, VoiceIntent.NAV_NEARBY -> {
+                val q = c.query ?: c.target ?: return say("Что найти?")
+                say("Ищу: $q")
+                Nav.search(app, Nav.pkg(app, c.app), q, route = false)
+            }
+            VoiceIntent.NAV_HOME, VoiceIntent.NAV_WORK -> {
+                val key = if (c.intent == VoiceIntent.NAV_HOME) "home" else "work"
+                val p = prefs(app)
+                val lat = p.getFloat("${key}Lat", Float.NaN); val lon = p.getFloat("${key}Lon", Float.NaN)
+                val pkg = Nav.pkg(app, c.app)
+                when {
+                    !lat.isNaN() && !lon.isNaN() -> { say(if (key == "home") "Едем домой" else "Едем на работу"); Nav.routeTo(app, pkg, lat.toDouble(), lon.toDouble()) }
+                    else -> speak("Сначала скажите «запомни это место как ${if (key == "home") "дом" else "работу"}», когда будете там")
+                }
+            }
+            VoiceIntent.NAV_SAVE_PLACE -> {
+                val g = kg.forester.sg.data.Repo.gps.value
+                val key = if (c.target == "work") "work" else "home"
+                if (g?.lat == null || g.lon == null) speak("Нет координат GPS")
+                else {
+                    prefs(app).edit().putFloat("${key}Lat", g.lat.toFloat()).putFloat("${key}Lon", g.lon.toFloat()).apply()
+                    speak(if (key == "home") "Запомнил дом" else "Запомнил работу")
+                }
+            }
+            VoiceIntent.NAV_TRAFFIC -> { Nav.traffic(app, Nav.pkg(app, c.app)); say("Пробки") }
+            VoiceIntent.NAV_OPEN -> { c.app?.let { openApp(it) } ?: kg.forester.sg.ui.openNavigator(app); say("Навигатор") }
+            // no navigator takes these from outside: open it and let its own assistant do it
+            VoiceIntent.NAV_CANCEL, VoiceIntent.NAV_ETA, VoiceIntent.NAV_SOUND_OFF, VoiceIntent.NAV_SOUND_ON -> {
+                kg.forester.sg.ui.openNavigator(app)
+                speak("Скажите навигатору: «Слушай, Алиса, " + when (c.intent) {
+                    VoiceIntent.NAV_CANCEL -> "отмени маршрут»"
+                    VoiceIntent.NAV_ETA -> "сколько ехать»"
+                    VoiceIntent.NAV_SOUND_OFF -> "выключи звук»"
+                    else -> "включи звук»"
+                })
+            }
+            VoiceIntent.NAV_WHERE -> whereAmI()
+            // --- our app
+            VoiceIntent.SCREEN -> runCatching { VoiceTarget.valueOf(c.target ?: "") }.getOrNull()?.let { go(it, screenName(it)) } ?: say("Не понял: ${c.text}")
+            VoiceIntent.FULL_SCREEN -> {
+                if (c.target == "nav") Shortcuts.list.value.firstOrNull { it.icon == "navigation" }?.let { Shortcuts.launch(app, it.copy(split = false)) }
+                else Shortcuts.exitSplit(app)
+                say("Весь экран")
+            }
+            VoiceIntent.READ_VALUE -> readValue(c.target ?: "")
+            VoiceIntent.APP_OPEN -> {
+                val q = c.query.orEmpty()
+                val a = Shortcuts.installedApps(app).firstOrNull { similar(it.label.lowercase(), q) || it.label.lowercase().startsWith(q) }
+                if (a != null) { say(a.label); openApp(a.pkg) } else say("Не нашёл приложение «$q»")
+            }
+            VoiceIntent.CANCEL -> say("Хорошо")
+            VoiceIntent.HELP -> speak("Например: поехали домой, громче, следующая, найди заправку, какая температура")
+            VoiceIntent.UNSUPPORTED -> speak("Это я пока не умею")
+        }
+    }
+
+    private fun screenName(t: VoiceTarget) = when (t) {
+        VoiceTarget.HOME -> "Главная"; VoiceTarget.DRIVE -> "Динамика"; VoiceTarget.FUEL -> "Расход"
+        VoiceTarget.GEARBOX -> "АКПП"; VoiceTarget.BATTERY -> "Аккумулятор"; VoiceTarget.DTC -> "Ошибки"; VoiceTarget.MEDIA -> "Медиа"
+    }
+
+    private fun needSessions() = "Разрешите приложению доступ к уведомлениям: Настройки → Голос"
+
+    /** Answers that matter (values, what plays) are spoken too, not only shown. */
+    private fun speak(t: String) { say(t); Speech.say(t) }
+
+    private fun openApp(pkg: String) {
+        Shortcuts.list.value.firstOrNull { it.pkg == pkg }?.let { Shortcuts.launch(app, it); return }
+        app.packageManager.getLaunchIntentForPackage(pkg)?.let { runCatching { app.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+            ?: say("Приложение не установлено")
+    }
+
+    private val MUSIC_APPS = listOf("ru.yandex.music", "com.uma.musicvk", "com.spotify.music", "com.google.android.apps.youtube.music")
+
+    /** "Включи группу Кино": the standard play-from-search intent of the music app, else its search screen. */
+    private fun playFromSearch(c: VoiceCommand) {
+        val q = c.query.orEmpty()
+        if (q.isBlank()) return run(VoiceCommand(VoiceIntent.PLAY))
+        val pkg = c.app ?: Shortcuts.list.value.firstOrNull { it.pkg in MUSIC_APPS }?.pkg ?: MUSIC_APPS.firstOrNull { Shortcuts.isInstalled(app, it) }
+        val i = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(android.app.SearchManager.QUERY, q)
+        val ms = android.provider.MediaStore.Audio::class
+        when (c.focus) {
+            MediaFocus.ARTIST -> i.putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, android.provider.MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE).putExtra(android.provider.MediaStore.EXTRA_MEDIA_ARTIST, q)
+            MediaFocus.ALBUM -> i.putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, android.provider.MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE).putExtra(android.provider.MediaStore.EXTRA_MEDIA_ALBUM, q)
+            MediaFocus.TRACK -> i.putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/audio").putExtra(android.provider.MediaStore.EXTRA_MEDIA_TITLE, q)
+            MediaFocus.GENRE -> i.putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, android.provider.MediaStore.Audio.Genres.ENTRY_CONTENT_TYPE).putExtra("android.intent.extra.genre", q)
+            MediaFocus.PLAYLIST, MediaFocus.FAVORITES -> i.putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, android.provider.MediaStore.Audio.Playlists.ENTRY_CONTENT_TYPE).putExtra("android.intent.extra.playlist", q)
+            else -> i.putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+        }
+        if (pkg != null) i.setPackage(pkg)
+        say("Ищу: $q")
+        if (i.resolveActivity(app.packageManager) != null && runCatching { app.startActivity(i) }.isSuccess) return
+        val ctl = MediaSessions.controller(app)?.takeIf { pkg == null || it.packageName == pkg }
+        if (ctl != null) { ctl.transportControls.playFromSearch(q, android.os.Bundle()); return }
+        val web = when (pkg) {
+            "com.spotify.music" -> "spotify:search:" + Uri.encode(q)
+            "ru.yandex.music" -> "https://music.yandex.ru/search?text=" + Uri.encode(q)
+            else -> null
+        }
+        if (web != null) runCatching { app.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(web)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        else say("Не нашёл, чем включить «$q»")
+    }
+
+    /** Volume to [n] steps (or [percent] of the maximum): stepping the MCU on FYT units, Android's volume elsewhere. */
+    private fun setVolume(n: Int, percent: Boolean) {
+        val cur = Fyt.volume.value
+        if (Fyt.present(app) && cur >= 0) {
+            val target = if (percent) Math.round(40 * n / 100f) else n // FYT volume goes 0…40
+            Fyt.volumeStep(target - cur)
+            say("Громкость $target")
+            return
+        }
+        val am = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val v = (if (percent) Math.round(max * n / 100f) else n).coerceIn(0, max)
+        am.setStreamVolume(AudioManager.STREAM_MUSIC, v, AudioManager.FLAG_SHOW_UI)
+        say("Громкость $v")
+    }
+
+    private fun muteMusic(on: Boolean) {
+        say(if (on) "Без звука" else "Звук включён")
+        if (Fyt.mute(on)) return
+        val am = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, if (on) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, AudioManager.FLAG_SHOW_UI)
+    }
+
+    /** "Какая температура", "сколько бензина"…: the value spoken. */
+    private fun readValue(t: String) {
+        val e = kg.forester.sg.data.Repo.live.value
+        val trip = kg.forester.sg.data.Repo.trip.value
+        val ru = java.util.Locale("ru")
+        fun n(x: Number?, unit: String) = x?.let { "${Math.round(it.toDouble())} $unit".trim() } ?: "нет данных"
+        speak(when (t) {
+            "COOLANT" -> "Двигатель ${n(e.coolantC, "градусов")}"
+            "INTAKE", "OUTSIDE" -> "Воздух на впуске ${n(e.intakeC, "градусов")}"
+            "ATF" -> "Коробка ${n(kg.forester.sg.data.Repo.tcu.value?.atfC, "градусов")}"
+            "BATTERY" -> "Напряжение ${e.batteryV?.let { String.format(ru, "%.1f", it) } ?: "нет данных"} вольт"
+            "SPEED" -> "Скорость ${n(e.speedKmh, "километров в час")}"
+            "RPM" -> "Обороты ${n(e.rpm, "")}"
+            "BOOST" -> "Наддув ${e.boostBar?.let { String.format(ru, "%.2f", it) } ?: "нет данных"} бар"
+            "FUEL" -> trip.fuelLeftL?.let { "В баке ${Math.round(it)} литров" } ?: e.fuelLevelPct?.let { "В баке ${Math.round(it)} процентов" } ?: "Нет данных о топливе: отметьте заправку"
+            "RANGE" -> "Хватит на ${n(trip.rangeKm, "километров")}"
+            "CONSUMPTION" -> "Расход ${trip.trip?.per100?.let { String.format(ru, "%.1f", it) } ?: "нет данных"} литров на сотню"
+            "TRIP" -> "Проехали ${n(trip.trip?.distanceKm, "километров")}"
+            "TIME" -> java.text.SimpleDateFormat("H:mm", ru).format(java.util.Date())
+            "VOLUME" -> "Громкость ${Fyt.volume.value.takeIf { it >= 0 } ?: (app.getSystemService(Context.AUDIO_SERVICE) as AudioManager).getStreamVolume(AudioManager.STREAM_MUSIC)}"
+            "DTC" -> "Открываю ошибки".also { go(VoiceTarget.DTC, "Ошибки") }
+            else -> "Не знаю"
+        })
+    }
+
+    /** Street and city by GPS (needs the network for the address), else the point in the navigator. */
+    private fun whereAmI() {
+        val g = kg.forester.sg.data.Repo.gps.value
+        if (g?.lat == null || g.lon == null) return speak("Нет координат GPS")
+        scope.launch {
+            val a = runCatching {
+                @Suppress("DEPRECATION")
+                android.location.Geocoder(app, java.util.Locale("ru")).getFromLocation(g.lat, g.lon, 1)?.firstOrNull()
+            }.getOrNull()
+            val text = a?.let { listOfNotNull(it.thoroughfare, it.subThoroughfare, it.locality).joinToString(", ") }?.ifBlank { null }
+            main.post { if (text != null) speak(text) else Nav.routeTo(app, Nav.pkg(app, null), g.lat, g.lon) }
+        }
     }
 
     private fun go(t: VoiceTarget, label: String) {

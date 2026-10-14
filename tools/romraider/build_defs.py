@@ -6,6 +6,10 @@ Source: RomRaider logger definitions v370 (logger_METRIC_EN_v370.xml, RomRaider 
 https://www.romraider.com, maintained by the RomRaider community). The original file is kept here
 gzipped; Russian names are in ru/*.json.
 
+Extended parameters of ROMs v370 doesn't know are taken from the TD-D/SubaruDefs fork
+(https://github.com/TD-D/SubaruDefs, branches Alpha and Stable, GPL), only for those ROM ids and only where the
+parameter id has the same name as in v370: everything v370 has stays exactly as it is.
+
 Writes:
   app/src/main/assets/romraider_ssm.json  standard parameters, switches and per-ROM extended parameters
   app/src/main/assets/ssm_dtc.json        adds the trouble codes the table did not have yet
@@ -72,6 +76,29 @@ def main():
             'id': e.get('id'), 't': int(e.get('target', '1')), 'n': e.get('name').rstrip('*').strip(),
             'ru': tr.get('n', ''), 'd': tr.get('d', ''), 'c': conversions(e), 'r': roms,
         })
+    # ROMs only the TD-D fork knows (newer USDM/ADM/EDM cars): added, never replacing a v370 address
+    known = {r for e in ecuparams for r in e['r']}
+    by_id = {e['id']: e for e in ecuparams}
+    extra_roms = set()
+    for fork in ('logger_METRIC_EN_v290_TDD_Alpha.xml.gz', 'logger_METRIC_EN_TDD_Stable.xml.gz'):
+        path = os.path.join(HERE, fork)
+        if not os.path.exists(path):
+            continue
+        froot = ET.parse(gzip.open(path)).getroot()
+        fssm = next(p for p in froot.iter('protocol') if p.get('id') == 'SSM')
+        for e in fssm.find('ecuparams'):
+            base = by_id.get(e.get('id'))
+            if base is None or base['n'] != e.get('name').rstrip('*').strip():
+                continue
+            for ecu in e.findall('ecu'):
+                a = address(ecu.find('address'))
+                for rom in ecu.get('id').split(','):
+                    rom = rom.strip().upper()
+                    if len(rom) != 10 or rom in known or rom in base['r'] or not 0 < a[0] <= 0xFFFFFF:
+                        continue
+                    base['r'][rom] = a
+                    extra_roms.add(rom)
+
     out = {
         'source': 'RomRaider logger definitions v%s (logger_METRIC_EN), GPL, https://www.romraider.com' % root.get('version'),
         'params': params, 'switches': switches, 'ecuparams': ecuparams,
@@ -95,8 +122,8 @@ def main():
         added += 1
     with open(dtc_path, 'w', encoding='utf-8') as f:
         json.dump(dtc, f, ensure_ascii=False)
-    print('params %d, switches %d, ecuparams %d (%d ROMs), dtc +%d = %d' % (
-        len(params), len(switches), len(ecuparams), len({r for e in ecuparams for r in e['r']}), added, len(dtc)))
+    print('params %d, switches %d, ecuparams %d (%d ROMs, %d from TD-D), dtc +%d = %d' % (
+        len(params), len(switches), len(ecuparams), len({r for e in ecuparams for r in e['r']}), len(extra_roms), added, len(dtc)))
 
 
 if __name__ == '__main__':

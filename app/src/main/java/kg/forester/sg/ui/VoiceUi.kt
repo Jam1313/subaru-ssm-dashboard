@@ -1,5 +1,7 @@
 package kg.forester.sg.ui
 
+import androidx.compose.foundation.verticalScroll
+
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -120,30 +122,58 @@ fun VoiceSettings() {
             Spacer(Modifier.height(10.dp))
             T("Статус: $status", 13.sp, if (status.startsWith("слушаю")) C.Green else C.Sub)
             T("Услышано: ${heard.ifBlank { "—" }}", 13.sp, C.Sub)
+            Spacer(Modifier.height(12.dp))
+            MediaAccessRow()
         }
         Spacer(Modifier.width(12.dp))
         Panel(Modifier.weight(1f).fillMaxHeight()) {
             T("Команды", 16.sp, weight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
             val w = Voice.wakeWord(ctx).replaceFirstChar { it.uppercase() }
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                listOf(
-                    "«$w, навигатор» / «$w, музыка»" to "любая кнопка по названию или голосовой фразе",
-                    "«$w, поехали на Ленина 10»" to "поиск адреса в Яндекс Навигаторе",
-                    "«$w, весь экран»" to "выйти из разделённого экрана",
-                    "«$w, громче» / «тише»" to "громкость",
-                    "«$w, следующий» / «пауза» / «играй»" to "управление музыкой",
-                    "«$w, расход» / «коробка» / «аккумулятор» / «ошибки»" to "открыть экран",
-                    "«$w» … пауза … «навигатор»" to "можно и раздельно: после имени есть 6 секунд",
-                ).forEach { (cmd, what) ->
+            Column(Modifier.weight(1f).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                (kg.forester.sg.service.Commands.EXAMPLES.map { (cmd, what) -> "«$w, $cmd»" to what } +
+                    ("«$w» … пауза … «навигатор»" to "можно и раздельно: после имени есть 6 секунд")).forEach { (cmd, what) ->
                     Column {
                         T(cmd, 14.sp)
                         T(what, 11.sp, C.Sub)
                     }
                 }
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(8.dp))
             T("«Алиса» в Яндекс Навигаторе отвечает на «Слушай, Алиса», когда навигатор на экране (в т.ч. в разделённом режиме).", 12.sp, C.Sub)
+        }
+    }
+}
+
+/**
+ * «Перемешай», «повтор», «что играет», «нравится» in other players need their media sessions, which Android shows
+ * only to an app with notification access: its state and a button to the settings, re-checked on return.
+ */
+@Composable
+private fun MediaAccessRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var resumed by remember { mutableStateOf(0) }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) resumed++ }
+        owner.lifecycle.addObserver(o)
+        onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    val on = remember(resumed) { kg.forester.sg.service.MediaSessions.allowed(ctx) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            T("Управление плеерами: " + if (on) "есть" else "нет доступа", 13.sp, if (on) C.Green else C.Orange)
+            T("Для «перемешай», «повтор», «что играет» в Яндекс Музыке, VK, Spotify нужен доступ к уведомлениям " +
+                "(приложение их не читает, только видит, какой плеер играет).", 11.sp, C.Sub)
+        }
+        if (!on) {
+            Spacer(Modifier.width(8.dp))
+            Chip("Разрешить", false, {
+                runCatching {
+                    ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            })
         }
     }
 }

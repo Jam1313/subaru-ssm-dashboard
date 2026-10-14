@@ -125,7 +125,8 @@ class EngineGuard {
         fun v(role: String) = roles[role]?.let { rr[it.id] }?.toFloat()
 
         // --- IAM and knock corrections
-        val iam = v("iam")?.let { if (it > 1.5f) it / 16f else it }
+        // a role read from a borrowed or user-typed address can be junk: keep only values that make sense for it
+        val iam = v("iam")?.let { if (it > 1.5f) it / 16f else it }?.takeIf { it in 0f..1f }
         if (iam != null && running && fKnock) {
             if (iamStart == null) iamStart = iam
             if (!iamLogged) { iamLogged = true; if (!s.demo) logIam(now, iam) }
@@ -134,8 +135,8 @@ class EngineGuard {
                 iamStart!! - iam >= 0.1f -> Alerts.raise("iamDrop", "IAM снизился с %.2f до %.2f за поездку: была детонация".format(iamStart, iam), Alerts.Level.WARN, 30 * 60_000L)
             }
         }
-        val fbkc = v("fbkc")
-        val flkc = v("flkc")
+        val fbkc = v("fbkc")?.takeIf { it in -16f..2f }
+        val flkc = v("flkc")?.takeIf { it in -16f..2f }
         if (fKnock && flkc != null && flkc <= -2.8f && running) {
             Alerts.raise("flkc", "Выученная коррекция по детонации %.1f°: мотор стабильно детонирует на этом режиме".format(flkc), Alerts.Level.WARN, 30 * 60_000L)
         }
@@ -164,10 +165,11 @@ class EngineGuard {
             Alerts.raise("turbo", "Турбина горячая: дайте мотору поработать на холостых около ${heat.toInt()} секунд перед выключением", Alerts.Level.INFO, 5 * 60_000L,
                 banner = false) // the countdown is on screen already
         }
-        if (cooldownAnnounced && heat < 8f) {
+        // the same moment the countdown ends (heat 12): spoken only, the header pill turns green «можно глушить»
+        if (cooldownAnnounced && heat <= 12f) {
             cooldownAnnounced = false
             Alerts.clear("turbo")
-            if (idle) Alerts.raise("turboOk", "Турбина остыла, можно глушить", Alerts.Level.INFO, 5 * 60_000L)
+            if (idle) Alerts.raise("turboOk", "Турбина остыла, можно глушить", Alerts.Level.INFO, 5 * 60_000L, banner = false)
         }
         if (!idle && heat > 35f) cooldownAnnounced = false
 

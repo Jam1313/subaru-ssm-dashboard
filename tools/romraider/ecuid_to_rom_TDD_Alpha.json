@@ -1,0 +1,9467 @@
+{
+ "1234567890": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH202X.MeRpMoD.Switch.Testing.v13.8.29.2358",
+   "year": "06"
+  }
+ ],
+ "133201224F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2UJ000J.MeRpMoD.VA.SDS.RL.LCA.CEL.POLF_v13.3.20.1224",
+   "year": "07"
+  }
+ ],
+ "133201547F": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJ710J.MeRpMoD.SD.RL.LCA.CEL_v13.3.20.1547",
+   "year": "04"
+  }
+ ],
+ "133F150F40": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2UJ000J.MeRpMoD.VA.SDS.RL.LCA.CEL.POLF_v13.3.15.040",
+   "year": "07"
+  }
+ ],
+ "133F161319": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC510S.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.16.1319",
+   "year": "05"
+  }
+ ],
+ "134271823F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH202X.MeRpMoD.Gratis.Testing.v13.4.27.1823",
+   "year": "06"
+  }
+ ],
+ "13429021FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DH200V.MeRpMoD.Gratis.Testing.v13.4.29.021",
+   "year": "06"
+  }
+ ],
+ "134291236F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJB11J.MeRpMoD.Gratis.Testing.v13.4.29.1236",
+   "year": "05"
+  }
+ ],
+ "134291244F": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJ710J.MeRpMoD.Gratis.Testing.v13.4.29.1244",
+   "year": "04"
+  }
+ ],
+ "134291327F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJE11J.MeRpMoD.Gratis.Testing.v13.4.29.1327",
+   "year": "06"
+  }
+ ],
+ "134291421F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202I.MeRpMoD.Gratis.Testing.v13.4.29.1421",
+   "year": "08/09"
+  }
+ ],
+ "134291654F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G701I.MeRpMoD.Gratis.Testing.v13.4.29.1654",
+   "year": "10"
+  }
+ ],
+ "134451FFFF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G101N.MeRpMoD.VA.SD.CEL_v13.4.4.51",
+   "year": "09/10"
+  }
+ ],
+ "135111322F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DK100P.MeRpMoD.Gratis.Testing.v13.5.11.1322",
+   "year": "07"
+  }
+ ],
+ "135111334F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "AZ1G101M.MeRpMoD.Gratis.Testing.v13.5.11.1334",
+   "year": "09/10"
+  }
+ ],
+ "135111339F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G101N.MeRpMoD.Gratis.Testing.v13.5.11.1339",
+   "year": "09/10"
+  }
+ ],
+ "1351137FFF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2UJ000J.MeRpMoD.Gratis.Testing.v13.5.1.137",
+   "year": "07"
+  }
+ ],
+ "13514948FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH202X.MeRpMoD.Flash.Testing.v13.5.14.948",
+   "year": "06"
+  }
+ ],
+ "13521031FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DH100F.MeRpMoD.Gratis.Testing.v13.5.21.031",
+   "year": "06"
+  }
+ ],
+ "13521035FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K700V.MeRpMoD.Gratis.Testing.v13.5.21.035",
+   "year": "2012"
+  }
+ ],
+ "13521037FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5IB00V.MeRpMoD.Gratis.Testing.v13.5.21.037",
+   "year": "11"
+  }
+ ],
+ "13521546FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DH200Z.MeRpMoD.Gratis.Testing.v13.5.2.1546",
+   "year": "06"
+  }
+ ],
+ "13521810FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DK100Z.MeRpMoD.Gratis.Testing.v13.5.2.1810",
+   "year": "07"
+  }
+ ],
+ "13521813FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202G.MeRpMoD.Gratis.Testing.v13.5.2.1813",
+   "year": "08"
+  }
+ ],
+ "135222216F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJB11J.MeRpMoD.Flash.Testing.v13.5.22.2216",
+   "year": "05"
+  }
+ ],
+ "13523142FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202G.MeRpMoD.Flash.Testing.v13.5.23.142",
+   "year": "08"
+  }
+ ],
+ "13523149FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH200Y.MeRpMoD.Gratis.Testing.v13.5.23.149",
+   "year": "06"
+  }
+ ],
+ "135291419F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K700V.MeRpMoD.Flash.Testing.v13.5.29.1419",
+   "year": "2012"
+  }
+ ],
+ "135291431F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK100Y.MeRpMoD.Gratis.Testing.v13.5.29.1431",
+   "year": "07"
+  }
+ ],
+ "135291648F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WC522N.MeRpMoD.Gratis.Testing.v13.5.29.1648",
+   "year": "05"
+  }
+ ],
+ "135291713F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "MT",
+   "xmlid": "A2WC501L.MeRpMoD.Gratis.Testing.v13.5.29.1713",
+   "year": "05"
+  }
+ ],
+ "135291732F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH200U.MeRpMoD.Gratis.Testing.v13.5.29.1732",
+   "year": "06"
+  }
+ ],
+ "13562113FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1E400U.MeRpMoD.Gratis.Testing.v13.5.6.2113",
+   "year": "08"
+  }
+ ],
+ "1356212FFF": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2WC012E.MeRpMoD.Gratis.Testing.v13.5.6.212",
+   "year": "04-07"
+  }
+ ],
+ "1356224FFF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1J500G.MeRpMoD.Gratis.Testing.v13.5.6.224",
+   "year": "11"
+  }
+ ],
+ "13571023FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK101X.MeRpMoD.Gratis.Testing.v13.5.7.1023",
+   "year": "07"
+  }
+ ],
+ "13571038FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1E401A.MeRpMoD.Gratis.Testing.v13.5.7.1038",
+   "year": "08"
+  }
+ ],
+ "13571054FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G401V.MeRpMoD.Gratis.Testing.v13.5.7.1054",
+   "year": "09"
+  }
+ ],
+ "1358171FFF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC412I.MeRpMoD.Gratis.Testing.v13.5.8.171",
+   "year": "05"
+  }
+ ],
+ "1362025FFF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2UJ000J.MeRpMoD.Flash.Testing.v13.6.20.25",
+   "year": "07"
+  }
+ ],
+ "136272237F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5F301C.MeRpMoD.Gratis.Testing.v13.6.27.2237",
+   "year": "10"
+  }
+ ],
+ "136272238F": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC522S.MeRpMoD.Gratis.Testing.v13.6.27.2238",
+   "year": "05"
+  }
+ ],
+ "136272244F": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJD02G.MeRpMoD.Gratis.Testing.v13.6.27.2244",
+   "year": "04"
+  }
+ ],
+ "13627236FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2UG002T.MeRpMoD.Gratis.Testing.v13.6.27.236",
+   "year": "07"
+  }
+ ],
+ "13628026FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G301F.MeRpMoD.Gratis.Testing.v13.6.28.026",
+   "year": "08"
+  }
+ ],
+ "13712232FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DH200V.MeRpMoD.Flash.Testing.v13.7.1.2232",
+   "year": "06"
+  }
+ ],
+ "13715134FF": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G900C.MeRpMoD.Gratis.Testing.v13.7.15.134",
+   "year": "11"
+  }
+ ],
+ "137161227F": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G500F.MeRpMoD.Gratis.Testing.v13.7.16.1227",
+   "year": "09"
+  }
+ ],
+ "14491853FF": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD701C.MeRpMoD.Flash.Testing.v14.4.9.1853",
+   "year": "05"
+  }
+ ],
+ "1B04400405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SD501A",
+   "year": "01/02"
+  }
+ ],
+ "1B04400505": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SD800A",
+   "year": "01/02"
+  }
+ ],
+ "1B04400605": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SD900A",
+   "year": "01/02"
+  }
+ ],
+ "1B04490305": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SD600B",
+   "year": "01/02"
+  }
+ ],
+ "1B04490405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SD700B",
+   "year": "01/02"
+  }
+ ],
+ "1B04490505": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SD800B",
+   "year": "01/02"
+  }
+ ],
+ "1B04490605": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SDA00B",
+   "year": "01/02"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SD900B",
+   "year": "01/02"
+  }
+ ],
+ "1B04490805": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SDA01B",
+   "year": "01/02"
+  }
+ ],
+ "1B14400305": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SG900C",
+   "year": "02"
+  }
+ ],
+ "1B14400405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SGA00C",
+   "year": "02"
+  }
+ ],
+ "1B14400505": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SGC00C",
+   "year": "02"
+  }
+ ],
+ "1B14400605": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SGD10C",
+   "year": "02"
+  }
+ ],
+ "1B14400705": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SGE00C",
+   "year": "02"
+  }
+ ],
+ "1B14400805": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SGE01C",
+   "year": "02"
+  }
+ ],
+ "1B44580105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE300D",
+   "year": "01/02"
+  }
+ ],
+ "1B44580405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE700D",
+   "year": "01/02"
+  }
+ ],
+ "1B44580505": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE900D",
+   "year": "01/02"
+  }
+ ],
+ "1B54500405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE700I",
+   "year": "01/02"
+  }
+ ],
+ "1B54500505": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE900I",
+   "year": "01/02"
+  }
+ ],
+ "2344500405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE700E",
+   "year": "01/02"
+  }
+ ],
+ "2354500405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE700F",
+   "year": "01/02"
+  }
+ ],
+ "23A4500405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4SE700J",
+   "year": "01/02"
+  }
+ ],
+ "2604446305": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "BH",
+   "transmission": "MT/AT",
+   "xmlid": "A4SH701G",
+   "year": "02"
+  }
+ ],
+ "2604446405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "BH",
+   "transmission": "MT/AT",
+   "xmlid": "4SLEHB00",
+   "year": "02"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "BH",
+   "transmission": "MT/AT",
+   "xmlid": "A4SHB00G",
+   "year": "02"
+  }
+ ],
+ "2604446505": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "B4",
+   "transmission": "MT/AT",
+   "xmlid": "A4SHC00G",
+   "year": "02"
+  }
+ ],
+ "2604446605": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "B4",
+   "transmission": "MT/AT",
+   "xmlid": "A4SHC01G",
+   "year": "02"
+  }
+ ],
+ "2604686305": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "B4",
+   "transmission": "MT/AT",
+   "xmlid": "A4SH701H",
+   "year": "02"
+  }
+ ],
+ "2604686405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "B4",
+   "transmission": "MT/AT",
+   "xmlid": "A4SHB00H",
+   "year": "02"
+  }
+ ],
+ "2604686505": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Legacy",
+   "submodel": "b4",
+   "transmission": "MT",
+   "xmlid": "A4SHC00H",
+   "year": "02"
+  }
+ ],
+ "261A25A105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Outback",
+   "submodel": "H6 non-VDC",
+   "transmission": "AT",
+   "xmlid": "D6HE100B",
+   "year": "2001"
+  }
+ ],
+ "264A354005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Outback",
+   "submodel": "H6",
+   "transmission": "AT",
+   "xmlid": "D6HC000C",
+   "year": "01/02"
+  }
+ ],
+ "2654786105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Liberty",
+   "submodel": "B4",
+   "transmission": "MT/AT",
+   "xmlid": "A4SH701K",
+   "year": "02"
+  }
+ ],
+ "2904485005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SDA00P",
+   "year": "01/02"
+  }
+ ],
+ "2904495005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SDA00Q",
+   "year": "01/02"
+  }
+ ],
+ "2904497105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4SDA01Q",
+   "year": "01/02"
+  }
+ ],
+ "29044A4105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RG050N",
+   "year": "01/02"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RG0500",
+   "year": "01/02"
+  }
+ ],
+ "29044A7105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RG051N",
+   "year": "01/02"
+  }
+ ],
+ "29044B6005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RG050R",
+   "year": "01/02"
+  }
+ ],
+ "29046B6005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RG052N",
+   "year": "01/02"
+  }
+ ],
+ "2944594105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A4RG060Q",
+   "year": "01/02"
+  }
+ ],
+ "2944596105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A4RN1000",
+   "year": "01/02"
+  }
+ ],
+ "2954594105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RG060P",
+   "year": "01/02"
+  }
+ ],
+ "2A04446305": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8AK210A",
+   "year": "03"
+  }
+ ],
+ "2A04446405": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8AK211A",
+   "year": "03"
+  }
+ ],
+ "2A04484005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4RI200I",
+   "year": "01/02"
+  }
+ ],
+ "2A04486005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4RI300I",
+   "year": "01/02"
+  }
+ ],
+ "2A44506005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4RL100J",
+   "year": "03"
+  }
+ ],
+ "2AA4506005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4RL100K",
+   "year": "03"
+  }
+ ],
+ "2D0A264005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Outback",
+   "submodel": "H6",
+   "transmission": "AT",
+   "xmlid": "D6QB001A",
+   "year": "01/02"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "",
+   "memmodel": "68HC16Y5",
+   "model": "Outback",
+   "submodel": "H6 EZ30D",
+   "transmission": "Manual",
+   "xmlid": "D6QF000A",
+   "year": "01/02"
+  }
+ ],
+ "2D4A354005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Outback",
+   "submodel": "H6",
+   "transmission": "AT",
+   "xmlid": "D6QD001C",
+   "year": "02/03"
+  }
+ ],
+ "2D54544005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Liberty",
+   "submodel": "B4",
+   "transmission": "MT/AT",
+   "xmlid": "A4SHA10R",
+   "year": "03"
+  }
+ ],
+ "2E04404005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE000A",
+   "year": "03"
+  }
+ ],
+ "2E04494005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE001B",
+   "year": "03"
+  }
+ ],
+ "2E04496005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE002B",
+   "year": "03"
+  }
+ ],
+ "2E044A6005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE002Q",
+   "year": "03"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE002C",
+   "year": "03"
+  }
+ ],
+ "2E12495106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJ500J",
+   "year": "04"
+  }
+ ],
+ "2E12495206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJ700J",
+   "year": "04"
+  }
+ ],
+ "2E12495306": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJ710J",
+   "year": "04"
+  },
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJ710J.MeRpMoD.SD.RL.LCA.CEL_v13.3.1.1348",
+   "year": "04"
+  }
+ ],
+ "2E14446006": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A4TF300E",
+   "year": "04"
+  }
+ ],
+ "2E14446106": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A4TF400E",
+   "year": "04"
+  }
+ ],
+ "2E14446206": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A4TF510E",
+   "year": "04"
+  }
+ ],
+ "2E14486006": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TF300F",
+   "year": "04"
+  }
+ ],
+ "2E14486106": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TF500F",
+   "year": "04"
+  }
+ ],
+ "2E14486206": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TF510F",
+   "year": "04"
+  }
+ ],
+ "2E14486306": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TF520F",
+   "year": "04"
+  }
+ ],
+ "2E44584105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE001G",
+   "year": "03"
+  }
+ ],
+ "2E44586005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE100G",
+   "year": "03"
+  }
+ ],
+ "2E44594005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RM000H",
+   "year": "03"
+  }
+ ],
+ "2E44594105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A4RM100H",
+   "year": "03"
+  }
+ ],
+ "2E44596105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A4RN200H",
+   "year": "03"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A4RN2000",
+   "year": "03"
+  }
+ ],
+ "2E54504105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE001I",
+   "year": "03"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE0000",
+   "year": "03"
+  }
+ ],
+ "2E54594105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RM100G",
+   "year": "03"
+  }
+ ],
+ "2EA4584005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4RM100F",
+   "year": "05"
+  }
+ ],
+ "2F04015206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "2.0",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZD308E",
+   "year": "04"
+  }
+ ],
+ "2F04505106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJ601A",
+   "year": "04"
+  }
+ ],
+ "2F04505206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJ800A",
+   "year": "04"
+  }
+ ],
+ "2F04505306": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJC00A",
+   "year": "05"
+  }
+ ],
+ "2F04505406": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJD00A",
+   "year": "04"
+  }
+ ],
+ "2F04505506": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJD01A",
+   "year": "04"
+  }
+ ],
+ "2F04785006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2ZJ600B",
+   "year": "04"
+  }
+ ],
+ "2F04785206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2ZJC00B",
+   "year": "04"
+  }
+ ],
+ "2F04785306": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2ZJD00B",
+   "year": "04"
+  }
+ ],
+ "2F04785506": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2ZJD02B",
+   "year": "04"
+  }
+ ],
+ "2F0A366106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZR003A",
+   "year": "03"
+  }
+ ],
+ "2F0A367106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZU002A",
+   "year": "04"
+  }
+ ],
+ "2F0A367306": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "",
+   "xmlid": "D2ZU200A",
+   "year": "04"
+  }
+ ],
+ "2F12044106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ101B",
+   "year": "05"
+  }
+ ],
+ "2F12044506": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT/MT",
+   "xmlid": "E2ZJ141B",
+   "year": "05"
+  }
+ ],
+ "2F120A4606": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT/MT",
+   "xmlid": "E2ZJ173B",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ173B",
+   "year": "05"
+  }
+ ],
+ "2F12505106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WC500C",
+   "year": "05"
+  }
+ ],
+ "2F12505206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WC510C",
+   "year": "05"
+  }
+ ],
+ "2F12505306": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WC511C",
+   "year": "05"
+  }
+ ],
+ "2F12505506": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WC521C",
+   "year": "05"
+  }
+ ],
+ "2F12515106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC500R",
+   "year": "05"
+  }
+ ],
+ "2F12515206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC510R",
+   "year": "05"
+  }
+ ],
+ "2F12515306": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC511R",
+   "year": "05"
+  }
+ ],
+ "2F12515506": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC521R",
+   "year": "05"
+  }
+ ],
+ "2F12785106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WC500N",
+   "year": "05"
+  }
+ ],
+ "2F12785206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WC510N",
+   "year": "05"
+  }
+ ],
+ "2F12785306": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WC511N",
+   "year": "05"
+  }
+ ],
+ "2F12785506": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WC521N",
+   "year": "05"
+  }
+ ],
+ "2F12785606": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WC522N",
+   "year": "05"
+  }
+ ],
+ "2F12795206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC510S",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC510S.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.5.342",
+   "year": "05"
+  }
+ ],
+ "2F12795606": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC522S",
+   "year": "05"
+  }
+ ],
+ "2F1A355006": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZX004B",
+   "year": "05"
+  }
+ ],
+ "2F1A357106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "usdm",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZX100B",
+   "year": "05"
+  }
+ ],
+ "2F1A357206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "usdm",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZX110B",
+   "year": "05"
+  }
+ ],
+ "2F22044706": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5",
+   "transmission": "AT",
+   "xmlid": "E2ZK001A",
+   "year": "05"
+  }
+ ],
+ "2F220A4006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5",
+   "transmission": "AT",
+   "xmlid": "E2ZI103A",
+   "year": "05"
+  }
+ ],
+ "2F421A6106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2ZD508C",
+   "year": "04"
+  }
+ ],
+ "2F4A346006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZS002C",
+   "year": "04"
+  },
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZS000C",
+   "year": "04"
+  }
+ ],
+ "2F4A34A006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZS000C",
+   "year": "2004"
+  }
+ ],
+ "2F54505006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJ800G",
+   "year": "04"
+  }
+ ],
+ "2F54505106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJC00G",
+   "year": "04"
+  }
+ ],
+ "2F54505206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJD00G",
+   "year": "04"
+  }
+ ],
+ "2F54505406": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJD02G",
+   "year": "04"
+  },
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2ZJD02G.MeRpMoD.SD.RL.LCA.CEL_v13.3.4.1256",
+   "year": "04"
+  }
+ ],
+ "2F5A356006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZS002D",
+   "year": "04"
+  }
+ ],
+ "3112405106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2ZJ201D",
+   "year": "04"
+  }
+ ],
+ "3112485106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2ZJ500I",
+   "year": "04"
+  }
+ ],
+ "3112485406": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2ZJ512I",
+   "year": "04"
+  }
+ ],
+ "3144504006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT/AT",
+   "xmlid": "A2ZJ500F",
+   "year": "04"
+  }
+ ],
+ "3152504006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2ZJ500H",
+   "year": "04"
+  }
+ ],
+ "3152584006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2ZJ500M",
+   "year": "04"
+  }
+ ],
+ "3614446105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A4TC101K",
+   "year": "03"
+  }
+ ],
+ "3614446205": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A4TC300K",
+   "year": "03"
+  }
+ ],
+ "3614486105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TC101L",
+   "year": "03"
+  }
+ ],
+ "3614486205": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TC300L",
+   "year": "03"
+  }
+ ],
+ "3614486305": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TC400L",
+   "year": "03"
+  }
+ ],
+ "3614486405": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TC401L",
+   "year": "03"
+  }
+ ],
+ "3712405006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "AT",
+   "xmlid": "A2ZJ500K",
+   "year": "04"
+  }
+ ],
+ "371240A006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC50",
+   "year": "04"
+  }
+ ],
+ "3712485006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "MT",
+   "xmlid": "A2ZJ500L",
+   "year": "04"
+  }
+ ],
+ "3722047206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "",
+   "transmission": "MT/AT",
+   "xmlid": "E6PF101A",
+   "year": "04"
+  },
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "",
+   "transmission": "MT/AT",
+   "xmlid": "E6PF101A",
+   "year": "04"
+  }
+ ],
+ "37220A7206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "",
+   "transmission": "MT/AT",
+   "xmlid": "E6PF103A",
+   "year": "04"
+  },
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "",
+   "transmission": "MT/AT",
+   "xmlid": "E6PF103A",
+   "year": "04"
+  }
+ ],
+ "3A54504005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TH000N",
+   "year": "04"
+  }
+ ],
+ "3A54584005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TH000O",
+   "year": "04"
+  }
+ ],
+ "3B02593006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2WA20",
+   "year": "04"
+  }
+ ],
+ "3B02594006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2WC000E",
+   "year": "04"
+  }
+ ],
+ "3B02594216": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2WC011E",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2WC011E",
+   "year": "04-07"
+  }
+ ],
+ "3B02594316": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2WC012E",
+   "year": "04-07"
+  }
+ ],
+ "3B02594416": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2WC013E",
+   "year": "04-07"
+  }
+ ],
+ "3B04484105": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Forester",
+   "submodel": "Turbo",
+   "transmission": "MT/AT",
+   "xmlid": "A4RI401I",
+   "year": "01/02"
+  }
+ ],
+ "3B12044206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ121H",
+   "year": "05"
+  }
+ ],
+ "3B12504006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC400D",
+   "year": "05"
+  }
+ ],
+ "3B12504106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC410D",
+   "year": "05"
+  }
+ ],
+ "3B12504306": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC412D",
+   "year": "05"
+  }
+ ],
+ "3B12584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC400I",
+   "year": "05"
+  }
+ ],
+ "3B12584106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC410I",
+   "year": "05"
+  }
+ ],
+ "3B12584206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC411I",
+   "year": "05"
+  }
+ ],
+ "3B12584306": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC412I",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC412I.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.5.323",
+   "year": "05"
+  }
+ ],
+ "3B42584006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC401F",
+   "year": "04"
+  }
+ ],
+ "3B42584116": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC420F",
+   "year": "04"
+  }
+ ],
+ "3B44503006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT/AT",
+   "xmlid": "A2ZJA00P",
+   "year": "05"
+  }
+ ],
+ "3B44503116": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT/AT",
+   "xmlid": "A2ZJA10P",
+   "year": "05"
+  }
+ ],
+ "3B52503006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC400H",
+   "year": "05"
+  }
+ ],
+ "3B52503116": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WC420H",
+   "year": "05"
+  }
+ ],
+ "3B52583006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC400M",
+   "year": "05"
+  }
+ ],
+ "3B52583116": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WC420M",
+   "year": "05"
+  }
+ ],
+ "3BA4503006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7055",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT/AT",
+   "xmlid": "A2ZJA00Q",
+   "year": "05"
+  }
+ ],
+ "3C02057216": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2WD301D",
+   "year": "05"
+  }
+ ],
+ "3C02057416": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2WD500D",
+   "year": "05"
+  }
+ ],
+ "3C04504006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD000A",
+   "year": "04"
+  }
+ ],
+ "3C04504106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD001A",
+   "year": "04"
+  }
+ ],
+ "3C04504216": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD010A",
+   "year": "04"
+  }
+ ],
+ "3C04504316": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD012A",
+   "year": "04"
+  }
+ ],
+ "3C04784106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD001B",
+   "year": "04"
+  }
+ ],
+ "3C04784216": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD010B",
+   "year": "04"
+  }
+ ],
+ "3C04784316": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD012B",
+   "year": "04"
+  }
+ ],
+ "3C0A383106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD200A",
+   "year": "04"
+  }
+ ],
+ "3C0A384206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD604A",
+   "year": "05"
+  }
+ ],
+ "3C0A387116": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD610A",
+   "year": "04"
+  }
+ ],
+ "3C0A387516": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD612A",
+   "year": "04"
+  }
+ ],
+ "3C42164006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Outback",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2WD200C",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Outback",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2WD200C",
+   "year": "05"
+  }
+ ],
+ "3C421A4006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2WD201C",
+   "year": "05"
+  }
+ ],
+ "3C4A354006": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7055",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZZ001E",
+   "year": "05"
+  }
+ ],
+ "3C4A384106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD701C",
+   "year": "05"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD701C",
+   "year": "05"
+  }
+ ],
+ "3C54504106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD001G",
+   "year": "04"
+  }
+ ],
+ "3C54504216": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD010G",
+   "year": "04"
+  }
+ ],
+ "3C54504316": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD012G",
+   "year": "04"
+  }
+ ],
+ "3C54784106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD001T",
+   "year": "05"
+  }
+ ],
+ "3C54784206": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD002T",
+   "year": "05"
+  }
+ ],
+ "3C54784216": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD010T",
+   "year": "05"
+  }
+ ],
+ "3C54784316": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD012T",
+   "year": "05"
+  }
+ ],
+ "3C5A347116": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZY110H",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2ZY110H",
+   "year": "05"
+  }
+ ],
+ "3C5A384106": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD603H",
+   "year": "05"
+  }
+ ],
+ "3C5A387116": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2WD610H",
+   "year": "04"
+  }
+ ],
+ "3D04403005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE200A",
+   "year": "04"
+  }
+ ],
+ "3D044A4005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ111C",
+   "year": "05"
+  }
+ ],
+ "3D04594005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ111B",
+   "year": "05"
+  }
+ ],
+ "3D045B4005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ120S",
+   "year": "05"
+  }
+ ],
+ "3D04EA4605": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ1X00",
+   "year": ""
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ1X00",
+   "year": ""
+  }
+ ],
+ "3D12594006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJB10J",
+   "year": "05"
+  }
+ ],
+ "3D12594106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJB11J",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJB11J.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.10.1159",
+   "year": "05"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJB11J.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.5.327",
+   "year": "05"
+  }
+ ],
+ "3D44583005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE3000",
+   "year": "05"
+  },
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TE300D",
+   "year": "05"
+  }
+ ],
+ "3D44593005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A4RN300G",
+   "year": "05"
+  }
+ ],
+ "3D54583005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TH100H",
+   "year": "05"
+  }
+ ],
+ "3D54593005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4RN300I",
+   "year": "04"
+  }
+ ],
+ "3D545B6005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4TH100L",
+   "year": "05"
+  }
+ ],
+ "3DA4583005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT/AT",
+   "xmlid": "A4RM200K",
+   "year": "05"
+  }
+ ],
+ "3E12044006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5RS",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ101G",
+   "year": "05"
+  }
+ ],
+ "3E12044106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5RS",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ111G",
+   "year": "05"
+  }
+ ],
+ "3E12044206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5RS",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ121G",
+   "year": "05"
+  }
+ ],
+ "3E12084006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5RS",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ103G",
+   "year": "05"
+  }
+ ],
+ "3E12084106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5RS",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ113G",
+   "year": "05"
+  }
+ ],
+ "3E12084206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5RS",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ123G",
+   "year": "05"
+  }
+ ],
+ "3E12084306": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5RS",
+   "transmission": "MT/AT",
+   "xmlid": "E2ZJ133G",
+   "year": "05"
+  }
+ ],
+ "3E14444006": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A4TF800E",
+   "year": "05"
+  }
+ ],
+ "3E14483006": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TF7000",
+   "year": "05"
+  }
+ ],
+ "3E14484006": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TF800F",
+   "year": "05"
+  }
+ ],
+ "3E14486006": [
+  {
+   "flashmethod": "wrx04",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A4TF810F",
+   "year": "05"
+  }
+ ],
+ "3F12404006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "AT",
+   "xmlid": "A2WC400K",
+   "year": "05"
+  }
+ ],
+ "3F12404106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "AT",
+   "xmlid": "A2WC500K",
+   "year": "05"
+  }
+ ],
+ "3F12404206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "AT",
+   "xmlid": "A2WC501K",
+   "year": "05"
+  }
+ ],
+ "3F12484006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "MT",
+   "xmlid": "A2WC400L",
+   "year": "05"
+  }
+ ],
+ "3F12484106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "MT",
+   "xmlid": "A2WC500L",
+   "year": "05"
+  }
+ ],
+ "3F12484206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "MT",
+   "xmlid": "A2WC501L",
+   "year": "05"
+  }
+ ],
+ "401A344206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "B9 Tribeca",
+   "submodel": "",
+   "transmission": "AT",
+   "xmlid": "D0XJ002B",
+   "year": "06"
+  }
+ ],
+ "4212047006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2VG211D",
+   "year": "06"
+  }
+ ],
+ "4212047106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2VG221D",
+   "year": "07"
+  }
+ ],
+ "4212087006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2VG212D",
+   "year": "06"
+  }
+ ],
+ "4212505106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DH101D",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DH100D",
+   "year": "06"
+  }
+ ],
+ "4212585006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DH100I",
+   "year": "06"
+  }
+ ],
+ "4212585106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DH101I",
+   "year": "06"
+  }
+ ],
+ "4212585206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DH102I",
+   "year": "06"
+  }
+ ],
+ "4242504106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DH100P",
+   "year": "06"
+  }
+ ],
+ "4242584106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DH100F",
+   "year": "06"
+  }
+ ],
+ "4252187006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2VG212E",
+   "year": "06"
+  }
+ ],
+ "4252504106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DH100H",
+   "year": "06"
+  }
+ ],
+ "4252584106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DH100M",
+   "year": "06"
+  }
+ ],
+ "42A2504106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DH100E",
+   "year": "06"
+  }
+ ],
+ "4304594005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ121B",
+   "year": "05"
+  }
+ ],
+ "43045A4005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ121C",
+   "year": "05"
+  }
+ ],
+ "43045B4005": [
+  {
+   "flashmethod": "wrx02",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "68HC16Y5",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT/AT",
+   "xmlid": "A4TJ121S",
+   "year": "05"
+  }
+ ],
+ "4312044006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VH101C",
+   "year": "06"
+  }
+ ],
+ "4312047106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VH111C",
+   "year": "06"
+  }
+ ],
+ "4312048006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5",
+   "transmission": "AT",
+   "xmlid": "E2VL001C",
+   "year": "06"
+  }
+ ],
+ "4312084006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VH102C",
+   "year": "06"
+  }
+ ],
+ "4312087106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VH112C",
+   "year": "06"
+  }
+ ],
+ "4312087206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VH202C",
+   "year": "06"
+  }
+ ],
+ "431208A006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VH100C",
+   "year": "06"
+  }
+ ],
+ "4312504006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A8DH200W",
+   "year": "06"
+  }
+ ],
+ "4312584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH200X",
+   "year": "06"
+  }
+ ],
+ "4312584106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH201X",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH201X.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.5.2253",
+   "year": "06"
+  }
+ ],
+ "4312584206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH202X",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH202X.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.5.326",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH202X.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.9.334",
+   "year": "06"
+  }
+ ],
+ "4312594006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2ZJE11J",
+   "year": "06"
+  }
+ ],
+ "4342584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH200Y",
+   "year": "06"
+  }
+ ],
+ "4342592006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DG300Z",
+   "year": "06"
+  }
+ ],
+ "4342594006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DH200Z",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DH200Z.MeRpMoD.VA.SD.RL.CEL_v13.3.13.319",
+   "year": "06"
+  }
+ ],
+ "434259A006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DH20",
+   "year": "06"
+  }
+ ],
+ "4352584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH200O",
+   "year": "06"
+  }
+ ],
+ "4352594006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DP020X",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DH200V",
+   "year": "06"
+  }
+ ],
+ "43A2584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DH200U",
+   "year": "06"
+  }
+ ],
+ "4512147106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VG221B",
+   "year": "06"
+  }
+ ],
+ "4512184106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT/MT",
+   "xmlid": "E2VG204B",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VG204B",
+   "year": "06"
+  }
+ ],
+ "4512187106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "MT/AT",
+   "xmlid": "E2VG222B",
+   "year": "06"
+  }
+ ],
+ "4512188006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5",
+   "transmission": "MT/AT",
+   "xmlid": "E2VL002B",
+   "year": "06"
+  }
+ ],
+ "4512503106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WF200C",
+   "year": "06"
+  }
+ ],
+ "4512513106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2WF200R",
+   "year": "06"
+  }
+ ],
+ "4512783106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WF200N",
+   "year": "06"
+  }
+ ],
+ "4512793106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A2WF200S",
+   "year": "06"
+  }
+ ],
+ "451A354006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D0XJ001P",
+   "year": "06"
+  }
+ ],
+ "454A344006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D0XJ001R",
+   "year": "06"
+  }
+ ],
+ "454A357006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D0XJ002S",
+   "year": "06"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D0XJ001S",
+   "year": "06"
+  }
+ ],
+ "454A384006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D0XJ001L",
+   "year": "06"
+  }
+ ],
+ "455A344006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D0XJ001T",
+   "year": "06"
+  }
+ ],
+ "455A384006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D0XJ001M",
+   "year": "06"
+  }
+ ],
+ "4812403006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "AT",
+   "xmlid": "A2WF100K",
+   "year": "06"
+  }
+ ],
+ "4812403106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "AT",
+   "xmlid": "A2WF101K",
+   "year": "06"
+  }
+ ],
+ "4812483006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "MT",
+   "xmlid": "A2WF100L",
+   "year": "06"
+  }
+ ],
+ "4812483106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Baja",
+   "submodel": "Turbo",
+   "transmission": "MT",
+   "xmlid": "A2WF101L",
+   "year": "06"
+  }
+ ],
+ "4B04505107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2UH000A",
+   "year": "06"
+  }
+ ],
+ "4B04505207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2UI000A",
+   "year": "07"
+  }
+ ],
+ "4B04535107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2PG420A",
+   "year": "07"
+  }
+ ],
+ "4B04585007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2UG000B",
+   "year": "06"
+  }
+ ],
+ "4B04785007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2UG000K",
+   "year": "06"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2UG000k",
+   "year": "06"
+  }
+ ],
+ "4B04785207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2UI000K",
+   "year": "07"
+  }
+ ],
+ "4B0A368007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2UK001Q",
+   "year": "07"
+  }
+ ],
+ "4B0A377007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2PH410Q",
+   "year": "07"
+  }
+ ],
+ "4B12147007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2UE101B",
+   "year": "07"
+  }
+ ],
+ "4B12187007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2UE102B",
+   "year": "07"
+  }
+ ],
+ "4B12525007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2UG000C",
+   "year": "07"
+  }
+ ],
+ "4B12525207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2UI001C",
+   "year": "07"
+  }
+ ],
+ "4B125A5007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2UG000N",
+   "year": "07"
+  }
+ ],
+ "4B12785007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2UG000L",
+   "year": "07"
+  }
+ ],
+ "4B12785207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2UI001L",
+   "year": "07"
+  }
+ ],
+ "4B4A346107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2UH003R",
+   "year": "07"
+  }
+ ],
+ "4B4A347007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2UJ003R",
+   "year": "07"
+  }
+ ],
+ "4B4A384007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2UH001L",
+   "year": "07"
+  }
+ ],
+ "4B52504107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2UG001G",
+   "year": "08"
+  }
+ ],
+ "4B5250A007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2UI000Y",
+   "year": "08"
+  }
+ ],
+ "4B52584207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2UG002T",
+   "year": "07"
+  }
+ ],
+ "4B5258A007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2UI000Z",
+   "year": "08"
+  }
+ ],
+ "4B5A344007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2UH001T",
+   "year": "07"
+  }
+ ],
+ "4B5A347007": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2UJ001T",
+   "year": "08"
+  }
+ ],
+ "4B5A384007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "3.0R",
+   "transmission": "MT",
+   "xmlid": "D2UH001M",
+   "year": "07"
+  }
+ ],
+ "4C1A344007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "B9 Tribeca",
+   "submodel": "",
+   "transmission": "AT",
+   "xmlid": "D2UG101B",
+   "year": "07"
+  }
+ ],
+ "4D12044006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2UE101L",
+   "year": "07"
+  }
+ ],
+ "4D12048006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2UG001L",
+   "year": "07"
+  }
+ ],
+ "4D12084006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2UE102L",
+   "year": "07"
+  }
+ ],
+ "4D12084106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2UE202L",
+   "year": "06"
+  }
+ ],
+ "4D12088006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2UG002L",
+   "year": "07"
+  }
+ ],
+ "4D12504006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "A8DK100W",
+   "year": "07"
+  }
+ ],
+ "4D12584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK100X",
+   "year": "07"
+  }
+ ],
+ "4D12584106": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK101X",
+   "year": "07"
+  }
+ ],
+ "4D12784006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2UG000J",
+   "year": "07"
+  }
+ ],
+ "4D12784206": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2UJ000J",
+   "year": "07"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A2UJ000J.MeRpMoD.VA.SD.RL.LCA.CEL_v13.2.26.150",
+   "year": "07"
+  }
+ ],
+ "4D42584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK100Y",
+   "year": "07"
+  }
+ ],
+ "4D42594006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DK100Z",
+   "year": "07"
+  }
+ ],
+ "4D425A6006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK100K",
+   "year": "07"
+  }
+ ],
+ "4D52584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK100O",
+   "year": "07"
+  }
+ ],
+ "4D52594006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "A8DK100V",
+   "year": "07"
+  }
+ ],
+ "4D525A6006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK100L",
+   "year": "07"
+  }
+ ],
+ "4DA2584006": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "A8DK100U",
+   "year": "07"
+  }
+ ],
+ "4E12047007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester X",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2UE101I",
+   "year": "07"
+  }
+ ],
+ "4E12504107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DK100D",
+   "year": "07"
+  }
+ ],
+ "4E12584107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DK100I",
+   "year": "07/08"
+  }
+ ],
+ "4E22048007": [
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2UG001H",
+   "year": "07"
+  }
+ ],
+ "4E42504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DK100P",
+   "year": "07"
+  }
+ ],
+ "4E42584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DK100F",
+   "year": "07"
+  }
+ ],
+ "4E52144007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "AT",
+   "xmlid": "E2UE101J",
+   "year": "06/07"
+  }
+ ],
+ "4E52184007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT",
+   "xmlid": "E2UE102J",
+   "year": "06/07"
+  }
+ ],
+ "4E52504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DK100H",
+   "year": "07"
+  }
+ ],
+ "4E52584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DK100M",
+   "year": "07"
+  }
+ ],
+ "4EA2504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A8DK100E",
+   "year": "07"
+  }
+ ],
+ "4EA2584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DK100Q",
+   "year": "08"
+  },
+  {
+   "flashmethod": "sti05",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "A8DK100Q",
+   "year": "08"
+  }
+ ],
+ "4F54507016": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2WD010Y",
+   "year": "06"
+  }
+ ],
+ "4F54787016": [
+  {
+   "flashmethod": "sti04",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7055",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2WD010Z",
+   "year": "06"
+  }
+ ],
+ "5104144007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Exiga",
+   "submodel": "2.0i",
+   "transmission": "AT",
+   "xmlid": "E2TB101Q",
+   "year": "08"
+  }
+ ],
+ "5104504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "SGT",
+   "transmission": "AT",
+   "xmlid": "A2TB100V",
+   "year": "08"
+  }
+ ],
+ "5104584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "SGT",
+   "transmission": "MT",
+   "xmlid": "A2TB100U",
+   "year": "08"
+  }
+ ],
+ "5112144007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1E102H",
+   "year": "08"
+  }
+ ],
+ "5112147007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1E401H",
+   "year": "09"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1E401H",
+   "year": "08/09"
+  }
+ ],
+ "5112148007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1GB00H",
+   "year": "08"
+  }
+ ],
+ "5112184007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1E102G",
+   "year": "08"
+  }
+ ],
+ "5112187007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1E401G",
+   "year": "08/09"
+  }
+ ],
+ "5112188007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1GB00G",
+   "year": "08"
+  }
+ ],
+ "5112504107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "AT",
+   "xmlid": "AZ1E401B",
+   "year": "08"
+  }
+ ],
+ "5112584107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1E401A",
+   "year": "08"
+  }
+ ],
+ "5142584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1E400U",
+   "year": "08"
+  }
+ ],
+ "5152584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1E400C",
+   "year": "08"
+  }
+ ],
+ "51A2584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1E400E",
+   "year": "08"
+  }
+ ],
+ "5204504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2TB100A",
+   "year": "08"
+  }
+ ],
+ "520450C007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2TB100Y",
+   "year": "07"
+  }
+ ],
+ "5204584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2TB100B",
+   "year": "07"
+  }
+ ],
+ "5204784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2TB100K",
+   "year": "07"
+  }
+ ],
+ "5212167107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1D201D",
+   "year": "08"
+  }
+ ],
+ "5212167307": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1D302D",
+   "year": "09"
+  }
+ ],
+ "52121A7007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1D105C",
+   "year": "08"
+  }
+ ],
+ "52121A7307": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1D302C",
+   "year": "09"
+  }
+ ],
+ "5212525107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy(Outback)",
+   "submodel": "GT(XT)",
+   "transmission": "AT",
+   "xmlid": "A2TB001C",
+   "year": "08"
+  }
+ ],
+ "5212527007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "AT",
+   "xmlid": "A2TB002C",
+   "year": "09"
+  }
+ ],
+ "52125A5007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "A2TB000N",
+   "year": "08"
+  }
+ ],
+ "52125A5107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy(Outback)",
+   "submodel": "GT(XT)",
+   "transmission": "MT",
+   "xmlid": "A2TB001N",
+   "year": "08/09"
+  }
+ ],
+ "5212785007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2TB000L",
+   "year": "08"
+  }
+ ],
+ "5212785107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT spec.B",
+   "transmission": "MT",
+   "xmlid": "A2TB001L",
+   "year": "08"
+  }
+ ],
+ "521A355007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2TB101P",
+   "year": "08"
+  }
+ ],
+ "5222167007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i PZEV",
+   "transmission": "AT",
+   "xmlid": "EZ1D105B",
+   "year": "08"
+  }
+ ],
+ "5222167307": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1D302B",
+   "year": "09"
+  }
+ ],
+ "5222167407": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT",
+   "xmlid": "EZ1D303B",
+   "year": "09"
+  }
+ ],
+ "5222168007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outlook",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1GC00B",
+   "year": "12"
+  }
+ ],
+ "5222168107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1GD00B",
+   "year": "09"
+  }
+ ],
+ "52221A7207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i PZEV",
+   "transmission": "MT",
+   "xmlid": "EZ1D301A",
+   "year": "08"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5 PZEV",
+   "transmission": "MT",
+   "xmlid": "EZ1D301A",
+   "year": "08"
+  }
+ ],
+ "52221A7307": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5",
+   "transmission": "MT",
+   "xmlid": "EZ1D302A",
+   "year": "09"
+  }
+ ],
+ "52221A8107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1GD00A",
+   "year": "09"
+  }
+ ],
+ "524A344007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "6MT",
+   "xmlid": "D2TB201L",
+   "year": "08"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2TB201R",
+   "year": "08"
+  }
+ ],
+ "52521A4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2TB102M",
+   "year": "08"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2TB101L",
+   "year": "08"
+  }
+ ],
+ "5312146007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "AT",
+   "xmlid": "E2TB011I",
+   "year": "08"
+  }
+ ],
+ "571B347007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "",
+   "transmission": "AT",
+   "xmlid": "DZ1E401B",
+   "year": "08"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "",
+   "transmission": "AT",
+   "xmlid": "DZ1E103B",
+   "year": "08"
+  }
+ ],
+ "574B343107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "",
+   "transmission": "AT",
+   "xmlid": "DZ1G001F",
+   "year": "09"
+  }
+ ],
+ "5A04784107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G300F",
+   "year": "08"
+  }
+ ],
+ "5A04784207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G301F",
+   "year": "08"
+  }
+ ],
+ "5A12784107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G201I",
+   "year": "08/09"
+  }
+ ],
+ "5A42784107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G201G",
+   "year": "08"
+  }
+ ],
+ "5A42784207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202G",
+   "year": "08"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202G.AZ1GAM16.210131",
+   "year": "08"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202G.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.5.356",
+   "year": "08"
+  }
+ ],
+ "5A4278A107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "Z1G20000",
+   "year": "08/09"
+  }
+ ],
+ "5AA2784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G200J",
+   "year": "08"
+  }
+ ],
+ "5AA2784207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202J",
+   "year": "08"
+  }
+ ],
+ "5B02564007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5F300A",
+   "year": "10"
+  }
+ ],
+ "5B025A4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5F300B",
+   "year": "09"
+  }
+ ],
+ "5B121A4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5F200W",
+   "year": "10"
+  }
+ ],
+ "5B125A6007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "5EAT",
+   "xmlid": "AE5F301E",
+   "year": "10"
+  }
+ ],
+ "5B2B367007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.6R",
+   "transmission": "AT",
+   "xmlid": "DE5F201B",
+   "year": "10"
+  }
+ ],
+ "5B32164007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EE5F300A",
+   "year": "10"
+  }
+ ],
+ "5B42164007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EE5F300L",
+   "year": "10"
+  }
+ ],
+ "5B42564107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5F301C",
+   "year": "10"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5F301C",
+   "year": "10"
+  }
+ ],
+ "5B4B367007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.6",
+   "transmission": "AT",
+   "xmlid": "DE5F301H",
+   "year": "11"
+  }
+ ],
+ "5B525A4107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "AE5F301D",
+   "year": "10"
+  }
+ ],
+ "5B72564107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5F301H",
+   "year": "10"
+  }
+ ],
+ "5BEB367007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "KDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.6R",
+   "transmission": "AT",
+   "xmlid": "DE5F201A",
+   "year": "10"
+  }
+ ],
+ "5C04505107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G104L",
+   "year": "09"
+  }
+ ],
+ "5C04505207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G105L",
+   "year": "09"
+  }
+ ],
+ "5C12148007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1GB00L",
+   "year": "09"
+  }
+ ],
+ "5C12184007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1G108K",
+   "year": "09"
+  }
+ ],
+ "5C12187007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT",
+   "xmlid": "EZ1G109K",
+   "year": "09"
+  }
+ ],
+ "5C12504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G101R",
+   "year": "09"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi S206",
+   "transmission": "6MT",
+   "xmlid": "AZ1G800V",
+   "year": "2012"
+  }
+ ],
+ "5C22147007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1G109J",
+   "year": "09"
+  }
+ ],
+ "5C22147407": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1G110J",
+   "year": "10"
+  }
+ ],
+ "5C22148007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1GB00J",
+   "year": "09"
+  }
+ ],
+ "5C42504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G101N",
+   "year": "09/10"
+  }
+ ],
+ "5C42584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "AZ1G101M",
+   "year": "09/10"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "AZ1G101M.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.11.1246",
+   "year": "09/10"
+  }
+ ],
+ "5C52184007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5 FB",
+   "transmission": "MT",
+   "xmlid": "EP5D202N",
+   "year": "12"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5",
+   "transmission": "MT",
+   "xmlid": "EZ1G107M",
+   "year": "09"
+  }
+ ],
+ "5CA2504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G100T",
+   "year": "09"
+  }
+ ],
+ "5CA2507007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G111T",
+   "year": "11"
+  }
+ ],
+ "6202154007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "E2SB001K",
+   "year": "08"
+  }
+ ],
+ "6202504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "A2SB000Y",
+   "year": "08"
+  }
+ ],
+ "6204504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "A2SB000A",
+   "year": "08"
+  }
+ ],
+ "620A364007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2SB001Q",
+   "year": "08"
+  }
+ ],
+ "621A354007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2TB102P",
+   "year": "09"
+  }
+ ],
+ "621A356007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "D2TC001P",
+   "year": "09"
+  }
+ ],
+ "62421A4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2SB002L",
+   "year": "08"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "E2SB002L",
+   "year": "08"
+  }
+ ],
+ "6304504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "SGT",
+   "transmission": "AT",
+   "xmlid": "AZ1H101W",
+   "year": "08"
+  }
+ ],
+ "6304504107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Exiga",
+   "submodel": "2.0GT",
+   "transmission": "AT",
+   "xmlid": "AZ1H102W",
+   "year": "08"
+  }
+ ],
+ "6612784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G401V",
+   "year": "09"
+  }
+ ],
+ "6642584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G400U",
+   "year": "09"
+  }
+ ],
+ "6642784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G400Y",
+   "year": "2009"
+  }
+ ],
+ "6644D87207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.0T Diesel",
+   "transmission": "MT",
+   "xmlid": "JZ2F401A",
+   "year": "09/10"
+  }
+ ],
+ "6652784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G400W",
+   "year": "09"
+  }
+ ],
+ "66A2784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G400X",
+   "year": "09"
+  }
+ ],
+ "671B344007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "",
+   "transmission": "AT",
+   "xmlid": "DZ1E402B",
+   "year": "09"
+  }
+ ],
+ "6902744007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "AT",
+   "xmlid": "AZ1G502L",
+   "year": "09"
+  }
+ ],
+ "6904784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G500F",
+   "year": "09"
+  }
+ ],
+ "6904794007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G501K",
+   "year": "09"
+  }
+ ],
+ "69047A3007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI R205",
+   "transmission": "MT",
+   "xmlid": "AZ1G500Z",
+   "year": "10"
+  }
+ ],
+ "6912783007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202I",
+   "year": "08/09"
+  }
+ ],
+ "6C045A3007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "AZ1J200N",
+   "year": "10"
+  }
+ ],
+ "6C12144007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "CVT",
+   "xmlid": "EZ1G600L",
+   "year": "09"
+  }
+ ],
+ "6C12188007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1GB10K",
+   "year": "10"
+  }
+ ],
+ "6C12506007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G601R",
+   "year": "10"
+  }
+ ],
+ "6C22148007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1GB10J",
+   "year": "10"
+  }
+ ],
+ "6C52144007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1G108N",
+   "year": "09"
+  }
+ ],
+ "6CE2147007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "KDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1G601Y",
+   "year": "10"
+  }
+ ],
+ "6CF2504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G600P",
+   "year": "10"
+  }
+ ],
+ "6E12144007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1G701H",
+   "year": "10"
+  }
+ ],
+ "6E12147007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1G702H",
+   "year": "10"
+  }
+ ],
+ "6E12148007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EZ1GB10H",
+   "year": "10"
+  }
+ ],
+ "6E12188007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EZ1GB10G",
+   "year": "10"
+  }
+ ],
+ "6E12786007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G701V",
+   "year": "2010"
+  }
+ ],
+ "6E12787007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G710V",
+   "year": "10"
+  }
+ ],
+ "7012147007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5I910H",
+   "year": "11"
+  }
+ ],
+ "7012187007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "ZE5I910G",
+   "year": "11"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5I910G",
+   "year": "11"
+  }
+ ],
+ "7012187107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5IA10G",
+   "year": "11"
+  }
+ ],
+ "7102514007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "S.EDITION",
+   "transmission": "5EAT",
+   "xmlid": "AZ1J500Q",
+   "year": "11"
+  }
+ ],
+ "7104584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "AZ1J500L",
+   "year": "11"
+  }
+ ],
+ "7112346007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "FB25",
+   "transmission": "AT",
+   "xmlid": "EP5D201D",
+   "year": "2011"
+  }
+ ],
+ "7112507407": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AE5IB40R",
+   "year": "11"
+  }
+ ],
+ "7122387007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.0X",
+   "transmission": "MT",
+   "xmlid": "EP5D202A",
+   "year": "2011"
+  }
+ ],
+ "7134345007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.0X",
+   "transmission": "AT",
+   "xmlid": "EP5D202X",
+   "year": "2011"
+  }
+ ],
+ "7134347007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.0X",
+   "transmission": "AT",
+   "xmlid": "EP5D700X",
+   "year": "2013"
+  }
+ ],
+ "7134385007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.0X",
+   "transmission": "MT",
+   "xmlid": "EP5D202W",
+   "year": "2011"
+  }
+ ],
+ "7142504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "S.EDITION",
+   "transmission": "5EAT",
+   "xmlid": "AZ1J500V",
+   "year": "11"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G900P",
+   "year": "11"
+  }
+ ],
+ "7142584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G900O",
+   "year": "11"
+  }
+ ],
+ "7144345007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.0X",
+   "transmission": "AT",
+   "xmlid": "EP5D004L",
+   "year": "2011"
+  }
+ ],
+ "7152345007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5 FB",
+   "transmission": "MT",
+   "xmlid": "EP5D202N",
+   "year": "12"
+  }
+ ],
+ "71F2504007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "AT",
+   "xmlid": "AZ1G800R",
+   "year": "11"
+  }
+ ],
+ "71F2514007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "STI",
+   "transmission": "AT",
+   "xmlid": "AZ1J500T",
+   "year": "10"
+  }
+ ],
+ "7212786007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G700J",
+   "year": "10"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G701I",
+   "year": "10"
+  }
+ ],
+ "7212786107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "STi",
+   "submodel": "SE",
+   "transmission": "MT",
+   "xmlid": "AZ1G702I",
+   "year": "10"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi SE",
+   "transmission": "MT",
+   "xmlid": "AZ1G702I",
+   "year": "10"
+  }
+ ],
+ "7272784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ME.DM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G700J",
+   "year": "10"
+  }
+ ],
+ "72F2784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G700H",
+   "year": "10"
+  }
+ ],
+ "7324387507": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.0 FB",
+   "transmission": "MT",
+   "xmlid": "EP5G600A",
+   "year": "12"
+  }
+ ],
+ "73243C7407": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.0i",
+   "transmission": "CVT",
+   "xmlid": "EP5G300b",
+   "year": "2012"
+  }
+ ],
+ "73243C7507": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.0i",
+   "transmission": "CVT",
+   "xmlid": "EP5G601B",
+   "year": "2012"
+  }
+ ],
+ "7334384107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.0 FB",
+   "transmission": "MT",
+   "xmlid": "EP5F300H",
+   "year": "13"
+  }
+ ],
+ "73343A4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.0i",
+   "transmission": "MT",
+   "xmlid": "EP5F300s",
+   "year": "2012"
+  }
+ ],
+ "73343C4207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.0i",
+   "transmission": "CVT",
+   "xmlid": "EP5F301I",
+   "year": "2013"
+  }
+ ],
+ "73343E4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EP5F300t",
+   "year": "12"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.5i",
+   "transmission": "CVT",
+   "xmlid": "EP5F300t",
+   "year": "2011"
+  }
+ ],
+ "73443F4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.5i",
+   "transmission": "CVT",
+   "xmlid": "EP5F300r",
+   "year": "2012"
+  }
+ ],
+ "73843E4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.5i",
+   "transmission": "CVT",
+   "xmlid": "EP5G401z",
+   "year": "13"
+  }
+ ],
+ "7402744007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "AT",
+   "xmlid": "AZ1G800F",
+   "year": "11"
+  }
+ ],
+ "7404784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "WRX",
+   "submodel": "SPEC C",
+   "transmission": "MT",
+   "xmlid": "AZ1G800T",
+   "year": "11"
+  }
+ ],
+ "7404794007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G800S",
+   "year": "2012"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi S206",
+   "transmission": "6MT",
+   "xmlid": "AZ1G800V",
+   "year": "2012"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G800S",
+   "year": "2010"
+  }
+ ],
+ "7412587007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5I910L",
+   "year": "11"
+  }
+ ],
+ "741258707": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5I910L",
+   "year": "11"
+  }
+ ],
+ "7412587107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5IA10L",
+   "year": "2011"
+  }
+ ],
+ "7412587207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5IB00L",
+   "year": "11"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "WRX",
+   "submodel": "HATCH",
+   "transmission": "AT",
+   "xmlid": "AE5IB00L",
+   "year": "11"
+  }
+ ],
+ "7412587407": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5IB40L",
+   "year": "11"
+  }
+ ],
+ "7412597007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5I910V",
+   "year": "2011"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5I910V",
+   "year": "11"
+  }
+ ],
+ "7412597207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5IB00V",
+   "year": "11"
+  }
+ ],
+ "7412597407": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5IB40V",
+   "year": "11"
+  }
+ ],
+ "7432744007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "AT",
+   "xmlid": "AZ1J500J",
+   "year": "11"
+  }
+ ],
+ "7442594007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1J500G",
+   "year": "11"
+  }
+ ],
+ "7452584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G900C",
+   "year": "11"
+  }
+ ],
+ "7472584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G700E",
+   "year": "11"
+  }
+ ],
+ "7472594007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G700K",
+   "year": "12"
+  }
+ ],
+ "7472744007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "Sti",
+   "transmission": "MT",
+   "xmlid": "AZ1J400H",
+   "year": "11"
+  }
+ ],
+ "74A2584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1G800D",
+   "year": "11"
+  }
+ ],
+ "74A2594007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G800X",
+   "year": "2011"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G800L",
+   "year": "2011"
+  }
+ ],
+ "7502564007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5I001A",
+   "year": "11"
+  }
+ ],
+ "7502567007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5I410A",
+   "year": "11"
+  }
+ ],
+ "75121A7307": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5IB20W",
+   "year": "11"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5IB50W",
+   "year": "11"
+  }
+ ],
+ "751B367007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.6",
+   "transmission": "AT",
+   "xmlid": "DE5F810G",
+   "year": "11"
+  }
+ ],
+ "751B367207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.6",
+   "transmission": "AT",
+   "xmlid": "DE5IB00G",
+   "year": "11"
+  }
+ ],
+ "7522167007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5I910T",
+   "year": "11"
+  }
+ ],
+ "7522167207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "CVT",
+   "xmlid": "EE5IA11T",
+   "year": "11"
+  }
+ ],
+ "7522167707": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outlook",
+   "submodel": "2.5i",
+   "transmission": "CVT",
+   "xmlid": "EE5IB41T",
+   "year": "12"
+  }
+ ],
+ "7522168007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "Elite",
+   "transmission": "AT",
+   "xmlid": "EE5I920T",
+   "year": "10"
+  }
+ ],
+ "752B367307": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "3.6R",
+   "transmission": "AT",
+   "xmlid": "DE5IB40B",
+   "year": "11"
+  }
+ ],
+ "7532164007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EE5I500A",
+   "year": "11"
+  }
+ ],
+ "7542564007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "5EAT",
+   "xmlid": "AE5I500G",
+   "year": "11"
+  }
+ ],
+ "75525A4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Liberty",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5I500F",
+   "year": "12"
+  }
+ ],
+ "761B347007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "3.6",
+   "transmission": "MT",
+   "xmlid": "DE5F810K",
+   "year": "11"
+  }
+ ],
+ "764B344007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "H6",
+   "transmission": "AT",
+   "xmlid": "DE5I500M",
+   "year": "12"
+  }
+ ],
+ "76E9015023": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AZ1G202G.MeRpMoD.Switch.Testing.v01.50.d20.9.21.1036",
+   "year": "08"
+  }
+ ],
+ "7B04507007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "Exiga",
+   "transmission": "MT",
+   "xmlid": "AZ1J500X",
+   "year": "2010"
+  }
+ ],
+ "7C02164007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Outback",
+   "submodel": "2.5i",
+   "transmission": "AT",
+   "xmlid": "EE5K000K",
+   "year": "11"
+  }
+ ],
+ "7C121A7407": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "2.5i",
+   "transmission": "MT",
+   "xmlid": "EE5K801W",
+   "year": "12"
+  }
+ ],
+ "7C125A4007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "MT",
+   "xmlid": "AE5K410E",
+   "year": "12"
+  }
+ ],
+ "7C2B367107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.6R",
+   "transmission": "AT",
+   "xmlid": "DE5K800B",
+   "year": "12"
+  }
+ ],
+ "7E2B377007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.6R",
+   "transmission": "AT",
+   "xmlid": "DE5M301C",
+   "year": "13"
+  }
+ ],
+ "7E42564007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "GT",
+   "transmission": "AT",
+   "xmlid": "AE5M100G",
+   "year": "13"
+  }
+ ],
+ "7E44DC4007": [
+  {
+   "flashmethod": "subarucand",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7059",
+   "model": "Forester",
+   "submodel": "2.0D",
+   "transmission": "CVT",
+   "xmlid": "JE8E001B",
+   "year": "2013"
+  }
+ ],
+ "7F12387107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5X",
+   "transmission": "MT",
+   "xmlid": "EP5F400c",
+   "year": "2012"
+  }
+ ],
+ "7F12505007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "4EAT",
+   "xmlid": "AE5K411R",
+   "year": "10"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "4EAT",
+   "xmlid": "AE5K411R",
+   "year": "12"
+  }
+ ],
+ "7F22387207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.5 FB",
+   "transmission": "MT",
+   "xmlid": "EP5G211a",
+   "year": "12"
+  }
+ ],
+ "8112585007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5K500L",
+   "year": "2012"
+  }
+ ],
+ "8112587007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5K611L",
+   "year": "2012"
+  }
+ ],
+ "8112587207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5K800L",
+   "year": "12"
+  }
+ ],
+ "8112595007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K500V",
+   "year": "2012"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K611V",
+   "year": "2012"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K700V",
+   "year": "2012"
+  }
+ ],
+ "8112597007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K611V",
+   "year": "2012"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K611V.MeRpMoD.VA.SD.RL.LCA.CEL_v13.3.5.339",
+   "year": "2012"
+  }
+ ],
+ "8112597107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K700V",
+   "year": "2012"
+  }
+ ],
+ "8112597207": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STi",
+   "transmission": "MT",
+   "xmlid": "AE5K800V",
+   "year": "2012"
+  }
+ ],
+ "821B367007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "3.6",
+   "transmission": "MT",
+   "xmlid": "DE5K411K",
+   "year": "12"
+  }
+ ],
+ "8424385107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.0 FB",
+   "transmission": "MT",
+   "xmlid": "EP5I200F",
+   "year": "13"
+  }
+ ],
+ "8512506007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "XT",
+   "transmission": "MT",
+   "xmlid": "AE5L500R",
+   "year": "2013"
+  }
+ ],
+ "8522346007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Forester",
+   "submodel": "2.0i",
+   "transmission": "AT",
+   "xmlid": "EP5H200b",
+   "year": "2013"
+  }
+ ],
+ "8604387107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "OTHER",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01A",
+   "year": "2013"
+  }
+ ],
+ "8604387207": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "OTHER",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA02A",
+   "year": "2015"
+  }
+ ],
+ "8614307207": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01D",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01D",
+   "year": "2013"
+  }
+ ],
+ "8614387107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA00C",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01C",
+   "year": "2013"
+  }
+ ],
+ "8644307107": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01I",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01I",
+   "year": "2013"
+  }
+ ],
+ "8644385007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FB25",
+   "transmission": "MT",
+   "xmlid": "ZA1J700G",
+   "year": "2013"
+  }
+ ],
+ "8644387007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA00G",
+   "year": "2013"
+  }
+ ],
+ "8644387107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "OTHER",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01J",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01G",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01G",
+   "year": "2013"
+  }
+ ],
+ "8674305007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "Middle East",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1J700K",
+   "year": "2012"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "Middle East",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1J700K",
+   "year": "2012"
+  }
+ ],
+ "8674307107": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01K",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01K",
+   "year": "2013"
+  }
+ ],
+ "86C4305207": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "China",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01O",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "China",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01O",
+   "year": "2013"
+  }
+ ],
+ "86C4385207": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "China",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01N",
+   "year": "2013"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "China",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01N",
+   "year": "2013"
+  }
+ ],
+ "86C4387107": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "China",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA03N",
+   "year": "2015"
+  }
+ ],
+ "86E4307107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "Korea",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JA01F",
+   "year": "2013"
+  }
+ ],
+ "86E4387107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "KOREA",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA01E",
+   "year": "2013"
+  }
+ ],
+ "86E4387207": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "KOREA",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JA02E",
+   "year": "2016"
+  }
+ ],
+ "8A04794007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "Sti Spec C",
+   "transmission": "MT",
+   "xmlid": "AZ1K000T",
+   "year": "12"
+  }
+ ],
+ "8A12584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5L500L",
+   "year": "13"
+  }
+ ],
+ "8A12587007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5L600L",
+   "year": "13"
+  }
+ ],
+ "8A12784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "Sti",
+   "transmission": "MT",
+   "xmlid": "AE5L500V",
+   "year": "13"
+  }
+ ],
+ "8A12787107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5L700V",
+   "year": "13"
+  }
+ ],
+ "8B04783007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1N100S",
+   "year": "15"
+  }
+ ],
+ "8B12784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5R100V",
+   "year": "15"
+  }
+ ],
+ "8B12787007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5R101V",
+   "year": "15"
+  }
+ ],
+ "8B32783107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1N1MMM",
+   "year": "14"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1N100M",
+   "year": "14"
+  }
+ ],
+ "8B42783107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1N100G",
+   "year": "14"
+  }
+ ],
+ "8C1B345007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Tribeca",
+   "submodel": "3.0R",
+   "transmission": "AT",
+   "xmlid": "DE5L510K",
+   "year": "13"
+  }
+ ],
+ "8E04503007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "Exiga",
+   "transmission": "AT",
+   "xmlid": "AZ1L100X",
+   "year": "2013"
+  }
+ ],
+ "8F04794007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1L100T",
+   "year": "14"
+  }
+ ],
+ "8F12583007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5Q100L",
+   "year": "14"
+  }
+ ],
+ "8F12587007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AE5Q200L",
+   "year": "14"
+  }
+ ],
+ "8F12783007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5Q100V",
+   "year": "14"
+  }
+ ],
+ "8F12787007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5Q200V",
+   "year": "14"
+  }
+ ],
+ "8F42784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1L100G",
+   "year": "14"
+  }
+ ],
+ "8F52584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1L100C",
+   "year": "14"
+  }
+ ],
+ "8F72784007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1L100K",
+   "year": "14"
+  }
+ ],
+ "8FA2584007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "WRX",
+   "transmission": "MT",
+   "xmlid": "AZ1L100D",
+   "year": "13"
+  }
+ ],
+ "901B374007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "CAD",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.6R",
+   "transmission": "AT",
+   "xmlid": "DE5M301H",
+   "year": "13"
+  }
+ ],
+ "902B374007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Legacy",
+   "submodel": "3.6R",
+   "transmission": "AT",
+   "xmlid": "DE5Q100C",
+   "year": "14"
+  }
+ ],
+ "91243C7007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "2.0 FB",
+   "transmission": "CVT",
+   "xmlid": "EP5L001G",
+   "year": "14"
+  }
+ ],
+ "91343E5007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.5 FB",
+   "transmission": "MT",
+   "xmlid": "EP5L000p",
+   "year": "14"
+  }
+ ],
+ "9222387107": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "Legacy",
+   "submodel": "2.0 NA",
+   "transmission": "MT",
+   "xmlid": "EA1M702A",
+   "year": "15"
+  }
+ ],
+ "A229607007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JB01D",
+   "year": "2014"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JB01D",
+   "year": "2014"
+  }
+ ],
+ "A229703007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JB00C",
+   "year": "2014"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JB00C",
+   "year": "2014"
+  }
+ ],
+ "A229707007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JB01C",
+   "year": "2014"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JB01C",
+   "year": "2014"
+  }
+ ],
+ "A329601007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JD00D",
+   "year": "2015"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JD00D",
+   "year": "2015"
+  }
+ ],
+ "A329701007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JD00C",
+   "year": "2015"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JD00C",
+   "year": "2015"
+  }
+ ],
+ "A361701007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JD00G",
+   "year": "2015"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JD00G",
+   "year": "2015"
+  }
+ ],
+ "A522507107": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "KDM",
+   "memmodel": "SH72531",
+   "model": "Forester",
+   "submodel": "2.5 NA",
+   "transmission": "MT",
+   "xmlid": "EA1T400W",
+   "year": "16"
+  }
+ ],
+ "A601907007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1P100S",
+   "year": "16"
+  }
+ ],
+ "A601936007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "JDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1P100T",
+   "year": "15"
+  }
+ ],
+ "A62A904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5T110V",
+   "year": "16"
+  }
+ ],
+ "A62A907007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5T200V",
+   "year": "16"
+  }
+ ],
+ "A62A907107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5T201V",
+   "year": "16"
+  }
+ ],
+ "A662903007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1P000G",
+   "year": "16"
+  }
+ ],
+ "A68A903007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1P000L",
+   "year": "15"
+  }
+ ],
+ "A6A2903007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1P000M",
+   "year": "15"
+  }
+ ],
+ "A891413007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "KDM",
+   "memmodel": "SH7058",
+   "model": "XV",
+   "submodel": "2.5i",
+   "transmission": "CVT",
+   "xmlid": "EP5N000z",
+   "year": "16"
+  }
+ ],
+ "A929703007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JF00C",
+   "year": "2016"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JF00C",
+   "year": "2016"
+  }
+ ],
+ "A929707007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JF40C",
+   "year": "2016"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JF40C",
+   "year": "2016"
+  }
+ ],
+ "A961704007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JF10G",
+   "year": "2015"
+  }
+ ],
+ "A9A1604007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JF20Q",
+   "year": "2016"
+  }
+ ],
+ "A9A1704007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JF20P",
+   "year": "2015"
+  }
+ ],
+ "B02A904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5W101V",
+   "year": "17"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5W100V",
+   "year": "17"
+  }
+ ],
+ "B0A2903007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1Q010M",
+   "year": "17"
+  }
+ ],
+ "B129704007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JN10C",
+   "year": "2018"
+  },
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JK00C",
+   "year": "2017"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JK00C",
+   "year": "2017"
+  }
+ ],
+ "B161604107": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "AT",
+   "xmlid": "ZA1JK00D",
+   "year": "2017"
+  }
+ ],
+ "B161704007": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "EUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "FA20",
+   "transmission": "MT",
+   "xmlid": "ZA1JK00G",
+   "year": "2017"
+  }
+ ],
+ "B22A904107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5Z000V",
+   "year": "17"
+  }
+ ],
+ "B22A933107": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5Z321V",
+   "year": "19"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI RA",
+   "transmission": "MT",
+   "xmlid": "AE5Z111W",
+   "year": "18"
+  },
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI RA",
+   "transmission": "MT",
+   "xmlid": "Ae5z111w",
+   "year": "18"
+  }
+ ],
+ "B262904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EUDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1S000G",
+   "year": "17"
+  }
+ ],
+ "B26A904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EUDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1S000M",
+   "year": "18"
+  }
+ ],
+ "B28A904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1S000L",
+   "year": "17"
+  }
+ ],
+ "C062904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "ADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI RA",
+   "transmission": "MT",
+   "xmlid": "AZ1U000G",
+   "year": "19"
+  }
+ ],
+ "C06A904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EUDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1U000M",
+   "year": "19"
+  }
+ ],
+ "C08A904007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "SADM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1U000L",
+   "year": "19"
+  }
+ ],
+ "C514015023": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "EUDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AZ1S000G.MeRpMoD.Switch.Testing.v01.50.d20.9.25.1445",
+   "year": "17"
+  }
+ ],
+ "D82A905007": [
+  {
+   "flashmethod": "subarucan",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH7058",
+   "model": "Impreza",
+   "submodel": "STI",
+   "transmission": "MT",
+   "xmlid": "AE5Z800A",
+   "year": "21"
+  }
+ ],
+ "ZA1JA00C": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "",
+   "transmission": "6MT",
+   "xmlid": "ZA1JA00C",
+   "year": "2012"
+  }
+ ],
+ "ZA1JA00G": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "",
+   "transmission": "6MT",
+   "xmlid": "ZA1JA00G",
+   "year": "2012"
+  }
+ ],
+ "ZA1JA01C": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "USDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "",
+   "transmission": "6MT",
+   "xmlid": "ZA1JA01C",
+   "year": "2012"
+  }
+ ],
+ "ZA1JA01G": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "AUDM",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "",
+   "transmission": "6MT",
+   "xmlid": "ZA1JA01G",
+   "year": "2012"
+  }
+ ],
+ "ZA1JA01J": [
+  {
+   "flashmethod": "subarubrz",
+   "make": "Subaru",
+   "market": "OTHER",
+   "memmodel": "SH72531",
+   "model": "BRZ",
+   "submodel": "",
+   "transmission": "6MT",
+   "xmlid": "ZA1JA01J",
+   "year": "2012"
+  }
+ ]
+}

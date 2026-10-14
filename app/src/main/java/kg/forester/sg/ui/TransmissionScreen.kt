@@ -147,7 +147,6 @@ fun TransmissionScreen() {
                 ConvRow(Lucide.Gauge, "Двигатель", if (rpm > 0) "$rpm" else "—", "об/мин")
                 ConvRow(Lucide.Fan, "Турбина", t?.turbineRpm?.toString() ?: "—", "об/мин")
                 ConvRow(Lucide.Percent, "Проскальзывание", fmtF(slip, 0), "%", if (lock == LockState.SLIPPING) C.Orange else C.Text)
-                ConvRow(Lucide.Lock, "Команда блокировки", fmtF(t?.lockUpPct, 0), "%")
                 Spacer(Modifier.weight(1f))
                 if (status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Lucide.Info, null, tint = if (t == null) C.Orange else C.Sub, modifier = Modifier.size(13.dp))

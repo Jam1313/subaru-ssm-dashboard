@@ -596,7 +596,10 @@ class EcuService : Service() {
             Repo.obdMode.value = false
             Repo.ecuInit.value = init
             Repo.link.value = LinkState.CONNECTED
-            Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+            val car = kg.forester.sg.ssm.EcuIds.car(this, init.romId)
+            Repo.linkMessage.value = "ROM ${init.romId}" + (car?.let { " ($it)" } ?: "") + " · ${client.transport.name}"
+            RomRaider.load(this)
+            RomRaider.siblingOf(init.romId)?.let { SsmTrace.log("no extended parameters for ROM ${init.romId}, using sibling $it") }
             SsmTrace.log("ECU init: SSM ${init.ssmId} ROM ${init.romId} caps ${init.capabilities.toHex(" ")}")
             val addrs = choosePollAddresses(client, init)
             if (addrs == null) {

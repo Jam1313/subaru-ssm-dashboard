@@ -66,7 +66,8 @@ abstract class KLineTransport : SsmTransport {
         SsmTrace.log("TX", packet)
         writeRaw(packet)
 
-        val deadline = System.currentTimeMillis() + 1500
+        // 2 s like RomRaider and FreeSSM: older (16-bit) ECUs can be slow with the first answer
+        val deadline = System.currentTimeMillis() + 2000
         var all = ByteArray(0)
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(15)
@@ -168,7 +169,11 @@ class SsmClient(val transport: SsmTransport) {
 
     fun init(dest: Int = ECU): EcuInit? {
         val (cmd, ok) = if (transport.isCan) 0xAA to 0xEA else 0xBF to 0xFF
-        val data = transport.exchange(dest, byteArrayOf(cmd.toByte())) ?: return null
+        // the engine unit gets one more try on K-line: just woken up, it may let the first request pass unanswered
+        // (not the transmission: its retries every minute would freeze the gauges twice as long)
+        val data = transport.exchange(dest, byteArrayOf(cmd.toByte()))
+            ?: (if (transport.isCan || dest != ECU) null else transport.exchange(dest, byteArrayOf(cmd.toByte())))
+            ?: return null
         if (data.size < 9 || data[0] != ok.toByte()) return null
         return EcuInit(
             ssmId = data.copyOfRange(1, 4).toHex(),

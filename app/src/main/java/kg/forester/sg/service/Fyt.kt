@@ -279,6 +279,9 @@ object Fyt {
         return true
     }
 
+    /** Makes [id] the head unit's audio source: 1 radio, 3 BT music, 8 music player (the call ensureRadio makes). */
+    fun source(id: Int) { cmd(main, 0, intArrayOf(id)) }
+
     fun radioSeek(up: Boolean) { ensureRadio(); cmd(radioModule, if (up) 5 else 6) }
     fun radioPreset(next: Boolean) { ensureRadio(); cmd(radioModule, if (next) 0 else 1) }
     fun radioBand() { ensureRadio(); cmd(radioModule, 11) }

@@ -1,5 +1,6 @@
 package kg.forester.sg.ui
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,6 +63,20 @@ object BottomBarCfg {
  */
 @Composable
 fun BottomStatusBar() {
+    // a warning takes the bar's place for a few seconds (see AlertInBottomBar), then the values come back
+    val alert by kg.forester.sg.service.Alerts.current.collectAsState()
+    androidx.compose.animation.AnimatedContent(
+        alert,
+        transitionSpec = {
+            (androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn()) togetherWith
+                (androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut())
+        },
+        label = "bottomAlert",
+    ) { a -> if (a != null) AlertInBottomBar(a) else BottomValues() }
+}
+
+@Composable
+private fun BottomValues() {
     val cfg by Repo.bottomBar.collectAsState()
     val slots = remember(cfg) { BottomBarCfg.parse(cfg) }
     val avail by Repo.rrAvailable.collectAsState()

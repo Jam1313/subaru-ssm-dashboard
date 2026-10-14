@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
         // adb: am start -n kg.forester.sg/.MainActivity --ez demo true [--ez skipSetup true]
         if (intent?.hasExtra("demo") == true) Repo.settings.demo = intent.getBooleanExtra("demo", false)
         if (intent?.getBooleanExtra("skipSetup", false) == true) Repo.settings.setupDone = true
+        testAlert(intent)
         kg.forester.sg.data.Shortcuts.load(this)
         // once a day: is there a newer release on GitHub?
         if (Repo.settings.feature("update") && System.currentTimeMillis() - Repo.settings.lastUpdateCheckMs > 24 * 3600_000L) {
@@ -138,6 +139,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // adb: am start -n kg.forester.sg/.MainActivity --es alert "текст" [--es level danger|warn|info]: how a warning looks
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        testAlert(intent)
+    }
+
+    private fun testAlert(i: android.content.Intent?) {
+        val text = i?.getStringExtra("alert") ?: return
+        val level = when (i.getStringExtra("level")) {
+            "danger" -> kg.forester.sg.service.Alerts.Level.DANGER
+            "info" -> kg.forester.sg.service.Alerts.Level.INFO
+            else -> kg.forester.sg.service.Alerts.Level.WARN
+        }
+        kg.forester.sg.service.Alerts.raise("test" + System.currentTimeMillis(), text, level, 0L, speak = false)
     }
 
     override fun onStart() {
@@ -331,7 +348,7 @@ fun App() {
             }
         }
         kg.forester.sg.ui.VoiceToast(Modifier.align(Alignment.TopCenter).padding(top = 14.dp))
-        DriverOverlays()
+        DriverOverlays(floating = false)
     }
 }
 
@@ -461,6 +478,7 @@ private fun TopBar(screen: Screen) {
             T(Repo.settings.carSub, 13.sp, C.Sub, maxLines = 1)
         }
         Spacer(Modifier.weight(1f))
+        kg.forester.sg.ui.StatusPill()
         Icon(Lucide.BatteryCharging, null, tint = C.Text, modifier = Modifier.size(22.dp))
         T(" ${fmt(e.batteryV?.toDouble())} V", 18.sp)
         Spacer(Modifier.width(22.dp))

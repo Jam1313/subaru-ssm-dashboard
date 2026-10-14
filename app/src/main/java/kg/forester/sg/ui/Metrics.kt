@@ -77,7 +77,7 @@ object Metrics {
         },
         Indicator("tripFuel", "Топливо за поездку", "За поездку", Lucide.Droplets, "л", "%.1f", 0f, 20f, "Топливо") { it.trip.trip?.fuelL?.toFloat() },
         Indicator("fuelLeft", "Топливо в баке", "В баке", Lucide.Fuel, "л", "%.0f", 0f, 60f, "Топливо") { it.trip.fuelLeftL?.toFloat() },
-        Indicator("range", "Запас хода", "Топливо", Lucide.Milestone, "км", "%.0f", 0f, 800f, "Топливо", warnBelow = 50f) { it.trip.rangeKm?.toFloat() },
+        Indicator("range", "Запас хода", "Топливо", Lucide.Fuel, "км", "%.0f", 0f, 800f, "Топливо", warnBelow = 50f) { it.trip.rangeKm?.toFloat() },
         // ignition and knock
         Indicator("timing", "УОЗ", "УОЗ", Lucide.Zap, "°", "%.1f", -10f, 50f, "Зажигание") { it.e.timingDeg },
         Indicator("knock", "Коррекция детонации", "Детонация", Lucide.AudioWaveform, "°", "%.1f", -10f, 2f, "Зажигание", warnBelow = -2f) { it.e.knockDeg },

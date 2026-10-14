@@ -252,11 +252,29 @@ object RomRaider {
         val calculated = defs.filter { p ->
             forUnit(p.target) && p.kind == RrParam.Kind.STD && p.addr < 0 && p.expr != null && p.deps.all { it in ids }
         }
-        val ext = if (tcu) emptyList() else byRom[init.romId.uppercase()].orEmpty().filter { it.expr != null }
+        val rom = init.romId.uppercase()
+        val ext = if (tcu) emptyList() else byRom[rom]?.filter { it.expr != null } ?: sibling(rom)
         // the driver's own addresses (engine unit only), for ROMs this base has no extended parameters for
         val own = if (tcu) emptyList() else kg.forester.sg.data.CustomParams.list().map { it.toParam() }.filter { it.expr != null }
         return std + calculated + ext + own
     }
+
+    /**
+     * For a ROM the base doesn't know: the extended parameters of its nearest sibling (same first 7 and last 2
+     * hex digits, e.g. 2A04446405 → 2A04446305, two revisions of one JDM Forester XT ECU), which usually keep their
+     * RAM layout. Marked in the description; the engine guard ignores readings that make no sense for a role.
+     */
+    private fun sibling(rom: String): List<RrParam> {
+        if (rom.length != 10) return emptyList()
+        val sib = byRom.keys.filter { it.length == 10 && it != rom && it.take(7) == rom.take(7) && it.takeLast(2) == rom.takeLast(2) }
+            .minByOrNull { kotlin.math.abs((it[7].digitToIntOrNull(16) ?: 99) - (rom[7].digitToIntOrNull(16) ?: 0)) } ?: return emptyList()
+        return byRom[sib].orEmpty().filter { it.expr != null }
+            .map { it.copy(desc = "адрес соседней прошивки $sib: значения стоит проверить. " + it.desc) }
+    }
+
+    /** ROMs whose extended parameters come from a sibling (see [sibling]), for the log. */
+    fun siblingOf(rom: String): String? = if (byRom.containsKey(rom.uppercase())) null
+        else sibling(rom.uppercase()).firstOrNull()?.desc?.substringAfter("прошивки ")?.substringBefore(':')
 
     private fun capOk(p: RrParam, init: EcuInit) = p.capByte < 0 || init.supports(p.capByte, p.capBit)
 
@@ -296,5 +314,20 @@ object RomRaider {
         }
         params.forEach { add(it, 0) }
         return out.toIntArray()
+    }
+}
+
+/** ECU id (the init's "ROM ID") → the car it comes from, "JDM Forester XT 2003 AT" (assets/ecu_ids.json). */
+object EcuIds {
+    @Volatile private var ids: Map<String, String>? = null
+
+    fun car(ctx: Context, romId: String): String? {
+        val m = ids ?: synchronized(this) {
+            ids ?: runCatching {
+                val o = JSONObject(ctx.assets.open("ecu_ids.json").bufferedReader().readText()).getJSONObject("ids")
+                o.keys().asSequence().associateWith { o.getString(it) }
+            }.getOrDefault(emptyMap()).also { ids = it }
+        }
+        return m[romId.uppercase()]
     }
 }
