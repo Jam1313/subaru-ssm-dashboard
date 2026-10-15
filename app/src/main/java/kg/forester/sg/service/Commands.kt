@@ -102,6 +102,7 @@ object Commands {
         "waze" to "вейз", "вэйз" to "вейз", "вейс" to "вейз", "osmand" to "османд", "осм энд" to "османд", "осмэнд" to "османд",
         "мак дональдс" to "макдональдс", "чек энджин" to "чек", "чек инджин" to "чек",
         "мега герц" to "мгц", "мегагерц" to "мгц", "хит фм" to "хит фм",
+        "эм ка эр" to "мкр", "мэ ка эр" to "мкр", "эм кэ эр" to "мкр", "эм ка эр эн" to "мкрн",
     )
 
     /** Inside-word spelling variants of the recogniser. */
@@ -177,6 +178,9 @@ object Commands {
     /** Lower case, ё→е, no punctuation, abbreviations joined, fillers removed; "" if nothing is left. */
     fun normalize(text: String): String {
         var s = text.lowercase().replace('ё', 'е').replace('-', ' ')
+        // a typed address: "65/2" keeps its fraction, "12мкр" is "12 мкр"
+        s = Regex("(\\d)\\s*/\\s*(\\d)").replace(s) { "${it.groupValues[1]} дробь ${it.groupValues[2]}" }
+        s = Regex("(\\d)(мкрн|мкр)").replace(s) { "${it.groupValues[1]} ${it.groupValues[2]}" }
         s = Regex("(\\d)[,.](\\d)").replace(s) { "${it.groupValues[1]}.${it.groupValues[2]}" }
         s = Regex("[^a-zа-я0-9. ]").replace(s, " ")
         s = Regex("(?<!\\d)\\.|\\.(?!\\d)").replace(s, " ")
@@ -283,14 +287,22 @@ object Commands {
         return null
     }
 
-    /** "ленина десять дробь два" → "ленина 10/2": cardinals as digits (for addresses; ordinals stay words). */
+    /** Nouns an ordinal before them is a number of: "двенадцатый микрорайон" → "12 микрорайон". */
+    private val NUMBERED = listOf("микрорайон", "мкр", "квартал", "лини", "проезд", "=км", "километр", "участ", "массив")
+    private val SLASH = setOf("дробь", "слеш", "слэш", "косая", "дробью")
+
+    /**
+     * "ленина десять дробь два" → "ленина 10/2": cardinals as digits (for addresses); ordinals too where they
+     * number a district or a line ("двенадцатый микрорайон" → "12 микрорайон"), else they stay words ("первая улица").
+     */
     fun numbersToDigits(w: List<String>): String {
         val out = ArrayList<String>()
         var i = 0
         while (i < w.size) {
             val n = numberAt(w, i)
-            if (n != null && !n.ordinal && w[i].toIntOrNull() == null) { out += n.value.toString(); i = n.end; continue }
-            out += if (w[i] == "дробь") "/" else w[i]
+            val numbered = n != null && n.ordinal && w.getOrNull(n.end)?.let { next -> NUMBERED.any { stemOk(next, it) } } == true
+            if (n != null && (!n.ordinal || numbered) && w[i].toIntOrNull() == null) { out += n.value.toString(); i = n.end; continue }
+            out += if (w[i] in SLASH) "/" else w[i]
             i++
         }
         return out.joinToString(" ").replace(" / ", "/")
@@ -1064,6 +1076,9 @@ object Commands {
         Case("гони на заправку", VoiceIntent.NAV_NEARBY, target = "АЗС"),
         Case("летим в аэропорт", VoiceIntent.NAV_ROUTE, query = "аэропорт"),
         Case("в аэропорт погнали", VoiceIntent.NAV_ROUTE, query = "аэропорт"),
+        Case("построй маршрут двенадцатый микрорайон дом шестьдесят пять дробь два", VoiceIntent.NAV_ROUTE, query = "12 микрорайон дом 65/2"),
+        Case("построй маршрут двенадцатый эм ка эр шестьдесят пять слеш два", VoiceIntent.NAV_ROUTE, query = "12 мкр 65/2"),
+        Case("построй маршрут 12мкр дом 65/2", VoiceIntent.NAV_ROUTE, query = "12 мкр дом 65/2"),
         Case("на работу поехали", VoiceIntent.NAV_WORK),
         Case("бензин кончается", VoiceIntent.NAV_NEARBY, target = "АЗС"),
         Case("громкасть двадцать", VoiceIntent.VOLUME_SET, number = 20),
