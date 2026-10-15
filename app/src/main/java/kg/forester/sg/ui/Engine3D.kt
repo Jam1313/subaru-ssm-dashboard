@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -173,7 +174,40 @@ private val SPOTS = listOf(
         "Обороты и нагрузка (воздух за оборот, г/об). Прогретые холостые EJ около 650–800 об/мин."),
 )
 
-private data class Proj(val x: Float, val y: Float, val z: Float)
+private data class Proj(val x: Float, val y: Float, val z: Float, val visible: Boolean = true)
+
+/**
+ * A real engine model rendered in Blender (tools/engine3d/render_engine.py): turntable frames in assets/<dir>/
+ * and, per frame, where each sensor is ([x, y] in 0..1 of the frame) and whether a part hides it.
+ */
+private class EngineFrames(val dir: String, val count: Int, val w: Int, val h: Int, val anchors: Map<String, List<FloatArray>>) {
+    private val cache = android.util.LruCache<Int, android.graphics.Bitmap>(14)
+
+    fun bitmap(ctx: android.content.Context, i: Int): android.graphics.Bitmap? = cache.get(i) ?: runCatching {
+        ctx.assets.open("$dir/engine_%03d.webp".format(i)).use { android.graphics.BitmapFactory.decodeStream(it) }
+    }.getOrNull()?.also { cache.put(i, it) }
+
+    companion object {
+        /** The rendered model for [e]'s family, if the app has one: EJ turbo, EJ without the turbo parts, FA. */
+        fun load(ctx: android.content.Context, e: kg.forester.sg.ssm.EngineInfo): EngineFrames? {
+            val dir = when {
+                e.family.startsWith("EJ") && e.turbo -> "engine_ej_t"
+                e.family.startsWith("EJ") -> "engine_ej_na"
+                e.family == "FA20" || e.family == "FB" -> "engine_fa"
+                else -> return null
+            }
+            return runCatching {
+                val o = org.json.JSONObject(ctx.assets.open("$dir/anchors.json").bufferedReader().readText())
+                val size = o.getJSONArray("size")
+                val an = o.getJSONObject("anchors")
+                EngineFrames(dir, o.getInt("frames"), size.getInt(0), size.getInt(1), an.keys().asSequence().associateWith { k ->
+                    val a = an.getJSONArray(k)
+                    List(a.length()) { i -> a.getJSONArray(i).let { floatArrayOf(it.getDouble(0).toFloat(), it.getDouble(1).toFloat(), it.getDouble(2).toFloat()) } }
+                })
+            }.getOrNull()
+        }
+    }
+}
 
 @Composable
 internal fun Engine3DTab() {
@@ -184,6 +218,14 @@ internal fun Engine3DTab() {
     val engine = remember(init, guardTurbo) { kg.forester.sg.ssm.EngineId.detect(appCtx) }
     val turbo = engine.turbo
     val mesh = remember(engine) { engineMesh(engine) }
+    // the real model when the app has it rendered for this family, else the one drawn here
+    val frames = remember(engine) { EngineFrames.load(appCtx, engine) }
+    var frameF by remember { mutableFloatStateOf(0f) }
+    val frame = frames?.let { ((frameF.roundToInt() % it.count) + it.count) % it.count } ?: 0
+    var bmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    androidx.compose.runtime.LaunchedEffect(frames, frame) {
+        if (frames != null) bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { frames.bitmap(appCtx, frame) } ?: bmp
+    }
     val avail by Repo.rrAvailable.collectAsState()
     val ctx = rememberMetricCtx()
     var yaw by remember { mutableFloatStateOf(0.75f) }
@@ -192,6 +234,7 @@ internal fun Engine3DTab() {
     var selected by remember { mutableStateOf<Spot?>(null) }
     val spots = SPOTS.filter { (!it.turboOnly || turbo) && it.metrics.any { id -> Metrics.of(id, avail)?.read(ctx) != null } }
         .ifEmpty { SPOTS.filter { !it.turboOnly || turbo } }
+        .filter { frames == null || frames.anchors.containsKey(it.id) }
 
     BoxWithConstraints(
         Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp))
@@ -218,8 +261,15 @@ internal fun Engine3DTab() {
             return Proj(cx + focal * x1 / z2, cy - focal * y2 / z2, z2)
         }
 
+        // the rendered frame fitted into the area (a little below the middle, under the engine card)
+        val fs = frames?.let { minOf(wPx * 0.62f / it.w, hPx * 0.86f / it.h) } ?: 1f
+        val fx = frames?.let { cx - it.w * fs / 2 } ?: 0f
+        val fy = frames?.let { hPx * 0.57f - it.h * fs / 2 } ?: 0f
         // callouts: left or right of the engine by where their point is, spread so they don't overlap
-        val anchors = spots.associateWith { project(it.anchor) }
+        val anchors = spots.associateWith { s ->
+            if (frames == null) project(s.anchor)
+            else frames.anchors[s.id]!![frame].let { a -> Proj(fx + a[0] * frames.w * fs, fy + a[1] * frames.h * fs, 0f, a[2] > 0.5f) }
+        }
         val placed = HashMap<Spot, Offset>()
         for (left in listOf(true, false)) {
             val side = spots.filter { (anchors[it]!!.x < cx) == left }.sortedBy { anchors[it]!!.y }
@@ -242,10 +292,18 @@ internal fun Engine3DTab() {
                 detectDragGestures { change, drag ->
                     yaw += drag.x * 0.008f
                     pitch = (pitch + drag.y * 0.006f).coerceIn(-0.3f, 1.3f)
+                    // the rendered model: a frame per ~10 px of the finger
+                    frameF -= drag.x / 10f
                     change.consume()
                 }
             },
         ) {
+            if (frames != null) {
+                bmp?.let { b ->
+                    drawImage(b.asImageBitmap(), dstOffset = IntOffset(fx.roundToInt(), fy.roundToInt()),
+                        dstSize = androidx.compose.ui.unit.IntSize((frames.w * fs).roundToInt(), (frames.h * fs).roundToInt()))
+                }
+            } else {
             // a soft floor shadow
             drawOval(Brush.radialGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent), Offset(cx, cy + focal * 1.2f / 6.2f + 30f), focal * 0.42f),
                 Offset(cx - focal * 0.42f, cy + focal * 1.2f / 6.2f), Size(focal * 0.84f, focal * 0.14f))
@@ -268,6 +326,7 @@ internal fun Engine3DTab() {
                 drawPath(path, col)
                 drawPath(path, Color.White.copy(alpha = 0.05f + 0.07f * lit), style = Stroke(1.2f))
             }
+            }
             // leader lines: from the part to its callout, with a glowing dot on the part
             for (s in spots) {
                 val a = anchors[s] ?: continue
@@ -276,10 +335,12 @@ internal fun Engine3DTab() {
                 val end = Offset(if (left) o.x + labelW else o.x, o.y + labelH / 2)
                 val mid = Offset(end.x + if (left) 18f else -18f, end.y)
                 val col = if (selected == s) Color.White else violet
-                drawLine(col.copy(alpha = 0.7f), Offset(a.x, a.y), mid, strokeWidth = 2f)
-                drawLine(col.copy(alpha = 0.7f), mid, end, strokeWidth = 2f)
-                drawCircle(col.copy(alpha = 0.25f), 12f, Offset(a.x, a.y))
-                drawCircle(col, 5f, Offset(a.x, a.y))
+                // a sensor behind the engine on this frame: a faint line and dot
+                val al = if (a.visible) 1f else 0.3f
+                drawLine(col.copy(alpha = 0.7f * al), Offset(a.x, a.y), mid, strokeWidth = 2f)
+                drawLine(col.copy(alpha = 0.7f * al), mid, end, strokeWidth = 2f)
+                drawCircle(col.copy(alpha = 0.25f * al), 12f, Offset(a.x, a.y))
+                drawCircle(col.copy(alpha = al), 5f, Offset(a.x, a.y))
             }
         }
 
