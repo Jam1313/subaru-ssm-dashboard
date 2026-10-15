@@ -892,8 +892,11 @@ class EcuService : Service() {
             if (now < tcuNextTryMs) return
             val init = EcuLink.mutex.withLock { client.init(SsmClient.TCU) }
             if (init == null) {
-                Repo.tcuStatus.value = "Блок АКПП не отвечает по SSM: у механики и некоторых старых Subaru его нет на " +
-                    "диагностической линии, а через часть Bluetooth-адаптеров он недоступен (надёжнее KKL-кабель)"
+                // MY1999–2000 (Impreza GC/GF, Forester SF, Legacy BE/BH early): the engine already speaks SSM2 on the
+                // K-line, the TCU still the old SSM1 on its own line; FreeSSM can't read those either
+                Repo.tcuStatus.value = "Блок АКПП не отвечает по SSM. На Subaru 1999–2000 годов (Impreza GC/GF, Forester SF, " +
+                    "ранние Legacy BE/BH) он работает по старому протоколу SSM1 на другой линии, через K-line его не прочитать " +
+                    "(FreeSSM тоже не видит). У механики блока нет, а через часть Bluetooth-адаптеров он недоступен (надёжнее KKL-кабель)"
                 tcuNextTryMs = now + 60_000
                 return
             }
