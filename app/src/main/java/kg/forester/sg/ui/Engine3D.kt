@@ -26,14 +26,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,8 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.Gauge
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.RotateCw
 import com.composables.icons.lucide.X
 import kg.forester.sg.data.Repo
 import kotlin.math.abs
@@ -61,7 +59,7 @@ import kotlin.math.sqrt
 
 /*
  * «3D мотор» (test page): a boxer EJ built from boxes and prisms right here (no model file), turned by a finger
- * and slowly on its own, flat-shaded and sorted back to front on a Canvas. Every part the app has a reading for
+ * flat-shaded and sorted back to front on a Canvas. Every part the app has a reading for
  * carries a callout with the live value in the colour of its state; a tap explains what it is and what is normal.
  */
 
@@ -74,7 +72,19 @@ private data class V3(val x: Float, val y: Float, val z: Float) {
 private class Face(val pts: List<V3>, val color: Color)
 
 /** The parts, in model units (a decimetre or so): x across (the cylinder banks), y up, z from the front (−) back. */
-private fun engineMesh(turbo: Boolean, accent: Color): List<Face> {
+/** The engine shaped after [e]: 2 or 3 cylinders a side, the bore of a 2.0 or a 2.5, turbo parts only on a turbo. */
+private fun engineMesh(e: kg.forester.sg.ssm.EngineInfo): List<Face> {
+    val turbo = e.turbo
+    // valve covers by family: red for the EJ turbos, black for FA/FB, silver for the sixes, dark for the rest
+    val accent = when {
+        e.family.startsWith("EJ") && turbo -> Color(0xFF9B1C22)
+        e.family == "FA20" || e.family == "FB" -> Color(0xFF26292F)
+        e.cylinders == 6 -> Color(0xFFA9AFB8)
+        else -> Color(0xFF4A505A)
+    }
+    val zs = if (e.cylinders == 6) listOf(-0.8f, 0f, 0.8f) else listOf(-0.55f, 0.55f)
+    val len = if (e.cylinders == 6) 2.9f else 2.2f
+    val bore = if (e.family == "EJ25" || e.family == "FB" || e.cylinders == 6) 0.42f else 0.38f
     val out = ArrayList<Face>()
     fun box(cx: Float, cy: Float, cz: Float, sx: Float, sy: Float, sz: Float, c: Color) {
         val x0 = cx - sx / 2; val x1 = cx + sx / 2; val y0 = cy - sy / 2; val y1 = cy + sy / 2; val z0 = cz - sz / 2; val z1 = cz + sz / 2
@@ -106,17 +116,17 @@ private fun engineMesh(turbo: Boolean, accent: Color): List<Face> {
         out += Face(ring.map { at(it, h) }.reversed(), c)
     }
     val metal = Color(0xFF8C929C); val dark = Color(0xFF2E323A); val alu = Color(0xFFB4BAC4); val rust = Color(0xFF8A5F44)
-    box(0f, 0f, 0f, 1.3f, 1.0f, 2.2f, metal)                       // crankcase
+    box(0f, 0f, 0f, 1.3f, 1.0f, len, metal)                        // crankcase
     for (s in listOf(-1f, 1f)) {
-        for (z in listOf(-0.55f, 0.55f)) prism(s * 0.95f, 0.05f, z, 0.38f, 0.65f, 'x', alu)   // cylinders
-        box(s * 1.52f, 0.05f, 0f, 0.42f, 0.95f, 2.1f, Color(0xFF7C828C))                    // heads
-        box(s * 1.83f, 0.05f, 0f, 0.2f, 0.76f, 1.9f, accent)                                // valve covers
-        for (z in listOf(-0.55f, 0.55f)) box(s * 0.92f, 0.58f, z, 0.95f, 0.16f, 0.2f, Color(0xFF606775)) // runners
-        for (z in listOf(-0.55f, 0.55f)) prism(s * 0.9f, -0.58f, z, 0.09f, 0.95f, 'x', rust) // exhaust
+        for (z in zs) prism(s * 0.95f, 0.05f, z, bore, 0.65f, 'x', alu)                     // cylinders
+        box(s * 1.52f, 0.05f, 0f, 0.42f, 0.95f, len - 0.1f, Color(0xFF7C828C))              // heads
+        box(s * 1.83f, 0.05f, 0f, 0.2f, 0.76f, len - 0.3f, accent)                          // valve covers
+        for (z in zs) box(s * 0.92f, 0.58f, z, 0.95f, 0.16f, 0.2f, Color(0xFF606775))       // runners
+        for (z in zs) prism(s * 0.9f, -0.58f, z, 0.09f, 0.95f, 'x', rust)                   // exhaust
         box(s * 1.5f, 0.1f, -1.12f, 0.46f, 0.9f, 0.1f, dark)                                  // belt covers
     }
-    box(0f, -0.75f, 0.1f, 1.1f, 0.42f, 1.8f, Color(0xFF3B3F47))     // oil pan
-    box(0f, 0.75f, 0f, 0.95f, 0.34f, 1.5f, Color(0xFF5B6170))       // intake plenum
+    box(0f, -0.75f, 0.1f, 1.1f, 0.42f, len - 0.4f, Color(0xFF3B3F47)) // oil pan
+    box(0f, 0.75f, 0f, 0.95f, 0.34f, len - 0.7f, Color(0xFF5B6170))   // intake plenum
     prism(0f, 0.75f, -0.95f, 0.17f, 0.3f, 'z', alu)                 // throttle body
     prism(-0.55f, 0.88f, -1.35f, 0.15f, 0.6f, 'z', Color(0xFF3A3F48)) // intake pipe with the MAF
     box(0f, 0.05f, -1.17f, 1.2f, 0.7f, 0.08f, dark)                 // centre belt cover
@@ -137,7 +147,7 @@ private fun engineMesh(turbo: Boolean, accent: Color): List<Face> {
 private class Spot(val id: String, val title: String, val anchor: V3, val metrics: List<String>, val about: String, val turboOnly: Boolean = false)
 
 private val SPOTS = listOf(
-    Spot("coolant", "Охлаждающая жидкость", V3(-0.8f, -0.45f, -0.9f), listOf("coolant"),
+    Spot("coolant", "Охлаждение (ОЖ)", V3(-0.8f, -0.45f, -0.9f), listOf("coolant"),
         "Датчик температуры ОЖ у термостата. Прогретый мотор держит примерно 85–95°. Выше 100° повод присмотреться, 105° и выше перегрев. Долго ниже 75° в движении: подклинил открытым термостат."),
     Spot("maf", "Расходомер (MAF)", V3(-0.55f, 0.88f, -1.55f), listOf("maf"),
         "Сколько воздуха идёт в мотор, г/с. На прогретых холостых у EJ20 обычно около 2,5–4 г/с, растёт с оборотами и нагрузкой. Заниженный при той же нагрузке: грязный датчик или подсос воздуха после него."),
@@ -167,24 +177,19 @@ private data class Proj(val x: Float, val y: Float, val z: Float)
 
 @Composable
 internal fun Engine3DTab() {
-    val turbo = Repo.guard.collectAsState().value.turbo || "turbo" in Repo.settings.carSub.lowercase()
-    val accent = Color(0xFF9B1C22)
-    val mesh = remember(turbo) { engineMesh(turbo, accent) }
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    val init by Repo.ecuInit.collectAsState()
+    val guardTurbo = Repo.guard.collectAsState().value.turbo
+    // the engine of this car: from the ECU's ROM, else the car set up; unknown: the generic EJ drawn here
+    val engine = remember(init, guardTurbo) { kg.forester.sg.ssm.EngineId.detect(appCtx) }
+    val turbo = engine.turbo
+    val mesh = remember(engine) { engineMesh(engine) }
     val avail by Repo.rrAvailable.collectAsState()
     val ctx = rememberMetricCtx()
     var yaw by remember { mutableFloatStateOf(0.75f) }
     var pitch by remember { mutableFloatStateOf(0.5f) }
-    var touchedAt by remember { mutableStateOf(0L) }
-    var auto by remember { mutableStateOf(true) }
+
     var selected by remember { mutableStateOf<Spot?>(null) }
-    // a slow turn on its own, paused for a while after the finger
-    LaunchedEffect(auto) {
-        var last = 0L
-        while (auto) withFrameNanos { t ->
-            if (last != 0L && System.currentTimeMillis() - touchedAt > 4000) yaw += (t - last) / 1e9f * 0.18f
-            last = t
-        }
-    }
     val spots = SPOTS.filter { (!it.turboOnly || turbo) && it.metrics.any { id -> Metrics.of(id, avail)?.read(ctx) != null } }
         .ifEmpty { SPOTS.filter { !it.turboOnly || turbo } }
 
@@ -196,10 +201,10 @@ internal fun Engine3DTab() {
         val d = LocalDensity.current
         val wPx = with(d) { maxWidth.toPx() }
         val hPx = with(d) { maxHeight.toPx() }
-        val labelW = with(d) { 168.dp.toPx() }
+        val labelW = with(d) { 184.dp.toPx() }
         val labelH = with(d) { 58.dp.toPx() }
         val margin = with(d) { 14.dp.toPx() }
-        val cy = hPx * 0.52f
+        val cy = hPx * 0.58f
         val cx = wPx * 0.5f
         val focal = minOf(wPx, hPx) * 1.25f
 
@@ -234,8 +239,7 @@ internal fun Engine3DTab() {
         val violet = C.Violet
         Canvas(
             Modifier.fillMaxSize().pointerInput(Unit) {
-                detectDragGestures(onDragStart = { touchedAt = System.currentTimeMillis() }) { change, drag ->
-                    touchedAt = System.currentTimeMillis()
+                detectDragGestures { change, drag ->
                     yaw += drag.x * 0.008f
                     pitch = (pitch + drag.y * 0.006f).coerceIn(-0.3f, 1.3f)
                     change.consume()
@@ -286,11 +290,19 @@ internal fun Engine3DTab() {
             }
         }
 
-        Row(Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) {
-            T("Тестовая страница · крутите пальцем", 12.sp, C.Sub)
-            Spacer(Modifier.width(10.dp))
-            Icon(Lucide.RotateCw, "Вращение", tint = if (auto) C.Violet else C.Sub,
-                modifier = Modifier.size(18.dp).clip(CircleShape).clickable { auto = !auto })
+        // which engine and how it is known
+        Column(
+            Modifier.align(Alignment.TopCenter).padding(top = 10.dp).width(with(d) { (wPx - 2 * (labelW + margin) - 24f).toDp() })
+                .clip(RoundedCornerShape(14.dp)).background(C.Card.copy(alpha = 0.85f)).border(1.dp, C.Border, RoundedCornerShape(14.dp))
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            T(engine.title, 16.sp, weight = FontWeight.Bold, maxLines = 1)
+            T(when (engine.source) {
+                "ЭБУ" -> "Определён по ЭБУ: ROM ${engine.romId}, ${engine.car}"
+                "настройки" -> "По настройкам машины, ЭБУ пока не отвечал"
+                else -> "Общая схема: мотор определится, когда ответит ЭБУ"
+            }, 11.sp, C.Sub, maxLines = 1)
         }
 
         AnimatedVisibility(selected != null, Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
@@ -337,14 +349,16 @@ private fun Callout(s: Spot, avail: List<kg.forester.sg.ssm.RrParam>, ctx: Metri
         else -> C.Green
     }
     Row(
-        modifier.width(168.dp).height(58.dp).clip(RoundedCornerShape(14.dp))
+        modifier.width(184.dp).height(58.dp).clip(RoundedCornerShape(14.dp))
             .background(C.Card.copy(alpha = if (selected) 0.98f else 0.86f))
             .border(1.dp, if (selected) Color.White else state.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(4.dp).fillMaxHeight().padding(vertical = 10.dp).clip(RoundedCornerShape(2.dp)).background(state))
-        Spacer(Modifier.width(8.dp))
+        Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(state.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
+            Icon(main?.icon ?: Lucide.Gauge, null, tint = state, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(9.dp))
         Column {
             T(s.title, 11.sp, C.Sub, maxLines = 1)
             Row(verticalAlignment = Alignment.Bottom) {
