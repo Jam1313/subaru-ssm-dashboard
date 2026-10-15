@@ -95,6 +95,8 @@ class MainActivity : ComponentActivity() {
         if (intent?.hasExtra("demo") == true) Repo.settings.demo = intent.getBooleanExtra("demo", false)
         if (intent?.getBooleanExtra("skipSetup", false) == true) Repo.settings.setupDone = true
         testAlert(intent)
+        // adb: am start -n kg.forester.sg/.MainActivity --es voiceText "найди видео на ютубе мистер бист" (a command as if said)
+        intent?.getStringExtra("voiceText")?.let { kg.forester.sg.service.Voice.runText(this, it) }
         // adb: am start -n kg.forester.sg/.MainActivity --es orbDemo "включи музло" (the listening orb without a microphone)
         intent?.getStringExtra("orbDemo")?.let { text ->
             lifecycleScope.launch {

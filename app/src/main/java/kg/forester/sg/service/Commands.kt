@@ -421,7 +421,7 @@ object Commands {
     private val MUSIC_NOUNS = listOf(
         "песн", "песен", "трек", "композиц", "мелоди", "музык", "альбом", "исполнител", "артист", "певц", "певиц", "групп",
         "плейлист", "подборк", "сборник", "подкаст", "аудиокниг", "жанр", "клип", "=хиты", "=хит", "сингл",
-        "радио", "авторадио", "станц", "волн", "=фм", "частот",
+        "радио", "авторадио", "станц", "волн", "=фм", "частот", "видео", "ролик", "ютуб",
     )
 
     /** Route verbs ("поехали в…", "проложи маршрут до…", "как доехать до…"). */
@@ -727,6 +727,7 @@ object Commands {
         "групп" to MediaFocus.ARTIST, "рэпер" to MediaFocus.ARTIST, "музыкант" to MediaFocus.ARTIST,
         "плейлист" to MediaFocus.PLAYLIST, "подборк" to MediaFocus.PLAYLIST, "сборник" to MediaFocus.PLAYLIST, "микс" to MediaFocus.PLAYLIST,
         "подкаст" to MediaFocus.PODCAST, "аудиокниг" to MediaFocus.PODCAST, "книг" to MediaFocus.PODCAST,
+        "видео" to MediaFocus.ANY, "ролик" to MediaFocus.ANY, "видос" to MediaFocus.ANY,
         "жанр" to MediaFocus.GENRE, "музык" to MediaFocus.ANY,
     )
 
@@ -792,14 +793,16 @@ object Commands {
         // which app, if one was named: "включи кино в спотифай", "открой яндекс музыку"
         val app = findApp(w, MUSIC_APPS)
         val opener = w.indexOfFirst { it in OPEN_VERBS }.takeIf { it in 0..1 && app != null }
-        val v = playIdx ?: opener ?: if (w[0] in setOf("запусти", "открой") && w.hasAny(FOCUS_NOUNS.map { it.first })) 0 else null
+        val video = w.has("видео", "ролик", "видос")
+        val v = playIdx ?: opener ?: if (w[0] in setOf("запусти", "открой", "покажи") && w.hasAny(FOCUS_NOUNS.map { it.first })) 0 else null
         if (v == null) {
             if (w.size <= 2 && w.has("музык", "=плей", "=играй")) return cmd(VoiceIntent.PLAY)
             if (w.seq("моя волна", "мою волну")) return VoiceCommand(VoiceIntent.PLAY_QUERY, query = "Моя волна", focus = MediaFocus.FAVORITES, app = app?.third)
             return null
         }
         var rest = w.drop(v + 1).without(findApp(w.drop(v + 1), MUSIC_APPS)).dropLead(FOCUS_GLUE + setOf("включи", "поставь"))
-        val pkg = app?.third
+        // a video with no app named is a YouTube one
+        val pkg = app?.third ?: if (video) "com.google.android.youtube" else null
         // "поставь на двадцать": a bare number is the volume, not a song
         numberAt(rest.dropLead(setOf("на")), 0)?.takeIf { it.end == rest.dropLead(setOf("на")).size && !it.ordinal }
             ?.let { return VoiceCommand(VoiceIntent.VOLUME_SET, number = it.value) }
@@ -1077,6 +1080,10 @@ object Commands {
         Case("летим в аэропорт", VoiceIntent.NAV_ROUTE, query = "аэропорт"),
         Case("в аэропорт погнали", VoiceIntent.NAV_ROUTE, query = "аэропорт"),
         Case("построй маршрут двенадцатый микрорайон дом шестьдесят пять дробь два", VoiceIntent.NAV_ROUTE, query = "12 микрорайон дом 65/2"),
+        Case("найди видео на ютубе мистер бист", VoiceIntent.PLAY_QUERY, query = "мистер бист", app = "com.google.android.youtube"),
+        Case("найди на ютубе мистер бист", VoiceIntent.PLAY_QUERY, query = "мистер бист", app = "com.google.android.youtube"),
+        Case("покажи видео мистер бист", VoiceIntent.PLAY_QUERY, query = "мистер бист", app = "com.google.android.youtube"),
+        Case("включи на ютубе обзор форестера", VoiceIntent.PLAY_QUERY, query = "обзор форестера", app = "com.google.android.youtube"),
         Case("построй маршрут двенадцатый эм ка эр шестьдесят пять слеш два", VoiceIntent.NAV_ROUTE, query = "12 мкр 65/2"),
         Case("построй маршрут 12мкр дом 65/2", VoiceIntent.NAV_ROUTE, query = "12 мкр дом 65/2"),
         Case("на работу поехали", VoiceIntent.NAV_WORK),

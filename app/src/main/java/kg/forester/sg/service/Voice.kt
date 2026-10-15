@@ -67,6 +67,16 @@ object Voice {
 
     fun restart(ctx: Context) { stop(); start(ctx) }
 
+    /** A command as if it was said (adb test hook, see MainActivity): no microphone or model needed. */
+    fun runText(ctx: Context, text: String) {
+        app = ctx.applicationContext
+        main.post {
+            listening.value = true
+            doneListening(text)
+            execute(text)
+        }
+    }
+
     fun setEnabled(ctx: Context, on: Boolean) {
         prefs(ctx).edit().putBoolean("enabled", on).apply()
         if (on) start(ctx) else stop()
@@ -403,6 +413,16 @@ object Voice {
     private fun playFromSearch(c: VoiceCommand) {
         val q = c.query.orEmpty()
         if (q.isBlank()) return run(VoiceCommand(VoiceIntent.PLAY))
+        // YouTube: its search with the results, the app has no "play from search" for videos
+        if (c.app == "com.google.android.youtube") {
+            say("Ищу на ютубе: $q")
+            val search = Intent(Intent.ACTION_SEARCH).setPackage(c.app).putExtra("query", q).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { app.startActivity(search) }.isSuccess) return
+            val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(q))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { app.startActivity(Intent(web).setPackage(c.app)) }.isSuccess || runCatching { app.startActivity(web) }.isSuccess) return
+            say("Не нашёл ютуб на магнитоле")
+            return
+        }
         val pkg = c.app ?: Shortcuts.list.value.firstOrNull { it.pkg in MUSIC_APPS }?.pkg ?: MUSIC_APPS.firstOrNull { Shortcuts.isInstalled(app, it) }
         val i = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra(android.app.SearchManager.QUERY, q)
