@@ -1,7 +1,7 @@
 {
- "tag": "v0.9-beta15",
- "name": "0.9-beta15",
- "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta15/subaru-ssm-dashboard.apk",
+ "tag": "v0.9-beta16",
+ "name": "0.9-beta16",
+ "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta16/subaru-ssm-dashboard.apk",
  "size": 108833395,
- "notes": "Медиа: один плеер (USB, Bluetooth, FM и интернет-радио, приложения), эквалайзер, вкладка «Обучение» (IAM, коррекции, FLKC), расход без MAF, умнее голосовой ассистент."
+ "notes": "Голосовой помощник понимает «гони домой», адреса вроде «12 микрорайон дом 65/2» и видео на YouTube; подсказка про коробки 1999–2000 годов."
 }
