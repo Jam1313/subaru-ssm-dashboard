@@ -479,6 +479,8 @@ private fun TopBar(screen: Screen) {
         }
         Spacer(Modifier.weight(1f))
         kg.forester.sg.ui.StatusPill()
+        kg.forester.sg.ui.ThemeButton(22.dp)
+        Spacer(Modifier.width(16.dp))
         Icon(Lucide.BatteryCharging, null, tint = C.Text, modifier = Modifier.size(22.dp))
         T(" ${fmt(e.batteryV?.toDouble())} V", 18.sp)
         Spacer(Modifier.width(22.dp))

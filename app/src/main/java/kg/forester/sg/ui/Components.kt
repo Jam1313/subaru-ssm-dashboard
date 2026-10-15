@@ -61,14 +61,44 @@ enum class AccentTheme(val id: String, val title: String, val main: Color, val d
     BLUE("blue", "Синий", Color(0xFF60A5FA), Color(0xFF2563EB), Color(0xFF06B6D4)),
     ORANGE("orange", "Оранжевый", Color(0xFFFB923C), Color(0xFFEA580C), Color(0xFFE11D48));
 
+    val theme get() = UiTheme(main, deep, second)
+
     companion object {
         fun byId(id: String?) = entries.firstOrNull { it.id == id } ?: VIOLET
     }
 }
 
+/** The accent colours in use: one of the [AccentTheme]s or made from the user's own colour. */
+data class UiTheme(val main: Color, val deep: Color, val second: Color) {
+    companion object {
+        /** From one picked colour: a deeper shade for the selection and a neighbouring hue for the gradient. */
+        fun of(rgb: Int): UiTheme {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(rgb or 0xFF000000.toInt(), hsv)
+            fun c(h: Float, s: Float, v: Float) = Color(android.graphics.Color.HSVToColor(
+                floatArrayOf((h + 360f) % 360f, s.coerceIn(0f, 1f), v.coerceIn(0f, 1f))))
+            val v = hsv[2].coerceAtLeast(0.55f) // a very dark pick would vanish on the dark background
+            return UiTheme(c(hsv[0], hsv[1], v), c(hsv[0], hsv[1] * 1.1f + 0.05f, v * 0.8f), c(hsv[0] - 45f, hsv[1], v * 0.95f))
+        }
+
+        /** A stored id: "violet", "green", ... or "custom:RRGGBB". */
+        fun parse(id: String?): UiTheme =
+            id?.takeIf { it.startsWith("custom:") }?.removePrefix("custom:")?.toIntOrNull(16)?.let(::of)
+                ?: AccentTheme.byId(id).theme
+    }
+}
+
 object C {
-    /** The chosen [AccentTheme]; Compose state, so everything drawn in the accent colours follows a change. */
-    var theme by mutableStateOf(AccentTheme.VIOLET)
+    /** Stored id of the theme ("violet", ..., "custom:RRGGBB"). */
+    var themeId by mutableStateOf("violet")
+        private set
+    /** The accent colours; Compose state, so everything drawn in them follows a change (also a live preview). */
+    var theme by mutableStateOf(AccentTheme.VIOLET.theme)
+
+    fun applyTheme(id: String) {
+        themeId = id
+        theme = UiTheme.parse(id)
+    }
 
     val Bg = Color(0xFF080A12)
     val Card = Color(0xFF111522)

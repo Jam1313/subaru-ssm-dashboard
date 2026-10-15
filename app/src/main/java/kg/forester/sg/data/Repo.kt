@@ -381,10 +381,10 @@ class Settings(ctx: Context) {
         get() = p.getInt("clusterSize", 1)
         set(v) { p.edit().putInt("clusterSize", v).apply(); Repo.clusterSize.value = v }
 
-    /** Interface colour theme (see ui.AccentTheme). */
+    /** Interface colour theme: an ui.AccentTheme id or "custom:RRGGBB". */
     var accentTheme: String
         get() = p.getString("accentTheme", "violet")!!
-        set(v) { p.edit().putString("accentTheme", v).apply(); kg.forester.sg.ui.C.theme = kg.forester.sg.ui.AccentTheme.byId(v) }
+        set(v) { p.edit().putString("accentTheme", v).apply(); kg.forester.sg.ui.C.applyTheme(v) }
 
     /** Gauge designs (see DialStyles), separately for the tachometer and the speedometer. */
     var tachStyle: String
@@ -521,7 +521,7 @@ object Repo {
             tcuTiles.value = settings.board("tcuTiles")
             dialStyles.value = settings.tachStyle to settings.speedoStyle
             clusterSize.value = settings.clusterSize
-            kg.forester.sg.ui.C.theme = kg.forester.sg.ui.AccentTheme.byId(settings.accentTheme)
+            kg.forester.sg.ui.C.applyTheme(settings.accentTheme)
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled
             CustomGauges.init(ctx)
             Scales.init(ctx)

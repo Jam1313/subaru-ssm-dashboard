@@ -185,26 +185,9 @@ fun CarAdapterSettings() {
             }
             Spacer(Modifier.height(16.dp))
             T("Цвет интерфейса", 15.sp)
-            T("Под подсветку приборов вашей машины", 11.sp, C.Sub)
+            T("Под подсветку приборов вашей машины, или любой свой. Кнопка с палитрой есть и в верхней строке", 11.sp, C.Sub)
             Spacer(Modifier.height(6.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                AccentTheme.entries.forEach { t ->
-                    val sel = C.theme == t
-                    val shape = RoundedCornerShape(10.dp)
-                    androidx.compose.foundation.layout.Row(
-                        Modifier.clip(shape).background(if (sel) t.deep.copy(alpha = 0.28f) else C.CardHi)
-                            .border(1.dp, if (sel) t.deep else C.Border, shape)
-                            .clickable { s.accentTheme = t.id }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(14.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(t.second, t.main))))
-                        Spacer(Modifier.width(8.dp))
-                        T(t.title, 14.sp)
-                    }
-                }
-            }
+            ThemeChooser()
         }
         Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
             PanelTitle(Lucide.Usb, "Адаптер")
@@ -380,14 +363,15 @@ private fun BluetoothPicker() {
     }
 }
 
-/** Hue / saturation / brightness sliders with a preview; [onApply] gets 0xRRGGBB. */
+/** Hue / saturation / brightness sliders with a preview; [onChange] follows the sliders, [onApply] gets 0xRRGGBB. */
 @Composable
-private fun ColourPicker(start: Int, onApply: (Int) -> Unit) {
+fun ColourPicker(start: Int, onChange: ((Int) -> Unit)? = null, onApply: (Int) -> Unit) {
     val hsv = remember { FloatArray(3).also { android.graphics.Color.colorToHSV(start or 0xFF000000.toInt(), it) } }
     var h by remember { mutableStateOf(hsv[0]) }
     var sat by remember { mutableStateOf(hsv[1]) }
     var v by remember { mutableStateOf(hsv[2]) }
     val rgb = android.graphics.Color.HSVToColor(floatArrayOf(h, sat, v))
+    if (onChange != null) androidx.compose.runtime.LaunchedEffect(rgb) { onChange(rgb) }
     val sliderColors = androidx.compose.material3.SliderDefaults.colors(
         thumbColor = Color.White, activeTrackColor = Color.Transparent, inactiveTrackColor = Color.Transparent,
     )
