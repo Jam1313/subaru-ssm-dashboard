@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import com.composables.icons.lucide.Wind
+import com.composables.icons.lucide.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -73,6 +74,7 @@ fun HealthScreen() {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Мотор", tab == 0, { tab = 0 }, Lucide.HeartPulse)
             Chip("Обучение", tab == 4, { tab = 4 }, Lucide.Wind)
+            Chip("3D мотор", tab == 5, { tab = 5 }, Lucide.Box)
             Chip("ТО", tab == 1, { tab = 1 }, Lucide.Wrench)
             Chip("Шины", tab == 2, { tab = 2 }, Lucide.Disc3)
             Chip("Предупреждения", tab == 3, { tab = 3 }, Lucide.Bell)
@@ -83,6 +85,7 @@ fun HealthScreen() {
                 1 -> ServiceTab()
                 2 -> TyresTab()
                 4 -> LearningTab()
+                5 -> Engine3DTab()
                 else -> AlertsTab()
             }
         }
