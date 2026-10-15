@@ -196,7 +196,7 @@ private fun EngineTab() {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 listOf(
                     Triple(Lucide.Flame, "Детонация", "IAM ниже 0,75 или −0,1 за поездку, FLKC до −2,8°, откат FBKC под наддувом"),
-                    Triple(Lucide.Thermometer, "Перегрев", "ОЖ от 105°; рост на 8° за минуту на прогретом моторе (EJ25 — прокладка ГБЦ, воздух)"),
+                    Triple(Lucide.Thermometer, "Перегрев", "ОЖ от 105°; рост на 8° за минуту, когда мотор прогрет больше 5 минут (воздух в системе, на EJ25 и прокладка ГБЦ)"),
                     Triple(Lucide.Gauge, "Холодный мотор", "обороты выше 3600 на непрогретом масле"),
                     Triple(Lucide.Repeat, "Термостат", "20 минут езды, а ОЖ ниже 72°"),
                     Triple(Lucide.Cog, "АКПП", "ATF выше 110° и 120°"),

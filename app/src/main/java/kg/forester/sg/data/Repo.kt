@@ -55,6 +55,8 @@ data class TripState(
 
 class Settings(ctx: Context) {
     private val p: SharedPreferences = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    /** A phone leaves the car with its owner: there the service should not start on its own. */
+    private val phone = ctx.resources.configuration.smallestScreenWidthDp < 600
 
     init {
         // installs from before the currency setting priced fuel in KGS: keep that for them
@@ -350,7 +352,7 @@ class Settings(ctx: Context) {
 
     /** Start the service when the head unit / phone starts or wakes up (ACC on). */
     var autostartService: Boolean
-        get() = p.getBoolean("autostartService", true)
+        get() = p.getBoolean("autostartService", !phone)
         set(v) { p.edit().putBoolean("autostartService", v).apply() }
 
     /** Also bring the app on screen then (needs "display over other apps" on Android 10+). */

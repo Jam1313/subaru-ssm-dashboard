@@ -148,6 +148,12 @@ class EcuService : Service() {
         when (intent?.action) {
             ACTION_RESET_TRIP -> scope.launch { tracker.resetTrip() }
             ACTION_START_GPS -> { startGps(); Voice.start(this) }
+            ACTION_EXIT -> {
+                exitRequested.tryEmit(Unit)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
         return START_STICKY
     }
@@ -1086,6 +1092,9 @@ class EcuService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pi)
             .setOngoing(true)
+            .addAction(Notification.Action.Builder(null, "Выход", PendingIntent.getService(
+                this, 1, Intent(this, EcuService::class.java).setAction(ACTION_EXIT), PendingIntent.FLAG_IMMUTABLE
+            )).build())
             .build()
     }
 
@@ -1094,6 +1103,9 @@ class EcuService : Service() {
         const val ACTION_USB_PERMISSION = "kg.forester.sg.USB_PERMISSION"
         const val ACTION_RESET_TRIP = "kg.forester.sg.RESET_TRIP"
         const val ACTION_START_GPS = "kg.forester.sg.START_GPS"
+        /** From the notification: stop everything and close the app. */
+        const val ACTION_EXIT = "kg.forester.sg.EXIT"
+        val exitRequested = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         /** Paired Bluetooth devices worth trying in "Auto". */
         private val OBD_NAMES = listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE", "ICAR", "OBDLINK", "CARISTA", "VEEPEAK")
 

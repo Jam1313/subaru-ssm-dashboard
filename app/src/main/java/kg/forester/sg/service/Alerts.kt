@@ -24,11 +24,25 @@ object Alerts {
     val history = MutableStateFlow<List<Alert>>(emptyList())
 
     private val lastShown = HashMap<String, Long>()
+    private var prefs: android.content.SharedPreferences? = null
     private var tts: TextToSpeech? = null
     @Volatile private var ttsReady = false
 
     fun init(ctx: Context) {
         if (Repo.settings.voiceAlerts) Speech.prepare(ctx)
+        if (prefs == null) {
+            // the list survives a restart, so a warning heard while driving can be read later
+            val p = ctx.applicationContext.getSharedPreferences("alerts", Context.MODE_PRIVATE).also { prefs = it }
+            val saved = runCatching {
+                val a = org.json.JSONArray(p.getString("history", "[]"))
+                (0 until a.length()).map { i ->
+                    val o = a.getJSONObject(i)
+                    Alert(o.getString("id"), o.getString("text"), Level.valueOf(o.getString("level")), o.getLong("time"))
+                }
+            }.getOrDefault(emptyList())
+            history.value = (history.value + saved).take(50)
+            save()
+        }
         if (tts != null) return
         tts = TextToSpeech(ctx.applicationContext) { status ->
             val t = tts ?: return@TextToSpeech
@@ -48,6 +62,7 @@ object Alerts {
         val a = Alert(id, text, level, now)
         if (banner) current.value = a
         history.value = (listOf(a) + history.value).take(50)
+        save()
         if (!speak || !Repo.settings.voiceAlerts || Repo.settings.demo) return
         // the app's own voice first, then the head unit's TTS, then a beep
         if (Speech.say(text)) return
@@ -56,6 +71,15 @@ object Alerts {
         } else if (level != Level.INFO) {
             runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80).startTone(ToneGenerator.TONE_PROP_BEEP2, 300) }
         }
+    }
+
+    private fun save() {
+        val p = prefs ?: return
+        val a = org.json.JSONArray()
+        history.value.forEach {
+            a.put(org.json.JSONObject().put("id", it.id).put("text", it.text).put("level", it.level.name).put("time", it.timeMs))
+        }
+        p.edit().putString("history", a.toString()).apply()
     }
 
     /** The banner goes away when the condition is over (e.g. the turbo has cooled down). */

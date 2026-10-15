@@ -71,6 +71,7 @@ class EngineGuard {
     private var warmupMin: Float? = null
     private var thermostatWarned = false
     private val coolant = ArrayDeque<Pair<Long, Int>>()
+    private var warmSince = 0L
     private var maintenanceChecked = 0L
     private var features = -1
     private var custom = -1
@@ -209,12 +210,15 @@ class EngineGuard {
         if (c != null && running && fCool) {
             coolant.addLast(now to c)
             while (coolant.isNotEmpty() && now - coolant.first().first > 90_000L) coolant.removeFirst()
+            // right after reaching 80° the thermostat may still be opening and the coolant overshoots: no spike check then
+            if (c < 80) warmSince = 0L else if (warmSince == 0L) warmSince = now
             if (c >= 105) Alerts.raise("hot", "Перегрев! ОЖ $c°. Сбросьте нагрузку, следите за стрелкой, при 110° остановитесь", Alerts.Level.DANGER, 2 * 60_000L)
             val old = coolant.firstOrNull { now - it.first in 50_000L..90_000L }?.second
-            if (old != null && old in 80..98 && c - old >= 8) {
-                Alerts.raise("spike", "ОЖ выросла с $old° до $c° за минуту. На EJ25 так проявляется прогар прокладки ГБЦ или воздух в системе охлаждения", Alerts.Level.WARN, 20 * 60_000L)
+            if (old != null && old in 80..98 && c - old >= 8 && now - warmSince > 5 * 60_000L) {
+                Alerts.raise("spike", "ОЖ выросла с $old° до $c° за минуту. Чаще всего это воздух в системе охлаждения, особенно после замены антифриза. " +
+                    "Если повторяется после прокачки, проверьте прокладку ГБЦ", Alerts.Level.WARN, 20 * 60_000L)
             }
-        }
+        } else if (!running) warmSince = 0L
         // --- ATF
         val atf = t?.atfC
         if (atf != null && fAtf) {

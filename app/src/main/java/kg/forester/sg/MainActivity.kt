@@ -63,6 +63,8 @@ import kg.forester.sg.ui.SettingsScreen
 import kg.forester.sg.ui.T
 import kg.forester.sg.ui.fmt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -118,6 +120,8 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 33) perms += Manifest.permission.POST_NOTIFICATIONS
         requestPermissions(perms.toTypedArray(), 1)
         EcuService.start(this)
+        // «Выход» in the service notification closes the screen too
+        lifecycleScope.launch { EcuService.exitRequested.collect { finishAndRemoveTask() } }
         setContent {
             // one gallery launcher for gauge pictures at the root, so the result survives the closed picker dialog
             val pickGauge = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -239,6 +243,8 @@ fun isPhone(ctx: android.content.Context) = ctx.resources.configuration.smallest
 /** Phone menu: all screens in a pop-up list (the compact panel has no side rail). */
 @Composable
 private fun PhoneMenu(onClose: () -> Unit, onSelect: (Screen) -> Unit) {
+    var exit by remember { mutableStateOf(false) }
+    if (exit) kg.forester.sg.ui.ExitDialog { exit = false; onClose() }
     Box(
         Modifier.fillMaxSize().background(Color(0xB3000000)).clickable(onClick = onClose),
     ) {
@@ -257,6 +263,15 @@ private fun PhoneMenu(onClose: () -> Unit, onSelect: (Screen) -> Unit) {
                     Spacer(Modifier.width(14.dp))
                     T(s.title, 16.sp)
                 }
+            }
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(1.dp).background(C.Border))
+            Row(
+                Modifier.fillMaxWidth().clickable { exit = true }.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Power, null, tint = C.Sub, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(14.dp))
+                T("Выход", 16.sp)
             }
         }
     }
@@ -480,6 +495,9 @@ private fun TopBar(screen: Screen) {
         Spacer(Modifier.weight(1f))
         kg.forester.sg.ui.StatusPill()
         kg.forester.sg.ui.ThemeButton(22.dp)
+        // as the head unit's home screen the app is never closed, so no exit there
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        if (!remember { kg.forester.sg.ui.isDefaultHome(ctx) }) kg.forester.sg.ui.ExitButton(22.dp)
         Spacer(Modifier.width(16.dp))
         Icon(Lucide.BatteryCharging, null, tint = C.Text, modifier = Modifier.size(22.dp))
         T(" ${fmt(e.batteryV?.toDouble())} V", 18.sp)

@@ -40,6 +40,11 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- other home apps: without them Android 11+ resolves HOME to us and we'd think we are the launcher -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
         <!-- map apps the mini-map can open -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
