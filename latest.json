@@ -1,7 +1,7 @@
 {
- "tag": "v0.9-beta16",
- "name": "0.9-beta16",
- "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta16/subaru-ssm-dashboard.apk",
- "size": 108833395,
- "notes": "Голосовой помощник понимает «гони домой», адреса вроде «12 микрорайон дом 65/2» и видео на YouTube; подсказка про коробки 1999–2000 годов."
+ "tag": "v0.9-beta17",
+ "name": "0.9-beta17",
+ "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta17/subaru-ssm-dashboard.apk",
+ "size": 117345457,
+ "notes": "Мотор в 3D на вкладке Мотор, умный анализатор по заводским мануалам с меньшим числом ложных тревог, проверка холостого хода с историей, машина определяется по ЭБУ, поиск музыки."
 }
