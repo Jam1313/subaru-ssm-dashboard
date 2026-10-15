@@ -30,8 +30,11 @@ ap.add_argument("--elev", type=float, default=24.0)
 ap.add_argument("--anchors")
 ap.add_argument("--hide", default="")
 ap.add_argument("--list", action="store_true")
+ap.add_argument("--markers", action="store_true", help="draw a glowing ball at each anchor (to check where they are)")
+ap.add_argument("--anchors-only", action="store_true", help="only recompute anchors.json for frames already rendered")
 ap.add_argument("--samples", type=int, default=32)
 ap.add_argument("--dist", type=float, default=4.4)
+ap.add_argument("--front", type=float, default=0.0, help="degrees to turn the model so frame 0 shows its front")
 a = ap.parse_args(argv)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -69,6 +72,7 @@ pivot.parent = turn
 
 # anchors in model coordinates (or an object's centre), as empties under the pivot so they turn with it
 anchors = {}
+bpy.context.view_layer.update()  # world matrices with the pivot applied, for the objects' centres
 if a.anchors:
     for k, v in json.load(open(a.anchors)).items():
         if isinstance(v, str):
@@ -82,6 +86,19 @@ if a.anchors:
         e.parent = pivot
         e.location = p
         anchors[k] = e
+        if a.markers:
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=0.025)
+            ball = bpy.context.active_object
+            ball.parent = pivot
+            ball.location = p
+            ball.scale = (1 / scale,) * 3  # the same size whatever units the model is in
+            mat = bpy.data.materials.new("m_" + k)
+            mat.use_nodes = True
+            em = mat.node_tree.nodes.new("ShaderNodeEmission")
+            em.inputs[0].default_value = (0.1, 1.0, 0.3, 1)
+            em.inputs[1].default_value = 8
+            mat.node_tree.links.new(em.outputs[0], mat.node_tree.nodes["Material Output"].inputs[0])
+            ball.data.materials.append(mat)
 
 # camera, lights, world
 w, h = (int(x) for x in a.size.split("x"))
@@ -117,7 +134,7 @@ os.makedirs(a.out, exist_ok=True)
 out = {"frames": a.frames, "size": [w, h], "elev": a.elev, "anchors": {k: [] for k in anchors}}
 depsgraph = bpy.context.evaluated_depsgraph_get()
 for i in range(a.frames):
-    turn.rotation_euler = (0, 0, 2 * math.pi * i / a.frames)
+    turn.rotation_euler = (0, 0, math.radians(a.front) + 2 * math.pi * i / a.frames)
     bpy.context.view_layer.update()
     depsgraph = bpy.context.evaluated_depsgraph_get()
     for k, e in anchors.items():
@@ -125,8 +142,10 @@ for i in range(a.frames):
         v = world_to_camera_view(scene, cam, p)
         # behind a part: something nearer than the point along the camera ray
         d = p - cam.location
-        hit, loc, *_ = scene.ray_cast(depsgraph, cam.location, d.normalized(), distance=d.length - 0.03)
+        hit, loc, *_ = scene.ray_cast(depsgraph, cam.location, d.normalized(), distance=d.length - 0.12)  # a point a little inside its own part still counts as seen
         out["anchors"][k].append([round(v.x, 4), round(1 - v.y, 4), 0 if hit else 1])
+    if a.anchors_only:
+        continue
     scene.render.filepath = os.path.join(a.out, "engine_%03d.webp" % i)
     bpy.ops.render.render(write_still=True)
     print("frame", i + 1, "/", a.frames, flush=True)

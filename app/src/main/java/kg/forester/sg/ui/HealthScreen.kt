@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -70,173 +71,414 @@ import kotlin.math.roundToInt
 @Composable
 fun HealthScreen() {
     var tab by remember { mutableStateOf(0) }
+    var engine3d by remember { mutableStateOf(Repo.settings.engine3d) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Мотор", tab == 0, { tab = 0 }, Lucide.HeartPulse)
             Chip("Обучение", tab == 4, { tab = 4 }, Lucide.Wind)
-            Chip("3D мотор", tab == 5, { tab = 5 }, Lucide.Box)
+            Chip("Проверка", tab == 5, { tab = 5 }, Lucide.Stethoscope)
             Chip("ТО", tab == 1, { tab = 1 }, Lucide.Wrench)
             Chip("Шины", tab == 2, { tab = 2 }, Lucide.Disc3)
             Chip("Предупреждения", tab == 3, { tab = 3 }, Lucide.Bell)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
-                0 -> EngineTab()
+                0 -> {
+                    // the engine as a 3D model or as a table of panels, whichever one likes
+                    val switch: @Composable () -> Unit = { EngineViewSwitch(engine3d) { engine3d = it; Repo.settings.engine3d = it } }
+                    if (engine3d) Engine3DTab(switch) else EngineTable(switch)
+                }
                 1 -> ServiceTab()
                 2 -> TyresTab()
                 4 -> LearningTab()
-                5 -> Engine3DTab()
+                5 -> CheckTab()
                 else -> AlertsTab()
             }
         }
     }
 }
 
+/**
+ * «Проверка»: half a minute of warm idle against the factory Select Monitor table for this engine, and what the
+ * analyzer watches while driving.
+ */
 @Composable
-private fun EngineTab() {
+private fun CheckTab() {
+    val ctx = LocalContext.current
+    val init by Repo.ecuInit.collectAsState()
+    val demo by Repo.demoOn.collectAsState()
+    val turbo = Repo.guard.collectAsState().value.turboCar
+    val engine = remember(init, demo, turbo) { kg.forester.sg.ssm.EngineId.detect(ctx) }
+    val table = remember(engine) { kg.forester.sg.service.IdleRef.forEngine(engine) }
+    val latest by kg.forester.sg.service.RulesHost.idle.collectAsState()
+    val history by kg.forester.sg.service.RulesHost.idleHistory.collectAsState()
+    // a sample picked in the history below, else the latest one
+    var picked by remember { mutableStateOf<kg.forester.sg.service.IdleSample?>(null) }
+    val sample = picked ?: latest
+    // a second sample to compare with: its values in a column of their own, with the difference
+    var compare by remember { mutableStateOf<kg.forester.sg.service.IdleSample?>(null) }
+    val cmp = compare?.takeIf { it.timeMs != sample?.timeMs }
+    val fmt = remember { SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()) }
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Panel(Modifier.weight(1.5f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            PanelTitle(Lucide.Stethoscope, "Холостой ход против заводских значений")
+            Spacer(Modifier.height(6.dp))
+            T("${engine.title} · ${engineSource(engine)}", 12.sp, C.Sub)
+            T(table?.source ?: if (engine.source == "нет") "Таблица выберется по мотору, который определит ЭБУ" else "Заводской таблицы для этого мотора нет", 12.sp, C.Sub)
+            Spacer(Modifier.height(6.dp))
+            NoteBox(sample?.let { (if (picked != null) "Замер из истории, ${fmt.format(Date(it.timeMs))}: " else "Замер ${fmt.format(Date(it.timeMs))}: ") +
+                "среднее за полминуты прогретого холостого хода. Обновляется сам, когда мотор прогрет до 80° и стоит на холостых." }
+                ?: "Прогрейте мотор до 80°, выключите кондиционер и обогревы и оставьте машину на холостых в N или P на минуту. Приложение само снимет средние значения и сравнит с заводскими.")
+            if (table != null) {
+                val lines = kg.forester.sg.service.IdleRef.judge(table, sample?.values.orEmpty())
+                // what the colours mean, above the table so it's seen without scrolling
+                Spacer(Modifier.height(8.dp))
+                ColorLegend(listOf(
+                    C.Green to "норма",
+                    Color(0xFFD9C24A) to "чуть за границей (у исправных бывает)",
+                    C.Red to "вне нормы",
+                    C.Gray to "нет данных",
+                ))
+                Spacer(Modifier.height(4.dp))
+                val cmpLines = cmp?.let { c -> kg.forester.sg.service.IdleRef.judge(table, c.values).associateBy { it.row.key } }
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    T("Параметр", 12.sp, C.Sub, modifier = Modifier.weight(1.3f))
+                    T(if (cmp != null && sample != null) fmt.format(Date(sample.timeMs)) else "У вас", 12.sp, C.Sub, modifier = Modifier.weight(0.8f), maxLines = 1)
+                    if (cmp != null) Row(Modifier.weight(0.9f), verticalAlignment = Alignment.CenterVertically) {
+                        T(fmt.format(Date(cmp.timeMs)), 12.sp, C.Violet, modifier = Modifier.weight(1f), maxLines = 1)
+                        Icon(Lucide.X, "Убрать сравнение", tint = C.Sub, modifier = Modifier.size(18.dp).clip(CircleShape).clickable { compare = null })
+                    }
+                    T("Завод", 12.sp, C.Sub, modifier = Modifier.weight(if (cmp != null) 1.0f else 1.4f))
+                }
+                lines.forEachIndexed { i, l ->
+                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.6f)))
+                    val col = when (l.verdict) {
+                        kg.forester.sg.service.IdleRef.Verdict.OK -> C.Green
+                        kg.forester.sg.service.IdleRef.Verdict.NEAR -> Color(0xFFD9C24A)
+                        kg.forester.sg.service.IdleRef.Verdict.NONE -> C.Gray
+                        else -> C.Red
+                    }
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1.3f), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(col))
+                            Spacer(Modifier.width(8.dp))
+                            T(l.row.title, 14.sp, maxLines = 1)
+                        }
+                        T(l.value?.let { "%.${l.row.decimals}f".format(it) + (if (l.row.unit.startsWith("°")) "" else " ") + l.row.unit } ?: "—", 15.sp, if (l.verdict == kg.forester.sg.service.IdleRef.Verdict.NONE) C.Sub else col,
+                            FontWeight.SemiBold, Modifier.weight(0.8f), maxLines = 1)
+                        if (cmpLines != null) {
+                            // the other sample, and how much this one differs from it
+                            val o = cmpLines[l.row.key]
+                            val ov = o?.value
+                            val d = l.row.decimals
+                            Column(Modifier.weight(0.9f)) {
+                                T(ov?.let { "%.${d}f".format(it) } ?: "—", 14.sp, when (o?.verdict) {
+                                    kg.forester.sg.service.IdleRef.Verdict.OK -> C.Green
+                                    kg.forester.sg.service.IdleRef.Verdict.NEAR -> Color(0xFFD9C24A)
+                                    kg.forester.sg.service.IdleRef.Verdict.NONE, null -> C.Sub
+                                    else -> C.Red
+                                }, FontWeight.Medium, maxLines = 1)
+                                val v = l.value
+                                if (v != null && ov != null && Math.abs(v - ov) * Math.pow(10.0, d.toDouble()) >= 0.5) {
+                                    T("разница %+.${d}f".format(v - ov), 11.sp, C.Sub, maxLines = 1)
+                                }
+                            }
+                        }
+                        T(l.row.norm, 12.sp, C.Sub, modifier = Modifier.weight(if (cmpLines != null) 1.0f else 1.4f), maxLines = 2)
+                    }
+                }
+                val hints = lines.mapNotNull { kg.forester.sg.service.IdleRef.hint(it) }.distinct()
+                if (hints.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    SectionLine(Lucide.Lightbulb, "Что это может значить")
+                    hints.forEach { T("• $it", 13.sp, C.Text.copy(alpha = 0.9f)) }
+                }
+                if (history.size > 1) {
+                    Spacer(Modifier.height(14.dp))
+                    SectionLine(Lucide.History, "История замеров")
+                    T("Нажмите на замер, чтобы открыть его в таблице, или на ⇄, чтобы сравнить с ним. В скобках сдвиг от первого замера: видно, куда идёт, например грязнеет датчик расхода воздуха или растёт подсос.", 12.sp, C.Sub)
+                    Spacer(Modifier.height(6.dp))
+                    val first = history.first()
+                    fun cell(s: kg.forester.sg.service.IdleSample, k: String, d: Int): String {
+                        val v = s.values[k] ?: return "—"
+                        val base = first.values[k]
+                        // only a real shift, not "+0.00" or "-0.0" from rounding
+                        val dv = if (s !== first && base != null) v - base else 0f
+                        val delta = if (Math.abs(dv) * Math.pow(10.0, d.toDouble()) >= 0.5) " (%+.${d}f)".format(dv) else ""
+                        return "%.${d}f".format(v) + delta
+                    }
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        listOf("Дата" to 1.1f, "Обороты" to 1f, "MAF, г/с" to 1f, "Впрыск, мс" to 1f, "Обучение, %" to 1f).forEach { (h, w) ->
+                            T(h, 11.sp, C.Sub, modifier = Modifier.weight(w))
+                        }
+                        Spacer(Modifier.width(36.dp))
+                    }
+                    history.reversed().forEach { s ->
+                        val on = sample?.timeMs == s.timeMs
+                        val vs = cmp?.timeMs == s.timeMs
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (on) C.Violet.copy(alpha = 0.14f) else Color.Transparent)
+                                .clickable { picked = if (s.timeMs == latest?.timeMs) null else s }.padding(start = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            T(fmt.format(Date(s.timeMs)), 12.sp, modifier = Modifier.weight(1.1f), maxLines = 1)
+                            T(cell(s, "rpm", 0), 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                            T(cell(s, "maf", 1), 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                            T(cell(s, "inj", 2), 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                            T(cell(s, "aflearn", 1), 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                            // compare with this one (not with itself)
+                            Box(
+                                Modifier.size(36.dp).clip(CircleShape).background(if (vs) C.Violet.copy(alpha = 0.3f) else Color.Transparent)
+                                    .clickable(enabled = !on) { compare = if (vs) null else s },
+                                contentAlignment = Alignment.Center,
+                            ) { if (!on) Icon(Lucide.ArrowLeftRight, "Сравнить", tint = if (vs) C.Text else C.Violet, modifier = Modifier.size(16.dp)) }
+                        }
+                    }
+                }
+            }
+        }
+        Panel(Modifier.weight(1f).fillMaxHeight()) {
+            PanelTitle(Lucide.ListChecks, "Что проверяется на ходу")
+            Spacer(Modifier.height(8.dp))
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { WatchedList() }
+        }
+    }
+}
+
+/** The colour legend under the idle table: a dot and a few words each, wrapping on narrow screens. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ColorLegend(items: List<Pair<Color, String>>) {
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        items.forEach { (c, text) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(c))
+                Spacer(Modifier.width(5.dp))
+                T(text, 11.sp, C.Sub, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** 3D or table: two segments in one pill. */
+@Composable
+private fun EngineViewSwitch(engine3d: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.clip(RoundedCornerShape(12.dp)).background(C.Card.copy(alpha = 0.92f)).border(1.dp, C.Border, RoundedCornerShape(12.dp)).padding(3.dp)) {
+        listOf(Triple(true, "3D", Lucide.Box), Triple(false, "Таблица", Lucide.Table)).forEach { (v, text, icon) ->
+            val on = engine3d == v
+            Row(
+                Modifier.clip(RoundedCornerShape(9.dp)).background(if (on) C.Purple.copy(alpha = 0.28f) else Color.Transparent)
+                    .clickable { onChange(v) }.padding(horizontal = 14.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(icon, null, tint = if (on) C.Text else C.Sub, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                T(text, 13.sp, if (on) C.Text else C.Sub, FontWeight.Medium)
+            }
+        }
+    }
+}
+
+/** «Мотор» as it was before the 3D engine: knock, oil/turbo/cooling, what is watched, side by side. */
+@Composable
+private fun EngineTable(switch: @Composable () -> Unit) {
     val g by Repo.guard.collectAsState()
-    var voice by remember { mutableStateOf(Repo.settings.voiceAlerts) }
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            PanelTitle(Lucide.Flame, "IAM и детонация")
+            Spacer(Modifier.height(12.dp))
+            KnockDetails()
+        }
+        Panel(Modifier.weight(1f).fillMaxHeight()) {
+            PanelTitle(Lucide.Thermometer, "Масло, турбина, охлаждение")
+            Spacer(Modifier.height(12.dp))
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                OilDetails()
+                if (g.turbo) {
+                    Spacer(Modifier.height(8.dp))
+                    TurboDetails()
+                }
+                Spacer(Modifier.height(14.dp))
+                SectionLine(Lucide.Thermometer, "Охлаждение и коробка")
+                CoolingDetails(wide = false)
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { switch() }
+        }
+        Panel(Modifier.weight(1f).fillMaxHeight()) {
+            PanelTitle(Lucide.Bell, "Что отслеживается")
+            Spacer(Modifier.height(8.dp))
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { WatchedList() }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border))
+            Spacer(Modifier.height(8.dp))
+            VoiceSwitch()
+        }
+    }
+}
+
+/** IAM colour: full, lowered, low. */
+internal fun iamColor(v: Double) = if (v >= 0.95) C.Green else if (v >= 0.75) C.Orange else C.Red
+
+/** The knock sensor's card on the engine: IAM now, the corrections, IAM at the start of each drive. */
+@Composable
+internal fun KnockDetails() {
+    val g by Repo.guard.collectAsState()
     val fmt = remember { SimpleDateFormat("dd.MM.yy", Locale.getDefault()) }
     val log = remember(g.iam) {
         runCatching { JSONArray(Repo.settings.iamLog) }.getOrNull()?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty().reversed()
     }
     val refills = remember { runCatching { Repo.db.refills() }.getOrDefault(emptyList()) }
-    fun iamColor(v: Double) = if (v >= 0.95) C.Green else if (v >= 0.75) C.Orange else C.Red
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        // knock: IAM now, the corrections, IAM at the start of each drive
-        Panel(Modifier.weight(1f).fillMaxHeight()) {
-            PanelTitle(Lucide.Flame, "IAM и детонация")
-            Spacer(Modifier.height(12.dp))
-            val iam = g.iam
-            Row(verticalAlignment = Alignment.Bottom) {
-                T(iam?.let { "%.2f".format(it) } ?: "—", 44.sp, iam?.let { iamColor(it.toDouble()) } ?: C.Gray, FontWeight.Bold)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.padding(bottom = 8.dp)) {
-                    T("IAM", 13.sp, C.Sub)
-                    T(when { iam == null -> "нет данных"; iam >= 0.95f -> "норма"; iam >= 0.75f -> "снижен"; else -> "низкий" }, 14.sp,
-                        iam?.let { iamColor(it.toDouble()) } ?: C.Sub, FontWeight.Medium)
-                }
+    val iam = g.iam
+    Row(verticalAlignment = Alignment.Bottom) {
+        T(iam?.let { "%.2f".format(it) } ?: "—", 34.sp, iam?.let { iamColor(it.toDouble()) } ?: C.Gray, FontWeight.Bold)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.padding(bottom = 6.dp)) {
+            T("IAM", 13.sp, C.Sub)
+            T(when { iam == null -> "нет данных"; iam >= 0.95f -> "норма"; iam >= 0.75f -> "снижен"; else -> "низкий" }, 14.sp,
+                iam?.let { iamColor(it.toDouble()) } ?: C.Sub, FontWeight.Medium)
+        }
+    }
+    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.Border)) {
+        if (iam != null) Box(Modifier.fillMaxHeight().fillMaxWidth(iam.coerceIn(0.02f, 1f)).clip(RoundedCornerShape(3.dp)).background(iamColor(iam.toDouble())))
+    }
+    Spacer(Modifier.height(10.dp))
+    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatTile(Lucide.Activity, "FBKC (откат)", g.fbkc?.let { "%.1f°".format(it) } ?: "—", "сейчас", Modifier.weight(1f),
+            if ((g.fbkc ?: 0f) < -1f) C.Orange else C.Text)
+        StatTile(Lucide.Waves, "FLKC (обучение)", g.flkc?.let { "%.1f°".format(it) } ?: "—", "выученная", Modifier.weight(1f),
+            if ((g.flkc ?: 0f) <= -2.8f) C.Red else if ((g.flkc ?: 0f) < -1f) C.Orange else C.Text)
+    }
+    if (iam == null) {
+        Spacer(Modifier.height(8.dp))
+        NoteBox("В определениях этой прошивки нет IAM — приложение следит за коррекцией детонации.")
+    }
+    Spacer(Modifier.height(12.dp))
+    SectionLine(Lucide.History, "IAM по поездкам")
+    T("На старте каждой поездки. Падение после заправки — признак плохого бензина на этой АЗС.", 12.sp, C.Sub)
+    Spacer(Modifier.height(4.dp))
+    if (log.isEmpty()) T("Пока нет данных.", 13.sp, C.Sub)
+    log.take(8).forEachIndexed { i, o ->
+        val t = o.getLong("t")
+        val v = o.getDouble("v")
+        val refill = refills.filter { it.timeMs < t }.maxByOrNull { it.timeMs }
+        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.6f)))
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(iamColor(v)))
+            Spacer(Modifier.width(8.dp))
+            T(fmt.format(Date(t)), 13.sp, C.Sub, modifier = Modifier.width(72.dp))
+            T("%.2f".format(v), 15.sp, iamColor(v), FontWeight.SemiBold, Modifier.width(52.dp))
+            T(refill?.let { "после заправки ${fmt.format(Date(it.timeMs))}" } ?: "", 12.sp, C.Sub, maxLines = 1)
+        }
+    }
+}
+
+/** The oil's card: the temperature (read or estimated) and whether the engine may be loaded. */
+@Composable
+internal fun OilDetails() {
+    val g by Repo.guard.collectAsState()
+    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatTile(Lucide.Droplet, "Масло", g.oilC?.let { "${it.roundToInt()}°" } ?: "—",
+            if (g.oilC == null) "" else if (g.oilEstimated) "оценка по ОЖ и нагрузке" else "датчик ЭБУ", Modifier.weight(1f))
+        StatTile(Lucide.Gauge, "Прогрев", if (g.cold) "холодный" else if (g.oilC != null) "прогрет" else "—",
+            if (g.cold) "не выше 3000 об/мин" else g.warmupMin?.let { "до 80° за %.0f мин".format(it) } ?: if (g.oilC != null) "можно нагружать" else "", Modifier.weight(1f),
+            if (g.cold) C.Orange else if (g.oilC != null) C.Green else C.Text)
+    }
+}
+
+/** The turbo's card: the turbo timer. */
+@Composable
+internal fun TurboDetails() {
+    val g by Repo.guard.collectAsState()
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.CardHi).padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Lucide.Fan, null, tint = C.Sub, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            T("Турботаймер", 13.sp, C.Sub, modifier = Modifier.weight(1f))
+            T("жар ${g.heat.roundToInt()}", 12.sp, C.Sub)
+        }
+        Spacer(Modifier.height(6.dp))
+        val hot = g.heat > 12f
+        T(when {
+            g.cooldownSec > 0 -> "подождите ${g.cooldownSec} с"
+            hot -> "~${g.heat.toInt()} с на холостых"
+            else -> "можно глушить"
+        }, 20.sp, if (hot || g.cooldownSec > 0) C.Orange else C.Green, FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.Border)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth((g.heat / 100f).coerceIn(0.02f, 1f)).clip(RoundedCornerShape(3.dp))
+                .background(if (g.heat > 60) C.Red else if (g.heat > 30) C.Orange else C.Green))
+        }
+    }
+}
+
+/** The coolant's card: the highest coolant and ATF this session, and the thermostat. */
+@Composable
+internal fun CoolingDetails(wide: Boolean = true) {
+    val g by Repo.guard.collectAsState()
+    // wide: three in a row; narrow: the thermostat under the two maximums
+    @Composable fun thermostat(m: Modifier) = StatTile(Lucide.Repeat, "Термостат", g.thermostat.ifEmpty { "—" },
+        if (g.thermostat.isEmpty()) "оценится после холодного пуска" else "", m, small = true)
+    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatTile(Lucide.Thermometer, "Макс. ОЖ", g.coolantMax?.let { "$it°" } ?: "—", "за сеанс", Modifier.weight(1f),
+            if ((g.coolantMax ?: 0) >= 105) C.Red else C.Text)
+        StatTile(Lucide.Cog, "Макс. ATF", g.atfMax?.let { "$it°" } ?: "—", "за сеанс", Modifier.weight(1f),
+            if ((g.atfMax ?: 0) >= 110) C.Orange else C.Text)
+        if (wide) thermostat(Modifier.weight(1f))
+    }
+    if (!wide) {
+        Spacer(Modifier.height(8.dp))
+        thermostat(Modifier.fillMaxWidth())
+    }
+}
+
+/** What the guard watches, and the voice warnings switch. */
+@Composable
+internal fun WatchedDetails() {
+    WatchedList()
+    Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border))
+    Spacer(Modifier.height(8.dp))
+    VoiceSwitch()
+}
+
+@Composable
+private fun WatchedList() {
+    listOf(
+        Triple(Lucide.Flame, "Детонация", "IAM ниже 0,75 или −0,1 за поездку, FLKC −1,4 / −2,8 / −4°, откат FBKC под наддувом и на разгоне. После сброса ЭБУ, на малой нагрузке и холодном моторе не пугает"),
+        Triple(Lucide.Droplets, "Смесь", "ЭБУ долго добавляет или убирает больше 15 % топлива, подсос только на холостых, датчик состава смеси не работает, форсунки на пределе"),
+        Triple(Lucide.Fan, "Наддув", "перенаддув, отсечка топлива, недодув против обычного для вашей машины, бедная смесь под наддувом, турботаймер"),
+        Triple(Lucide.Gauge, "Холостой ход", "плавающие, высокие или низкие обороты, AVCS не возвращается, слабое разрежение"),
+        Triple(Lucide.Thermometer, "Охлаждение", "горячо от 102°, перегрев от 105°, выше 100° на скорости, перегрев только в пробке (вентиляторы), рост на 8° за минуту"),
+        Triple(Lucide.Snowflake, "Холодный мотор", "высокие обороты, полный газ или наддув на непрогретом масле"),
+        Triple(Lucide.Repeat, "Термостат", "20 минут езды, а ОЖ ниже 72°"),
+        Triple(Lucide.Cog, "АКПП", "ATF от 100°, 110° и 120°, странный датчик, проскальзывание блокировки, аварийный режим на третьей"),
+        Triple(Lucide.Disc3, "Полный привод", "передние и задние колёса крутятся с разной скоростью: разный износ или давление"),
+        Triple(Lucide.BatteryCharging, "АКБ и генератор", "разряд на стоянке, слабый пуск, не заряжает ниже 12,6 В, перезаряд выше 15 В, магнитола не выключилась. 12,5–13 В на ходу у Subaru 2001–2008 норма"),
+        Triple(Lucide.ThermometerSnowflake, "Датчики", "после долгой стоянки ОЖ и воздух показывают по-разному, нереальное атмосферное давление"),
+        Triple(Lucide.Wrench, "ТО и шины", "сроки по пробегу, времени, моточасам; давление в шинах"),
+    ).forEachIndexed { i, (icon, title, sub) ->
+        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.6f)))
+        Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(30.dp).clip(CircleShape).background(C.Violet.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = C.Violet, modifier = Modifier.size(15.dp))
             }
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.Border)) {
-                if (iam != null) Box(Modifier.fillMaxHeight().fillMaxWidth(iam.coerceIn(0.02f, 1f)).clip(RoundedCornerShape(3.dp)).background(iamColor(iam.toDouble())))
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile(Lucide.Activity, "FBKC (откат)", g.fbkc?.let { "%.1f°".format(it) } ?: "—", "сейчас", Modifier.weight(1f),
-                    if ((g.fbkc ?: 0f) < -1f) C.Orange else C.Text)
-                StatTile(Lucide.Waves, "FLKC (обучение)", g.flkc?.let { "%.1f°".format(it) } ?: "—", "выученная", Modifier.weight(1f),
-                    if ((g.flkc ?: 0f) <= -2.8f) C.Red else if ((g.flkc ?: 0f) < -1f) C.Orange else C.Text)
-            }
-            if (iam == null) {
-                Spacer(Modifier.height(10.dp))
-                NoteBox("В определениях этой прошивки нет IAM — приложение следит за коррекцией детонации.")
-            }
-            Spacer(Modifier.height(14.dp))
-            SectionLine(Lucide.History, "IAM по поездкам")
-            T("На старте каждой поездки. Падение после заправки — признак плохого бензина на этой АЗС.", 12.sp, C.Sub)
-            Spacer(Modifier.height(6.dp))
-            if (log.isEmpty()) T("Пока нет данных.", 13.sp, C.Sub)
-            LazyColumn(Modifier.weight(1f)) {
-                items(log.size) { i ->
-                    val o = log[i]
-                    val t = o.getLong("t")
-                    val v = o.getDouble("v")
-                    val refill = refills.filter { it.timeMs < t }.maxByOrNull { it.timeMs }
-                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.6f)))
-                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(iamColor(v)))
-                        Spacer(Modifier.width(8.dp))
-                        T(fmt.format(Date(t)), 13.sp, C.Sub, modifier = Modifier.width(72.dp))
-                        T("%.2f".format(v), 15.sp, iamColor(v), FontWeight.SemiBold, Modifier.width(52.dp))
-                        T(refill?.let { "после заправки ${fmt.format(Date(it.timeMs))}" } ?: "", 12.sp, C.Sub, maxLines = 1)
-                    }
-                }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                T(title, 14.sp, weight = FontWeight.Medium)
+                T(sub, 12.sp, C.Sub)
             }
         }
-        // turbo, oil, cooling: tiles
-        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-            PanelTitle(Lucide.Thermometer, "Масло, турбина, охлаждение")
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile(Lucide.Droplet, "Масло", g.oilC?.let { "${it.roundToInt()}°" } ?: "—",
-                    if (g.oilC == null) "" else if (g.oilEstimated) "оценка по ОЖ и времени" else "датчик ЭБУ", Modifier.weight(1f))
-                StatTile(Lucide.Gauge, "Прогрев", if (g.cold) "холодный" else if (g.oilC != null) "прогрет" else "—",
-                    if (g.cold) "не выше 3000 об/мин" else g.warmupMin?.let { "до 80° за %.0f мин".format(it) } ?: if (g.oilC != null) "можно нагружать" else "", Modifier.weight(1f),
-                    if (g.cold) C.Orange else if (g.oilC != null) C.Green else C.Text)
-            }
-            if (g.turbo) {
-                Spacer(Modifier.height(8.dp))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.CardHi).padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Lucide.Fan, null, tint = C.Sub, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        T("Турботаймер", 13.sp, C.Sub, modifier = Modifier.weight(1f))
-                        T("жар ${g.heat.roundToInt()}", 12.sp, C.Sub)
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    val hot = g.heat > 12f
-                    T(when {
-                        g.cooldownSec > 0 -> "подождите ${g.cooldownSec} с"
-                        hot -> "~${g.heat.toInt()} с на холостых"
-                        else -> "можно глушить"
-                    }, 20.sp, if (hot || g.cooldownSec > 0) C.Orange else C.Green, FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.Border)) {
-                        Box(Modifier.fillMaxHeight().fillMaxWidth((g.heat / 100f).coerceIn(0.02f, 1f)).clip(RoundedCornerShape(3.dp))
-                            .background(if (g.heat > 60) C.Red else if (g.heat > 30) C.Orange else C.Green))
-                    }
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            SectionLine(Lucide.Thermometer, "Охлаждение и коробка")
-            Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile(Lucide.Thermometer, "Макс. ОЖ", g.coolantMax?.let { "$it°" } ?: "—", "за сеанс", Modifier.weight(1f),
-                    if ((g.coolantMax ?: 0) >= 105) C.Red else C.Text)
-                StatTile(Lucide.Cog, "Макс. ATF", g.atfMax?.let { "$it°" } ?: "—", "за сеанс", Modifier.weight(1f),
-                    if ((g.atfMax ?: 0) >= 110) C.Orange else C.Text)
-            }
-            Spacer(Modifier.height(8.dp))
-            StatTile(Lucide.Repeat, "Термостат", g.thermostat.ifEmpty { "—" },
-                if (g.thermostat.isEmpty()) "оценится после холодного пуска" else "", Modifier.fillMaxWidth(), small = true)
-        }
-        // what is watched, and the voice
-        Panel(Modifier.weight(1f).fillMaxHeight()) {
-            PanelTitle(Lucide.Bell, "Что отслеживается")
-            Spacer(Modifier.height(8.dp))
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                listOf(
-                    Triple(Lucide.Flame, "Детонация", "IAM ниже 0,75 или −0,1 за поездку, FLKC до −2,8°, откат FBKC под наддувом"),
-                    Triple(Lucide.Thermometer, "Перегрев", "ОЖ от 105°; рост на 8° за минуту, когда мотор прогрет больше 5 минут (воздух в системе, на EJ25 и прокладка ГБЦ)"),
-                    Triple(Lucide.Gauge, "Холодный мотор", "обороты выше 3600 на непрогретом масле"),
-                    Triple(Lucide.Repeat, "Термостат", "20 минут езды, а ОЖ ниже 72°"),
-                    Triple(Lucide.Cog, "АКПП", "ATF выше 110° и 120°"),
-                    Triple(Lucide.BatteryCharging, "АКБ и генератор", "разряд на стоянке, слабый пуск, недозаряд ниже 13 В, перезаряд выше 15 В"),
-                    Triple(Lucide.Fan, "Турбина", "сколько подождать на холостых после нагрузки"),
-                    Triple(Lucide.Wrench, "ТО и шины", "сроки по пробегу, времени, моточасам; давление в шинах"),
-                ).forEachIndexed { i, (icon, title, sub) ->
-                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.6f)))
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(30.dp).clip(CircleShape).background(C.Violet.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                            Icon(icon, null, tint = C.Violet, modifier = Modifier.size(15.dp))
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            T(title, 14.sp, weight = FontWeight.Medium)
-                            T(sub, 12.sp, C.Sub)
-                        }
-                    }
-                }
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border))
-            Spacer(Modifier.height(8.dp))
-            val ctx = LocalContext.current
-            val speech by kg.forester.sg.service.Speech.status.collectAsState()
-            SwitchRow("Голосовые предупреждения", "Встроенный русский голос (~21 МБ, один раз)" +
-                if (speech.isNotEmpty()) " · $speech" else "", voice) {
-                voice = it; Repo.settings.voiceAlerts = it
-                if (it) kg.forester.sg.service.Speech.prepare(ctx)
-            }
-        }
+    }
+}
+
+@Composable
+private fun VoiceSwitch() {
+    var voice by remember { mutableStateOf(Repo.settings.voiceAlerts) }
+    val ctx = LocalContext.current
+    val speech by kg.forester.sg.service.Speech.status.collectAsState()
+    SwitchRow("Голосовые предупреждения", "Встроенный русский голос (~21 МБ, один раз)" +
+        if (speech.isNotEmpty()) " · $speech" else "", voice) {
+        voice = it; Repo.settings.voiceAlerts = it
+        if (it) kg.forester.sg.service.Speech.prepare(ctx)
     }
 }
 

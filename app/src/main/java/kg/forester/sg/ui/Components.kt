@@ -459,6 +459,28 @@ fun RingGauge(
 }
 
 /**
+ * Demo on: a plate in the header that says so plainly (the made-up drive looks like a real one), a tap turns it off
+ * and the app goes back to looking for the car.
+ */
+@Composable
+fun DemoPill(short: Boolean = false) {
+    val on by kg.forester.sg.data.Repo.demoOn.collectAsState()
+    if (!on) return
+    Row(
+        Modifier.padding(horizontal = 6.dp).clip(RoundedCornerShape(10.dp)).background(C.Violet.copy(alpha = 0.22f))
+            .border(1.dp, C.Violet, RoundedCornerShape(10.dp)).clickable { kg.forester.sg.data.Repo.settings.demo = false }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Lucide.MonitorPlay, null, tint = C.Violet, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        T(if (short) "Демо" else "Демо: не ваша машина", 13.sp, C.Text, FontWeight.SemiBold, maxLines = 1)
+        Spacer(Modifier.width(6.dp))
+        Icon(Lucide.X, "Выключить демо", tint = C.Sub, modifier = Modifier.size(14.dp))
+    }
+}
+
+/**
  * The connection in the header: how the app talks to the car (USB cable, Wi-Fi or Bluetooth ELM327, demo),
  * green when the ECU answers, orange (struck through) while it does not.
  */

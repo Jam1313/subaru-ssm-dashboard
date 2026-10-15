@@ -185,7 +185,7 @@ fun HomeEditBar(onDone: () -> Unit) {
     val free = HomeLayout.board.isFree(Repo.homeTiles.collectAsState().value)
     BoardEditBar(HomeEdit, if (free) HomeTileInfo else HomeTileInfo - "car3d", onDone) {
         Chip("Просто", false, {
-            val turbo = Repo.guard.value.turbo || "turbo" in Repo.settings.carSub.lowercase()
+            val turbo = Repo.guard.value.turboCar
             Repo.settings.homeTiles = HomeLayout.simple(turbo, Repo.settings.gearbox != "mt")
             Repo.settings.clusterSize = 2
         }, Lucide.Sparkles)

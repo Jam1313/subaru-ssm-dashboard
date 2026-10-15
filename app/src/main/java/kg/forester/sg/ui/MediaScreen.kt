@@ -669,14 +669,43 @@ private fun FilesPanel() {
         }
     }
     val special = dir == FAV_ROOT || dir == RECENT_ROOT
+    // search over all the music at once (sticks, card, memory): title, artist, album, file or folder name
+    var query by remember { mutableStateOf("") }
+    var hits by remember { mutableStateOf<List<LocalMusic.Hit>?>(null) }
+    LaunchedEffect(query) {
+        if (query.trim().length < 2) { hits = null; return@LaunchedEffect }
+        delay(250) // typing: wait for a pause
+        hits = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { LocalMusic.search(ctx, query) }.getOrDefault(emptyList()) }
+    }
+    val found = hits
     PanelBox(Lucide.FolderOpen, "Музыка", trailing = {
-        if (listing.tracks.isNotEmpty()) {
+        if (found == null && listing.tracks.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Pill("Все", Lucide.Play, height = 38.dp) { dir?.let { LocalMusic.playFolder(ctx, it, listing.tracks, 0) } }
                 Pill("", Lucide.Shuffle, height = 38.dp) { dir?.let { LocalMusic.playFolder(ctx, it, listing.tracks, 0, shuffle = true) } }
             }
         }
     }) {
+        SearchLine(query, "Песня, исполнитель или папка") { query = it }
+        Spacer(Modifier.height(8.dp))
+        if (query.trim().length >= 2) {
+            when {
+                found == null -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { T("Ищу…", 14.sp, C.Sub) }
+                found.isEmpty() -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    T("Ничего не нашлось. Попробуйте часть названия или имя исполнителя", 14.sp, C.Sub, textAlign = TextAlign.Center)
+                }
+                else -> LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+                    items(found, key = { "h" + it.file.path }) { h ->
+                        val cur = h.file.path == st.current
+                        ListRow(h.title, h.sub, cur, lead = { if (cur) Bars(st.playing) else IconTile(Lucide.Music) },
+                            trail = { T(h.file.extension.uppercase(), 11.sp, C.Sub.copy(alpha = 0.6f)) }) {
+                            if (cur) LocalMusic.toggle(ctx) else LocalMusic.playFound(ctx, h.file)
+                        }
+                    }
+                }
+            }
+            return@PanelBox
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             roots.forEach { r ->
                 Pill(r.name, when (r.kind) { LocalMusic.Kind.USB -> Lucide.Usb; LocalMusic.Kind.SD -> Lucide.MemoryStick; else -> Lucide.HardDrive },

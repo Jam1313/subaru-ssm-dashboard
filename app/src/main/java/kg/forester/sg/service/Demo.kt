@@ -8,10 +8,13 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Made-up but plausible ECU/TCU data for the demo mode (Настройки → «Демо-данные»): a 90-second loop of
- * idle, a flat-out run to ~95 km/h, a sharp lift, cruise and braking to a stop. Nothing is written to trips.
+ * Made-up but plausible ECU/TCU data for the demo mode (Настройки → «Демо-данные»): a 140-second loop of
+ * idle, a flat-out run to ~95 km/h, a sharp lift, cruise, braking to a stop and a minute at a red light (long
+ * enough for «Мониторинг → Проверка» to take its idle sample, with the values of a healthy warm EJ).
+ * Nothing is written to trips.
  */
 object Demo {
+    private const val CYCLE = 140.0
     private val gearRatio = floatArrayOf(2.785f, 1.545f, 1.000f, 0.694f) // 4EAT
     private const val FINAL = 4.111f
     private const val TYRE_M = 2.0f
@@ -25,7 +28,7 @@ object Demo {
     }
 
     fun ecu(nowMs: Long): Pair<EcuSnapshot, TcuSnapshot> {
-        val t = (nowMs / 1000.0) % 90
+        val t = (nowMs / 1000.0) % CYCLE
         val v = speedAt(t)
         val accel = (speedAt(t + 0.5) - v) * 2 // km/h per s
         val load = when {
@@ -47,30 +50,37 @@ object Demo {
         val turbine = wheelRpm * gearRatio[gear - 1] * FINAL
         val rpm = max(780.0, if (v < 1) 780.0 else turbine * (if (lockUp) 1.0 else 1.08))
         val wobble = sin(nowMs / 700.0)
+        val idling = v < 1
+        // each stop a little different, and a small air leak growing over the stops (so «Проверка» has a history
+        // worth looking at): the MAF reads a bit less, the ECU learns a bit more fuel
+        val stop = ((nowMs / 1000.0) / CYCLE).toLong()
+        val leak = (stop % 8) / 7.0
+        val jitter = sin(stop * 1.7)
         val boostKpa = if (load > 0.7) (load - 0.7) / 0.3 * 85 else -60 + load * 70
         val maf = 2.5 + rpm / 1000 * (3 + load * 28)
-        val atf = (55 + (nowMs / 60000.0 % 30)).toInt()
+        // warms from 55° to 85° and back over an hour, smoothly (a sawtooth would look like a faulty sensor)
+        val atf = (70 - 15 * cos(nowMs / 60000.0 / 60 * 2 * Math.PI)).toInt()
         val transfer = (25 + load * 45 + if (v < 15 && accel > 3) 20 else 0).coerceAtMost(100.0)
         val ecu = EcuSnapshot(
             timeMs = nowMs,
             coolantC = 88 + (wobble * 2).toInt(),
-            rpm = rpm.toInt(),
+            rpm = if (idling) (715 + jitter * 25 + leak * 40 + wobble * 12).toInt() else rpm.toInt(),
             speedKmh = v.toInt(),
-            timingDeg = (12 + 18 * (1 - load) + wobble).toFloat(),
+            timingDeg = if (idling) (13 + wobble * 0.5).toFloat() else (12 + 18 * (1 - load) + wobble).toFloat(),
             intakeC = 32,
-            mafGs = maf.toFloat(),
-            throttlePct = (load * 85 + 2).toFloat(),
+            mafGs = if (idling) (2.9 - leak * 0.5 + jitter * 0.1 + wobble * 0.1).toFloat() else maf.toFloat(),
+            throttlePct = if (idling) 1.5f else (load * 85 + 2).toFloat(),
             batteryV = (14.1 + wobble * 0.1).toFloat(),
-            injPwMs = (1.8 + load * 9).toFloat(),
+            injPwMs = if (idling) (2.05 + leak * 0.3 + jitter * 0.05).toFloat() else (1.8 + load * 9).toFloat(),
             knockDeg = if (load > 0.9 && ((nowMs / 1000) % 17 == 0L)) -1.4f else 0f,
             atmKpa = 99f,
             afCorrPct = (wobble * 3).toFloat(),
-            afLearnPct = 2.3f,
+            afLearnPct = if (idling) (1.5 + leak * 8).toFloat() else 2.3f,
             lambda = if (load > 0.8) 0.82f else (1 + wobble * 0.02).toFloat(),
             wastegatePct = if (load > 0.7) 45f else 0f,
-            pedalPct = (load * 100).toFloat(),
-            mapKpa = (99 + boostKpa).toFloat(),
-            avcsDeg = (load * 25).toFloat(),
+            pedalPct = if (idling) 0f else (load * 100).toFloat(),
+            mapKpa = if (idling) (33 + wobble).toFloat() else (99 + boostKpa).toFloat(),
+            avcsDeg = if (idling) 0.5f else (load * 25).toFloat(),
             altDutyPct = 38f,
             throttleMotorPct = (load * 30).toFloat(),
         )
@@ -91,7 +101,7 @@ object Demo {
 
     /** Course for the fake GPS: gentle left-right bends while cruising (about ±10°/s). */
     fun bearing(nowMs: Long): Float {
-        val t = (nowMs / 1000.0) % 90
+        val t = (nowMs / 1000.0) % CYCLE
         val wiggle = if (t in 26.0..60.0) 40 * sin((t - 26) / 3.5) else 0.0
         return ((90 + wiggle) % 360).toFloat()
     }

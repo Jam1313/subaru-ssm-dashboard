@@ -24,6 +24,8 @@ data class GuardState(
     /** Engine still cold (oil under ~60 °C): keep the revs down. */
     val cold: Boolean = false,
     val turbo: Boolean = false,
+    /** A turbo car by what the ECU says (ROM, wastegate, boost seen), whether or not the turbo timer is on. */
+    val turboCar: Boolean = false,
     /** Turbo heat 0…100 and, at idle after a hard drive, the seconds left before switching off. */
     val heat: Float = 0f,
     val cooldownSec: Int = 0,
@@ -50,16 +52,26 @@ data class Peaks(
 )
 
 /**
- * Watches the engine between polls: IAM and knock corrections (bad fuel), turbo cool-down, cold engine revved,
- * thermostat, sudden coolant rise (EJ25 head gaskets), ATF temperature, and keeps the peak values. Warnings go
+ * Watches the engine between polls: reads IAM and the knock corrections, estimates the oil temperature, keeps
+ * the turbo cool-down, the thermostat (warm-up time), sudden coolant rise (EJ25 head gaskets) and the peak values.
+ * The other warnings (knock, mixture, boost, idle, overheating, ATF) are the [analyzer]'s rules. Warnings go
  * through [Alerts].
  */
 class EngineGuard {
+    /** The rules from docs/knowledge; fed with every sample and what the guard worked out. */
+    var analyzer: Analyzer? = null
+    /** For the ROM base lookup (turbo or not by the ECU's ROM ID). */
+    var ctx: android.content.Context? = null
+    private var romIdSeen: String? = null
+    private var romTurbo = false
+
     private var avail: List<RrParam>? = null
     private var roles = emptyMap<String, RrParam>()
     private var lastMs = 0L
     private var engineOnSince = 0L
     private var oilEst: Float? = null
+    /** Air flow averaged over the last few minutes, g/s: how hard the engine has been working (heats the oil). */
+    private var mafAvg = 0f
     private var heat = 0f
     private var cooldownAnnounced = false
     private var turboSeen = false
@@ -98,6 +110,17 @@ class EngineGuard {
 
     fun role(name: String): RrParam? = roles[name]
 
+    /**
+     * Forget everything learned from the samples so far: called when the demo is switched on or off, so its made-up
+     * boost doesn't make an NA car a turbo (and its injectors 380 cc), its heat doesn't keep the turbo timer going.
+     */
+    fun reset() {
+        oilEst = null; mafAvg = 0f; heat = 0f; cooldownAnnounced = false; turboSeen = false; boostMs = 0L
+        iamStart = null; iamLogged = false; coldStartMs = 0L; movingMsSinceCold = 0L; warmupMin = null
+        thermostatWarned = false; coolant.clear(); warmSince = 0L; engineOnSince = 0L; lastMs = 0L; romIdSeen = null
+        analyzer?.reset()
+    }
+
     fun newTrip(now: Long) {
         Repo.peaks.value = Peaks(sinceMs = now)
         Repo.tripRange.value = emptyMap()
@@ -111,8 +134,8 @@ class EngineGuard {
             avail = list; features = Repo.featureVersion.value; custom = Repo.customVersion.value; chooseRoles(list)
         }
         val s = Repo.settings
-        val fKnock = s.feature("knock"); val fTurbo = s.feature("turbo"); val fWarm = s.feature("warmup")
-        val fCool = s.feature("cooling"); val fAtf = s.feature("atf"); val fService = s.feature("service")
+        val fKnock = s.feature("knock"); val fTurbo = s.feature("turbo")
+        val fCool = s.feature("cooling"); val fService = s.feature("service")
         val dt = if (lastMs == 0L) 0f else ((now - lastMs) / 1000f).coerceIn(0f, 2f)
         lastMs = now
         val rpm = e.rpm ?: 0
@@ -133,19 +156,9 @@ class EngineGuard {
         if (iam != null && running && fKnock) {
             if (iamStart == null) iamStart = iam
             if (!iamLogged) { iamLogged = true; if (!s.demo) logIam(now, iam) }
-            when {
-                iam < 0.75f -> Alerts.raise("iam", "IAM упал до %.2f: ЭБУ сильно убрал опережение из-за детонации. Проверьте бензин, не нагружайте мотор".format(iam), Alerts.Level.DANGER, 30 * 60_000L)
-                iamStart!! - iam >= 0.1f -> Alerts.raise("iamDrop", "IAM снизился с %.2f до %.2f за поездку: была детонация".format(iamStart, iam), Alerts.Level.WARN, 30 * 60_000L)
-            }
         }
         val fbkc = v("fbkc")?.takeIf { it in -16f..2f }
         val flkc = v("flkc")?.takeIf { it in -16f..2f }
-        if (fKnock && flkc != null && flkc <= -2.8f && running) {
-            Alerts.raise("flkc", "Выученная коррекция по детонации %.1f°: мотор стабильно детонирует на этом режиме".format(flkc), Alerts.Level.WARN, 30 * 60_000L)
-        }
-        if (fKnock && fbkc != null && fbkc <= -4f && (e.gaugeKpa ?: 0f) > 20f) {
-            Alerts.raise("fbkc", "Сильный откат зажигания %.1f° под наддувом".format(fbkc), Alerts.Level.WARN, 5 * 60_000L)
-        }
         val target = targetBoost(e)
 
         // --- turbo heat and cool-down
@@ -153,7 +166,15 @@ class EngineGuard {
         // turbo only after real boost: above 0.15 bar, below 2.5 bar (a junk 0xFF reads +127 kPa), held for 2 s
         boostMs = if (gauge in 15f..250f && (e.rpm ?: 0) > 1500) boostMs + (dt * 1000).toLong() else 0L
         if (boostMs > 2000) turboSeen = true
-        val turbo = fTurbo && turboSeen || fTurbo && listOf("turbo", "sti", "wrx", "gt").any { s.carSub.lowercase().contains(it) || s.carTitle.lowercase().contains(it) }
+        // turbo by what the ECU says (its ROM ID, a wastegate it reports, boost seen), not by the name typed in the settings
+        val init = Repo.ecuInit.value
+        if (init?.romId != romIdSeen) {
+            romIdSeen = init?.romId
+            romTurbo = init != null && ((ctx?.let { kg.forester.sg.ssm.EngineId.romTurbo(it, init.romId) } ?: kg.forester.sg.ssm.EngineId.fromRomId(init.romId)?.turbo) == true ||
+                (kg.forester.sg.ssm.EcuParams.reported(init, kg.forester.sg.ssm.EcuParams.WGDC) && init.capabilities.size > 4))
+        }
+        val turboCar = turboSeen || romTurbo || s.demo
+        val turbo = fTurbo && turboCar
         val speed = e.speedKmh ?: 0
         val idle = running && rpm < 1300 && speed < 3
         heat = when {
@@ -179,15 +200,18 @@ class EngineGuard {
         // --- oil temperature and cold engine
         val c = e.coolantC
         val oilEcu = v("oil")
+        e.mafGs?.let { m -> mafAvg += (m - mafAvg) * (dt / 180f).coerceAtMost(1f) }
         val oil = oilEcu ?: if (running && c != null) {
-            // oil lags the coolant by several minutes after a cold start
+            // Most EJs have no oil temperature sensor: estimated. The oil lags the coolant by several minutes after a
+            // cold start, and once warm it runs hotter than the coolant, the more so the harder the engine works
+            // (a stock STI cruising at 105 km/h: oil ~106° at 90–95° coolant; the turbo is cooled by the oil too).
+            val warmth = ((c - 60) / 20f).coerceIn(0f, 1f) // no gap while the thermostat is still shut
+            val gap = (if (turboCar) 4f + 0.33f * mafAvg else 2f + 0.25f * mafAvg).coerceAtMost(30f) * warmth
+            val target = c + gap
             val o = oilEst ?: (c - 5f)
-            (o + (c - o) * (dt / 420f).coerceAtMost(1f)).also { oilEst = it }
+            (o + (target - o) * (dt / 420f).coerceAtMost(1f)).also { oilEst = it }
         } else null
         val cold = running && oil != null && oil < 60f
-        if (fWarm && cold && rpm > 3600) {
-            Alerts.raise("cold", "Мотор не прогрет: масло около ${oil!!.toInt()}°. Не выше 3000 оборотов", Alerts.Level.WARN, 2 * 60_000L)
-        }
 
         // --- thermostat: warm-up time from a cold start
         if (running && c != null) {
@@ -212,19 +236,20 @@ class EngineGuard {
             while (coolant.isNotEmpty() && now - coolant.first().first > 90_000L) coolant.removeFirst()
             // right after reaching 80° the thermostat may still be opening and the coolant overshoots: no spike check then
             if (c < 80) warmSince = 0L else if (warmSince == 0L) warmSince = now
-            if (c >= 105) Alerts.raise("hot", "Перегрев! ОЖ $c°. Сбросьте нагрузку, следите за стрелкой, при 110° остановитесь", Alerts.Level.DANGER, 2 * 60_000L)
             val old = coolant.firstOrNull { now - it.first in 50_000L..90_000L }?.second
             if (old != null && old in 80..98 && c - old >= 8 && now - warmSince > 5 * 60_000L) {
                 Alerts.raise("spike", "ОЖ выросла с $old° до $c° за минуту. Чаще всего это воздух в системе охлаждения, особенно после замены антифриза. " +
                     "Если повторяется после прокачки, проверьте прокладку ГБЦ", Alerts.Level.WARN, 20 * 60_000L)
             }
         } else if (!running) warmSince = 0L
-        // --- ATF
         val atf = t?.atfC
-        if (atf != null && fAtf) {
-            if (atf >= 120) Alerts.raise("atfHot", "ATF $atf°: перегрев коробки. Снизьте нагрузку", Alerts.Level.DANGER, 3 * 60_000L)
-            else if (atf >= 110) Alerts.raise("atfWarm", "ATF $atf°: коробка горячая", Alerts.Level.WARN, 10 * 60_000L)
-        }
+        // the transmission's sample only while fresh: a TCU that stopped answering must not feed a gear frozen at 3
+        val tFresh = t?.takeIf { now - it.timeMs in 0L..2500L }
+        // a rule failing must not cost the guard's own update below
+        runCatching {
+            analyzer?.process(RuleInput(e, tFresh, now, iam = if (fKnock) iam else null, fbkc = if (fKnock) fbkc else null, flkc = if (fKnock) flkc else null,
+                oilC = oil, turbo = turboCar, targetBoostKpa = target))
+        }.onFailure { kg.forester.sg.ssm.SsmTrace.log("analyzer: $it") }
 
         // --- maintenance reminder once a day when driving off
         if (fService && running && now - maintenanceChecked > 24 * 3600_000L) {
@@ -238,7 +263,7 @@ class EngineGuard {
         val g = Repo.guard.value
         Repo.guard.value = GuardState(
             iam = iam, iamStart = iamStart, fbkc = fbkc, flkc = flkc, targetBoostKpa = target,
-            oilC = oil, oilEstimated = oilEcu == null, cold = cold, turbo = turbo, heat = heat, cooldownSec = cooldown,
+            oilC = oil, oilEstimated = oilEcu == null, cold = cold, turbo = turbo, turboCar = turboCar, heat = heat, cooldownSec = cooldown,
             warmupMin = warmupMin ?: g.warmupMin,
             thermostat = when {
                 coldStartMs != 0L -> "прогрев: ${(now - coldStartMs) / 60_000} мин, ОЖ ${c ?: "—"}°"

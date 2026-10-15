@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.Bell
 import com.composables.icons.lucide.Gauge
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
@@ -169,7 +173,8 @@ private val SPOTS = listOf(
     Spot("avcs", "Распредвал (AVCS)", V3(-1.55f, 0.45f, -1.1f), listOf("avcs"),
         "Насколько муфта AVCS повернула впускной распредвал. На холостых около нуля, в нагрузке до 20–35°."),
     Spot("oil", "Масло", V3(0f, -0.95f, 0.3f), listOf("oil"),
-        "Температура масла, на большинстве EJ это оценка по ОЖ и времени работы. До 60° не крутите выше 3000–3500 оборотов."),
+        "Температура масла. У большинства EJ своего датчика нет, это оценка по ОЖ, времени и нагрузке: прогретое масло обычно на 5–15° горячее антифриза, под нагрузкой больше. До 60° не крутите выше 3000–3500 оборотов. " +
+            "Лампа давления масла загорается почти при нуле (0,15 бар, а норма на горячих холостых от 1 бара): если загорелась, глушите сразу. Уровень щупом проверяйте хотя бы раз в пару заправок."),
     Spot("crank", "Коленвал", V3(0f, -0.25f, -1.38f), listOf("rpm", "load"),
         "Обороты и нагрузка (воздух за оборот, г/об). Прогретые холостые EJ около 650–800 об/мин."),
 )
@@ -210,12 +215,14 @@ private class EngineFrames(val dir: String, val count: Int, val w: Int, val h: I
 }
 
 @Composable
-internal fun Engine3DTab() {
+internal fun Engine3DTab(bottom: @Composable () -> Unit = {}) {
     val appCtx = androidx.compose.ui.platform.LocalContext.current
     val init by Repo.ecuInit.collectAsState()
-    val guardTurbo = Repo.guard.collectAsState().value.turbo
+    val g by Repo.guard.collectAsState()
+    val guardTurbo = g.turboCar
     // the engine of this car: from the ECU's ROM, else the car set up; unknown: the generic EJ drawn here
-    val engine = remember(init, guardTurbo) { kg.forester.sg.ssm.EngineId.detect(appCtx) }
+    val demoOn by Repo.demoOn.collectAsState()
+    val engine = remember(init, guardTurbo, demoOn) { kg.forester.sg.ssm.EngineId.detect(appCtx) }
     val turbo = engine.turbo
     val mesh = remember(engine) { engineMesh(engine) }
     // the real model when the app has it rendered for this family, else the one drawn here
@@ -232,7 +239,8 @@ internal fun Engine3DTab() {
     var pitch by remember { mutableFloatStateOf(0.5f) }
 
     var selected by remember { mutableStateOf<Spot?>(null) }
-    val spots = SPOTS.filter { (!it.turboOnly || turbo) && it.metrics.any { id -> Metrics.of(id, avail)?.read(ctx) != null } }
+    var watched by remember { mutableStateOf(false) }
+    val spots = SPOTS.filter { (!it.turboOnly || turbo) && (it.metrics.any { id -> Metrics.of(id, avail)?.read(ctx) != null } || guardNote(it.id, g) != null) }
         .ifEmpty { SPOTS.filter { !it.turboOnly || turbo } }
         .filter { frames == null || frames.anchors.containsKey(it.id) }
 
@@ -262,17 +270,23 @@ internal fun Engine3DTab() {
         }
 
         // the rendered frame fitted into the area (a little below the middle, under the engine card)
-        val fs = frames?.let { minOf(wPx * 0.62f / it.w, hPx * 0.86f / it.h) } ?: 1f
+        val fs = frames?.let { minOf(wPx * 0.62f / it.w, hPx * 0.76f / it.h) } ?: 1f
         val fx = frames?.let { cx - it.w * fs / 2 } ?: 0f
-        val fy = frames?.let { hPx * 0.57f - it.h * fs / 2 } ?: 0f
+        val fy = frames?.let { hPx * 0.53f - it.h * fs / 2 } ?: 0f
         // callouts: left or right of the engine by where their point is, spread so they don't overlap
         val anchors = spots.associateWith { s ->
             if (frames == null) project(s.anchor)
             else frames.anchors[s.id]!![frame].let { a -> Proj(fx + a[0] * frames.w * fs, fy + a[1] * frames.h * fs, 0f, a[2] > 0.5f) }
         }
         val placed = HashMap<Spot, Offset>()
+        // a column holds only so many; the extra ones (nearest the middle) go to the other side
+        val fit = ((hPx - 2 * margin + margin * 0.6f) / (labelH + margin * 0.6f)).toInt().coerceAtLeast(1)
+        val onLeft = spots.filter { anchors[it]!!.x < cx }.toMutableList()
+        val onRight = spots.filter { anchors[it]!!.x >= cx }.toMutableList()
+        while (onLeft.size > fit && onRight.size < fit) onLeft.maxBy { anchors[it]!!.x }.let { onLeft -= it; onRight += it }
+        while (onRight.size > fit && onLeft.size < fit) onRight.minBy { anchors[it]!!.x }.let { onRight -= it; onLeft += it }
         for (left in listOf(true, false)) {
-            val side = spots.filter { (anchors[it]!!.x < cx) == left }.sortedBy { anchors[it]!!.y }
+            val side = (if (left) onLeft else onRight).sortedBy { anchors[it]!!.y }
             val gap = margin * 0.6f
             val ys = FloatArray(side.size)
             var start = margin
@@ -346,53 +360,98 @@ internal fun Engine3DTab() {
 
         for (s in spots) {
             val o = placed[s] ?: continue
-            Callout(s, avail, ctx, selected == s, Modifier.offset { IntOffset(o.x.roundToInt(), o.y.roundToInt()) }) {
+            Callout(s, avail, ctx, guardNote(s.id, g), selected == s, Modifier.offset { IntOffset(o.x.roundToInt(), o.y.roundToInt()) }) {
                 selected = if (selected == s) null else s
+                watched = false
             }
         }
 
-        // which engine and how it is known
-        Column(
+        // which engine and how it is known; what the app watches behind the bell
+        Row(
             Modifier.align(Alignment.TopCenter).padding(top = 10.dp).width(with(d) { (wPx - 2 * (labelW + margin) - 24f).toDp() })
                 .clip(RoundedCornerShape(14.dp)).background(C.Card.copy(alpha = 0.85f)).border(1.dp, C.Border, RoundedCornerShape(14.dp))
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            T(engine.title, 16.sp, weight = FontWeight.Bold, maxLines = 1)
-            T(when (engine.source) {
-                "ЭБУ" -> "Определён по ЭБУ: ROM ${engine.romId}, ${engine.car}"
-                "настройки" -> "По настройкам машины, ЭБУ пока не отвечал"
-                else -> "Общая схема: мотор определится, когда ответит ЭБУ"
-            }, 11.sp, C.Sub, maxLines = 1)
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                T(engine.title, 16.sp, weight = FontWeight.Bold, maxLines = 1)
+                T(engineSource(engine), 11.sp, C.Sub, maxLines = 1)
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier.size(38.dp).clip(CircleShape).background(if (watched) C.Violet.copy(alpha = 0.3f) else C.Violet.copy(alpha = 0.14f))
+                    .clickable { watched = !watched; selected = null },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Lucide.Bell, "Что отслеживается", tint = C.Violet, modifier = Modifier.size(18.dp)) }
         }
 
-        AnimatedVisibility(selected != null, Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+        // under the engine: the 3D / table switch
+        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)) { bottom() }
+
+        // a part's card (its readings, what the guard knows about it, what is normal) or what the app watches
+        val cardMaxH = maxHeight - 24.dp
+        AnimatedVisibility(selected != null || watched, Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
             enter = fadeIn() + slideInHorizontally { it / 4 }, exit = fadeOut() + slideOutHorizontally { it / 4 }) {
-            val s = selected ?: return@AnimatedVisibility
+            val s = selected
             Column(
-                Modifier.width(520.dp).clip(RoundedCornerShape(16.dp)).background(C.Card.copy(alpha = 0.97f))
+                Modifier.width(560.dp).heightIn(max = cardMaxH).clip(RoundedCornerShape(16.dp)).background(C.Card.copy(alpha = 0.97f))
                     .border(1.dp, C.Violet.copy(alpha = 0.6f), RoundedCornerShape(16.dp)).padding(16.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    T(s.title, 17.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Icon(Lucide.X, "Закрыть", tint = C.Sub, modifier = Modifier.size(22.dp).clip(CircleShape).clickable { selected = null })
+                    T(s?.title ?: "Что отслеживается", 17.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Icon(Lucide.X, "Закрыть", tint = C.Sub, modifier = Modifier.size(22.dp).clip(CircleShape).clickable { selected = null; watched = false })
                 }
                 Spacer(Modifier.height(6.dp))
-                Row {
-                    s.metrics.forEach { id ->
-                        val m = Metrics.of(id, avail) ?: return@forEach
-                        val v = m.read(ctx)
-                        Column(Modifier.padding(end = 18.dp)) {
-                            T(m.short, 11.sp, C.Sub)
-                            T(valueText(m, v), 18.sp, if (m.warn(v)) C.Orange else C.Text, FontWeight.Bold)
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    if (s == null) WatchedDetails()
+                    else {
+                        val shown = s.metrics.mapNotNull { id -> Metrics.of(id, avail)?.let { it to it.read(ctx) } }.filter { it.second != null }
+                        if (shown.isNotEmpty()) Row(Modifier.padding(bottom = 8.dp)) {
+                            shown.forEach { (m, v) ->
+                                Column(Modifier.padding(end = 18.dp)) {
+                                    T(m.short, 11.sp, C.Sub)
+                                    T(valueText(m, v), 18.sp, if (m.warn(v)) C.Orange else C.Text, FontWeight.Bold)
+                                }
+                            }
                         }
+                        when (s.id) {
+                            "knock" -> KnockDetails()
+                            "oil" -> OilDetails()
+                            "turbo" -> TurboDetails()
+                            "coolant" -> CoolingDetails()
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        T(s.about, 13.sp, C.Text.copy(alpha = 0.85f))
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                T(s.about, 13.sp, C.Text.copy(alpha = 0.85f))
             }
         }
     }
+}
+
+/** What the engine guard adds to a part's callout: a short state and its colour. */
+private fun guardNote(id: String, g: kg.forester.sg.service.GuardState): Pair<String, Color>? = when (id) {
+    "knock" -> g.iam?.let { "IAM %.2f".format(it) to iamColor(it.toDouble()) }
+        ?: g.flkc?.let { "FLKC %.1f°".format(it) to (if (it <= -2.8f) C.Red else if (it < -1f) C.Orange else C.Green) }
+    "oil" -> if (g.oilC == null) null else if (g.cold) "холодный" to C.Orange else "прогрет" to C.Green
+    "turbo" -> when {
+        !g.turbo -> null
+        g.cooldownSec > 0 -> "ждать ${g.cooldownSec} с" to C.Orange
+        g.heat > 12f -> "~${g.heat.toInt()} с ХХ" to C.Orange
+        else -> null
+    }
+    "coolant" -> g.coolantMax?.let { "макс $it°" to (if (it >= 105) C.Red else C.Sub) }
+    else -> null
+}
+
+/** How the engine was found, in one line under its name. */
+internal fun engineSource(e: kg.forester.sg.ssm.EngineInfo): String = when (e.source) {
+    "ЭБУ" -> "Определён по ЭБУ: ROM ${e.romId}, ${e.car}"
+    "ROM" -> "Определён по коду прошивки ЭБУ ${e.romId} (её нет в базе: тип и объём по ROM ID)"
+    "прошлое" -> "По ЭБУ при прошлом подключении: ROM ${e.romId ?: "—"}"
+    "ЭБУ без модели" -> "ЭБУ ответил, но по ROM ${e.romId} модель не определить"
+    "демо" -> "Демо: пример мотора, не ваша машина"
+    else -> "Определится, когда ответит ЭБУ (настройки не используются)"
 }
 
 private fun valueText(m: Indicator, v: Float?): String =
@@ -400,12 +459,16 @@ private fun valueText(m: Indicator, v: Float?): String =
 
 /** A callout card: the part, its main value large in the colour of its state, a second value small. */
 @Composable
-private fun Callout(s: Spot, avail: List<kg.forester.sg.ssm.RrParam>, ctx: MetricCtx, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun Callout(
+    s: Spot, avail: List<kg.forester.sg.ssm.RrParam>, ctx: MetricCtx, note: Pair<String, Color>?, selected: Boolean, modifier: Modifier,
+    onClick: () -> Unit,
+) {
     val main = s.metrics.firstNotNullOfOrNull { Metrics.of(it, avail) }
     val v = main?.read(ctx)
     val second = s.metrics.drop(1).firstNotNullOfOrNull { id -> Metrics.of(id, avail)?.let { m -> m.read(ctx)?.let { m to it } } }
     val state = when {
-        v == null -> C.Gray
+        note != null && (note.second == C.Red || note.second == C.Orange) -> note.second
+        v == null -> if (note != null) note.second else C.Gray
         main.warn(v) -> C.Orange
         else -> C.Green
     }
@@ -423,8 +486,10 @@ private fun Callout(s: Spot, avail: List<kg.forester.sg.ssm.RrParam>, ctx: Metri
         Column {
             T(s.title, 11.sp, C.Sub, maxLines = 1)
             Row(verticalAlignment = Alignment.Bottom) {
-                T(main?.let { valueText(it, v) } ?: "—", 17.sp, C.Text, FontWeight.Bold, maxLines = 1)
-                if (second != null) T("  " + valueText(second.first, second.second), 11.sp, C.Sub, maxLines = 1)
+                // no reading of its own: the guard's value takes its place
+                T(if (v == null && note != null) note.first else main?.let { valueText(it, v) } ?: "—", 17.sp, C.Text, FontWeight.Bold, maxLines = 1)
+                if (note != null && v != null) T("  " + note.first, 11.sp, note.second, maxLines = 1)
+                else if (second != null) T("  " + valueText(second.first, second.second), 11.sp, C.Sub, maxLines = 1)
             }
         }
     }

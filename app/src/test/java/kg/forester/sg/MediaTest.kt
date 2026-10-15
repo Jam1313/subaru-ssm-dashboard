@@ -25,4 +25,11 @@ class MediaTest {
         assertEquals("1999", LocalMusic.pretty(File("1999.mp3"))) // a title that is a number stays
         assertEquals("Intro", LocalMusic.pretty(File("Intro.mp3")))
     }
+
+    @Test fun musicSearchNormalisesAndSwapsLayout() {
+        assertEquals("ночной город", kg.forester.sg.service.LocalMusic.norm("Ночной  Город!"))
+        assertEquals("еж", kg.forester.sg.service.LocalMusic.norm("Ёж"))
+        assertEquals("subaru", kg.forester.sg.service.LocalMusic.otherLayout("ыгифкг"))
+        assertEquals("рок", kg.forester.sg.service.LocalMusic.otherLayout("hjr"))
+    }
 }

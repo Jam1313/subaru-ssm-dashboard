@@ -1,0 +1,69 @@
+package kg.forester.sg.ui
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import kg.forester.sg.data.Repo
+import kg.forester.sg.ssm.EngineId
+import kg.forester.sg.ssm.EngineInfo
+
+/**
+ * The car in the header from what the ECU says (its ROM: "JDM Forester XT 2003 AT" → «FORESTER XT», «2003 · EJ205 ·
+ * 2.0 · турбо»), so nobody has to type it in. A name the driver gave the car himself stays; without an ECU yet the
+ * settings' text is shown as before.
+ */
+@Composable
+fun rememberCarHeader(): Pair<String, String> {
+    val ctx = LocalContext.current
+    val init by Repo.ecuInit.collectAsState()
+    val demo by Repo.demoOn.collectAsState()
+    Repo.carVersion.collectAsState().value
+    val s = Repo.settings
+    val turbo = Repo.guard.collectAsState().value.turboCar
+    val engine = remember(init, demo, turbo) { EngineId.detect(ctx) }
+    return carHeader(engine, s.carTitle, s.carSub, s.carTitleCustom)
+}
+
+/** The 3D car closest to the ECU's car ("JDM Forester XT 2003 AT" → SG5), null when nothing fits. */
+fun car3dFor(car: String): String? {
+    val e = EngineId.fromCar(car)
+    val u = car.uppercase()
+    val year = u.split(' ').mapNotNull { it.toIntOrNull() }.firstOrNull { it in 1990..2030 }
+    return when {
+        "FORESTER" in u -> when {
+            (year ?: 2005) <= 2007 -> if (e.turbo) "SG" else "SGNA"
+            (year ?: 2010) <= 2012 -> if (e.turbo) "SH" else "SHNA"
+            else -> "SK"
+        }
+        "IMPREZA" in u || "WRX" in u -> when {
+            (year ?: 2005) <= 2007 -> if ("STI" in u) "GD" else "GG"
+            (year ?: 2010) <= 2014 -> "GV"
+            else -> "VA"
+        }
+        "LEGACY" in u || "LIBERTY" in u || "OUTBACK" in u -> "BM"
+        else -> null
+    }
+}
+
+/** Title and caption for [e]; [ownTitle] is kept when [custom] (the driver typed it). */
+fun carHeader(e: EngineInfo, title: String, sub: String, custom: Boolean): Pair<String, String> {
+    // nothing typed in: no ECU yet means nothing known, not a made-up "2003 EJ20 turbo"
+    if (!e.known) return (if (custom && title.isNotBlank()) title else "SUBARU") to when (e.source) {
+        "демо" -> "демо-данные"
+        "ЭБУ без модели" -> "ЭБУ ${e.romId}"
+        else -> "подключите ЭБУ"
+    }
+    val car = e.car
+    val words = car?.split(' ')?.filter { it.isNotBlank() }.orEmpty()
+    val year = words.firstOrNull { w -> w.toIntOrNull()?.let { it in 1990..2030 } == true }
+    // the model: without the market, the year and the gearbox ("MT", "AT", "MT/AT", "5EAT", "CVT")
+    val model = words.drop(1).filter { w ->
+        w != year && w.uppercase() !in setOf("MT", "AT", "MT/AT", "AT/MT", "5EAT", "4EAT", "CVT", "6MT")
+    }.joinToString(" ").uppercase().replace(Regex("\\(.*?\\)"), "").replace(Regex("\\s+"), " ").trim()
+    // the driver's own name, else the model by the ECU's ROM, else just the make (never a made-up model)
+    val t = if (custom && title.isNotBlank()) title else model.ifEmpty { "SUBARU" }
+    val engine = listOf(e.code, e.litres, if (e.diesel) "дизель" else if (e.turbo) "турбо" else "атмо").filter { it.isNotEmpty() }.joinToString(" · ")
+    return t to listOfNotNull(year, engine).joinToString(" · ")
+}

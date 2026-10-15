@@ -4,31 +4,37 @@ import android.content.Context
 import kg.forester.sg.data.Repo
 
 /**
- * Which engine the car has: worked out from the ECU's ROM ID (the car it was made for, assets/ecu_ids.json:
- * "JDM Forester XT 2003 AT" → EJ20 turbo), else from the car set up in the app, and confirmed by what the ECU
- * reports (a wastegate = turbo). The family is sure; the exact code (EJ205, EJ257…) is the likely one for that
- * market and year.
+ * Which engine the car has, from what the ECU itself says, never from what the driver typed in the settings:
+ * the ROM ID looked up in the base of known ROMs (assets/ecu_ids.json: "JDM Forester XT 2003 AT" → EJ20 turbo),
+ * else decoded from the ROM ID's own bytes, else what the ECU said at the last connection. A wastegate or boost
+ * seen makes it a turbo. The family is sure; the exact code (EJ205, EJ257…) is the likely one for that market and year.
  */
 data class EngineInfo(
-    /** "EJ20", "EJ22", "EJ25", "FA20", "FB", "EZ30", "EZ36", "EE20". */
+    /** "EJ20", "EJ22", "EJ25", "FA20", "FB", "EZ30", "EZ36", "EE20"; "EJ" when the size is not known. */
     val family: String,
     val turbo: Boolean,
     /** The likely code, e.g. "EJ205"; may be just the family. */
     val code: String,
-    /** How it was found: "ЭБУ", "настройки", "пример". */
+    /** How it was found: "ЭБУ" (ROM in the base), "ROM" (decoded from the ROM ID), "прошлое" (the last connection),
+     *  "ЭБУ без модели" (the ECU answered, its ROM ID says nothing), "демо", "нет" (no ECU yet). */
     val source: String,
     val romId: String? = null,
     val car: String? = null,
 ) {
     val cylinders get() = if (family.startsWith("EZ")) 6 else 4
-    val litres get() = when (family) { "EJ25", "FB" -> "2.5"; "EJ22" -> "2.2"; "EZ30" -> "3.0"; "EZ36" -> "3.6"; else -> "2.0" }
+    val litres get() = when (family) { "EJ25", "FB" -> "2.5"; "EJ22" -> "2.2"; "EZ30" -> "3.0"; "EZ36" -> "3.6"; "EJ" -> ""; else -> "2.0" }
     val diesel get() = family == "EE20"
-    val title: String get() = "$code · $litres ${if (diesel) "дизель" else if (turbo) "турбо" else "атмо"}" +
-        if (cylinders == 6) " · шесть цилиндров" else ""
+    /** Known from the ECU (now or at the last connection), not a placeholder. */
+    val known get() = source == "ЭБУ" || source == "ROM" || source == "прошлое"
+    val title: String get() = when (source) {
+        "нет" -> "Мотор не определён"
+        else -> listOf(code, litres, if (diesel) "дизель" else if (turbo) "турбо" else "атмо").filter { it.isNotEmpty() }.joinToString(" · ") +
+            (if (cylinders == 6) " · шесть цилиндров" else "") + if (family == "EJ") " · объём не определён" else ""
+    }
 }
 
 object EngineId {
-    private val TURBO_WORDS = listOf("XT", "WRX", "STI", "GT", "TURBO", "SPEC.B", "SGT", "B4", "2.0GT", "DIT")
+    private val TURBO_WORDS = listOf("XT", "WRX", "STI", "GT", "TURBO", "SPEC.B", "SGT", "B4", "2.0GT", "DIT", "S.EDITION")
 
     /** The engine from a car description of the ECU id base ("USDM Impreza STI 2007 MT"). */
     fun fromCar(car: String, source: String = "ЭБУ", romId: String? = null): EngineInfo {
@@ -65,23 +71,66 @@ object EngineId {
         }
     }
 
-    /** From the app's car setup ("2003 · EJ20 turbo"), when no ECU has answered. */
-    fun fromSettings(sub: String): EngineInfo? {
-        val u = sub.uppercase()
-        val fam = listOf("EJ20", "EJ22", "EJ25", "FA20", "FB25", "FB20", "EZ30", "EZ36").firstOrNull { u.contains(it) } ?: return null
-        val f = if (fam.startsWith("FB")) "FB" else fam
-        return EngineInfo(f, u.contains("TURBO") || u.contains("ТУРБО"), fam, "настройки", car = sub)
+    /**
+     * The engine from the ROM ID's own bytes, for a ROM the base doesn't know (K-line SSM2 ECUs of 1999–2010, ROM
+     * IDs 1B…6F). Checked against the ~600 ROMs of the base: byte 2's low digit is the engine (2 = 2.5 l, 4 = 2.0 l,
+     * A/B = the sixes), byte 3 from 0x40 up is a turbo (agrees on 99 % of them). Null for the later schemes.
+     */
+    fun fromRomId(romId: String): EngineInfo? {
+        val id = romId.uppercase()
+        if (id.length < 6 || id.startsWith("13") || id.startsWith("14")) return null
+        val b1 = id.substring(0, 2).toIntOrNull(16) ?: return null
+        val b2 = id.substring(2, 4).toIntOrNull(16) ?: return null
+        val b3 = id.substring(4, 6).toIntOrNull(16) ?: return null
+        if (b1 !in 0x1B..0x6F) return null
+        fun info(f: String, t: Boolean, code: String) = EngineInfo(f, t, code, "ROM", id)
+        return when (b2 and 0xF) {
+            0xA -> info("EZ30", false, "EZ30")
+            0xB -> info("EZ36", false, "EZ36")
+            else -> {
+                if (b3 >= 0xD0) return info("EE20", true, "EE20") // the diesels
+                val turbo = b3 >= 0x40
+                when (b2 and 0xF) {
+                    2 -> info("EJ25", turbo, if (turbo) "EJ255/EJ257" else "EJ25")
+                    4 -> info("EJ20", turbo, if (turbo) "EJ205/EJ207" else "EJ20")
+                    else -> info("EJ", turbo, "EJ")
+                }
+            }
+        }
     }
 
-    /** The best guess now: the ECU's ROM first, then the settings; a wastegate or boost seen makes it a turbo. */
+    /** The best guess now: the ECU's ROM, else what the ECU said last time; a wastegate or boost seen makes it a turbo. */
     fun detect(ctx: Context): EngineInfo {
+        if (Repo.settings.demo) return EngineInfo("EJ20", true, "EJ205", "демо")
         val init = Repo.ecuInit.value
-        val car = init?.romId?.let { EcuIds.car(ctx, it) }
         val base = when {
-            car != null -> fromCar(car, "ЭБУ", init.romId)
-            else -> fromSettings(Repo.settings.carSub) ?: EngineInfo("EJ20", Repo.guard.value.turbo, "EJ20", "пример")
+            init != null -> EcuIds.car(ctx, init.romId)?.let { fromCar(it, "ЭБУ", init.romId) }
+                ?: fromRomId(init.romId)
+                ?: EngineInfo("EJ", false, "EJ", "ЭБУ без модели", init.romId)
+            else -> saved(ctx) ?: EngineInfo("EJ", false, "EJ", "нет")
         }
-        val turboSeen = Repo.guard.value.turbo || (init != null && EcuParams.reported(init, EcuParams.WGDC) && init.capabilities.size > 4)
-        return if (turboSeen && !base.turbo && base.family.startsWith("EJ")) base.copy(turbo = true) else base
+        // turbo by the ECU (boost seen, a wastegate it reports), whether or not the turbo timer is switched on
+        val turboSeen = Repo.guard.value.turboCar || (init != null && EcuParams.reported(init, EcuParams.WGDC) && init.capabilities.size > 4)
+        val e = if (turboSeen && !base.turbo && base.family.startsWith("EJ")) base.copy(turbo = true) else base
+        if (init != null && e.source != "ЭБУ без модели") save(ctx, e)
+        return e
     }
+
+    private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("analyzer", Context.MODE_PRIVATE)
+
+    private fun save(ctx: Context, e: EngineInfo) {
+        val o = org.json.JSONObject().put("family", e.family).put("turbo", e.turbo).put("code", e.code)
+            .put("romId", e.romId ?: "").put("car", e.car ?: "")
+        prefs(ctx).edit().putString("engine", o.toString()).apply()
+    }
+
+    private fun saved(ctx: Context): EngineInfo? = runCatching {
+        val o = org.json.JSONObject(prefs(ctx).getString("engine", null) ?: return null)
+        EngineInfo(o.getString("family"), o.getBoolean("turbo"), o.getString("code"), "прошлое",
+            o.optString("romId").ifEmpty { null }, o.optString("car").ifEmpty { null })
+    }.getOrNull()
+
+    /** Turbo by the ECU alone (its ROM ID), for the guard: null = can't tell. */
+    fun romTurbo(ctx: Context, romId: String): Boolean? =
+        EcuIds.car(ctx, romId)?.let { fromCar(it).turbo } ?: fromRomId(romId)?.takeIf { it.family != "EJ" || it.turbo }?.turbo
 }

@@ -44,6 +44,8 @@ class BatteryMonitor(private val ctx: Context) {
     private var restingSinceMs = 0L
     /** Voltage of the last 30 s with the engine running, for the alternator warnings. */
     private val window30 = ArrayDeque<Pair<Long, Float>>()
+    /** This drive the alternator was seen charging (13.6 V+): 12.5–13 V later is the ECU's charge cut-out, not a fault. */
+    private var seenCharging = false
 
     init {
         restoreFromLog()
@@ -104,6 +106,7 @@ class BatteryMonitor(private val ctx: Context) {
             window30.clear()
             chargeSamples.clear()
             chargeLogged = false
+            seenCharging = false
             idleSamples.clear(); revSamples.clear(); chargeMin = Float.NaN; chargeMax = Float.NaN
             // A real start: the engine was stopped within the last 10 s. The ECU can report 0 rpm while
             // the starter turns, so take the minimum over the last few seconds of samples.
@@ -134,15 +137,29 @@ class BatteryMonitor(private val ctx: Context) {
             else if (now - c.timeMs > 60_000) finishCrank(now, -1f)
         }
 
+        // charging seen from the first seconds after the start (right after cranking the alternator gives 14+ V)
+        if (running && v >= 13.6f) seenCharging = true
         if (running && now - runningSinceMs > 30_000) {
             window30.addLast(now to v)
             while (window30.isNotEmpty() && now - window30.first().first > 30_000) window30.removeFirst()
             if (Repo.settings.feature("altAlert") && window30.size >= 5 && now - runningSinceMs > 60_000) {
                 val avg = window30.map { it.second }.average().toFloat()
-                if (avg < 13.0f) Alerts.raise("altLow", "Генератор не заряжает: %.2f В на работающем моторе — ремень, генератор, клеммы".format(avg),
-                    Alerts.Level.DANGER, 30 * 60_000L)
-                else if (avg > 15.0f) Alerts.raise("altHigh", "Перезаряд: %.2f В — неисправен регулятор генератора".format(avg),
-                    Alerts.Level.DANGER, 30 * 60_000L)
+                val last5 = window30.filter { now - it.first <= 5_000 }.map { it.second }
+                val runMin = (now - runningSinceMs) / 60_000f
+                // 2001–2008 Subarus cut the charging out at low load: 12.5–13 V on the move is normal there
+                // (docs/knowledge/transmission-awd-electrical.md, charging_cutout_normal)
+                when {
+                    // below the cut-out band (12.5–13.1 V), or low without the alternator ever charging this drive
+                    avg < 12.35f || (avg < 12.6f && !seenCharging) -> Alerts.raise("altLow", "Генератор не заряжает: %.2f В на работающем моторе. Машина едет на запасе аккумулятора: ".format(avg) +
+                        "выключите лишние потребители и проверьте ремень, клеммы и генератор", Alerts.Level.DANGER, 30 * 60_000L)
+                    avg < 13.0f && !seenCharging && runMin >= 5f -> Alerts.raise("altLow", "Похоже, генератор не заряжает: %.2f В, и с пуска напряжение ни разу не поднималось до 13,6 В. ".format(avg) +
+                        "Проверьте ремень и генератор", Alerts.Level.WARN, 30 * 60_000L)
+                    avg < 13.15f && seenCharging && window30.maxOf { it.second } - window30.minOf { it.second } < 0.3f -> cutoutInfo(avg, now)
+                    last5.size >= 2 && last5.min() > 15.5f -> Alerts.raise("altHigh", "Перезаряд: %.2f В. Неисправен регулятор генератора, это портит аккумулятор и электронику".format(last5.average()),
+                        Alerts.Level.DANGER, 30 * 60_000L)
+                    avg > 15.0f && (runMin >= 10f || (s.coolantC ?: 0) >= 60) -> Alerts.raise("altHigh", "Напряжение зарядки высокое: %.2f В. Проверьте регулятор генератора".format(avg),
+                        Alerts.Level.WARN, 30 * 60_000L)
+                }
             }
             if (rpm < 1000) idleSamples.add(v) else if (rpm in 1800..3500) revSamples.add(v)
             if (idleSamples.size > 3000) idleSamples.removeAt(0)
@@ -164,6 +181,15 @@ class BatteryMonitor(private val ctx: Context) {
             if (!chargeLogged && now - runningSinceMs > 10 * 60_000L) logCharging(now)
         }
         wasRunning = running
+    }
+
+    /** Once a month: the 12.8 V on the move is the ECU saving fuel, so the driver doesn't take it for a fault. */
+    private fun cutoutInfo(avg: Float, now: Long) {
+        val p = ctx.getSharedPreferences("analyzer", Context.MODE_PRIVATE)
+        if (now - p.getLong("cutoutInfo", 0L) < 30L * 24 * 3600_000L) return
+        p.edit().putLong("cutoutInfo", now).apply()
+        Alerts.raise("altCutout", "Напряжение %.1f В на ходу у этой Subaru нормально: блок двигателя сам временно отключает зарядку при малой нагрузке. ".format(avg) +
+            "Включите фары или печку, и зарядка вернётся", Alerts.Level.INFO, 0L, speak = false)
     }
 
     private fun logCharging(now: Long) {

@@ -246,6 +246,10 @@ class Settings(ctx: Context) {
         set(v) = p.edit().putLong("updCheck", v).apply()
 
     /** Spoken warnings (IAM, overheating, maintenance…); without a Russian voice on the unit it is a beep. */
+    /** «Мотор» in «Мониторинг»: the 3D engine with callouts, or the classic three panels. */
+    var engine3d: Boolean
+        get() = p.getBoolean("engine3d", true)
+        set(v) = p.edit().putBoolean("engine3d", v).apply()
     var voiceAlerts: Boolean
         get() = p.getBoolean("voiceAlerts", true)
         set(v) = p.edit().putBoolean("voiceAlerts", v).apply()
@@ -332,15 +336,16 @@ class Settings(ctx: Context) {
         get() = p.getString("bus", "auto")!!
         set(v) = p.edit().putString("bus", v).apply()
 
-    /** Car model id from [CarModels], plus the two lines shown in the top bar. */
-    var carModel: String
-        get() = p.getString("carModel", "SG")!!
-        set(v) { p.edit().putString("carModel", v).apply(); Repo.carVersion.value++ }
-
+    /** The header text when the ECU has not said which car it is (or the driver's own name). */
     var carTitle: String
         get() = p.getString("carTitle", "FORESTER SG5")!!
         set(v) { p.edit().putString("carTitle", v).apply(); Repo.carVersion.value++ }
 
+    /** The driver typed the header's name himself: it stays even when the ECU says which car it is. */
+    var carTitleCustom: Boolean
+        // before the flag: a name that isn't one of the model presets was typed by the driver
+        get() = p.getBoolean("carTitleCustom", carTitle !in setOf("FORESTER SG5", "FORESTER SH", "IMPREZA", "LEGACY", "SUBARU", ""))
+        set(v) { p.edit().putBoolean("carTitleCustom", v).apply(); Repo.carVersion.value++ }
     var carSub: String
         get() = p.getString("carSub", "2003   EJ20 turbo")!!
         set(v) { p.edit().putString("carSub", v).apply(); Repo.carVersion.value++ }
@@ -359,6 +364,14 @@ class Settings(ctx: Context) {
     var car3d: String
         get() = p.getString("car3d", "SG")!!
         set(v) { p.edit().putString("car3d", v).apply(); Repo.car3d.value = v }
+    /** The driver picked the 3D car himself: the ECU's car doesn't replace it. */
+    var car3dCustom: Boolean
+        get() = p.getBoolean("car3dCustom", false)
+        set(v) = p.edit().putBoolean("car3dCustom", v).apply()
+    /** The ROM ID of the last ECU: another one = another car (its own boost, MAF and load scales). */
+    var lastRomId: String
+        get() = p.getString("lastRomId", "")!!
+        set(v) = p.edit().putString("lastRomId", v).apply()
 
     /** Body colour of the 3D car (see CarPaints). */
     var carPaint: String
@@ -423,30 +436,19 @@ class Settings(ctx: Context) {
         set(v) { p.edit().putString("speedoStyle", v).apply(); Repo.dialStyles.value = tachStyle to v }
 
     /** Generated data instead of the car, to look at the screens. */
+    /**
+     * Demo data instead of the car: only until the app is restarted, never saved. Kept in the preferences it came
+     * back on its own (a restart, Android restoring a backup after a reinstall) and people took the made-up drive
+     * for their car.
+     */
     var demo: Boolean
-        get() = p.getBoolean("demo", false)
-        set(v) = p.edit().putBoolean("demo", v).apply()
+        get() = Repo.demoOn.value
+        set(v) { Repo.demoOn.value = v }
 
     /** The first-start question (model and adapter) was answered. */
     var setupDone: Boolean
         get() = p.getBoolean("setupDone", false)
         set(v) = p.edit().putBoolean("setupDone", v).apply()
-
-    fun applyModel(m: CarModel) {
-        if (m.id != carModel) Scales.reset() // another car: its own boost, MAF and load
-        carModel = m.id
-        carTitle = m.title
-        carSub = m.sub
-        bus = m.bus
-        // the 3D car closest to the chosen model (the SH default is the atmo EJ25: no bonnet scoop)
-        car3d = when (m.id) {
-            "SG" -> "SG"
-            "SH" -> "SHNA"
-            "GD" -> "GD"
-            "BL", "BH" -> "BM"
-            else -> "SK"
-        }
-    }
 
     /** Raw adapter exchange log for testers (logs/ssm_trace.txt). */
     var traceEnabled: Boolean
@@ -535,10 +537,15 @@ object Repo {
     /** What the automatic adapter search found, e.g. "USB 1A86:7523 → KKL". */
     val adapterFound = MutableStateFlow("")
 
+    /** Demo mode on (see [Settings.demo]). */
+    val demoOn = MutableStateFlow(false)
+
     fun init(ctx: Context) {
         if (!::db.isInitialized) {
             db = Db(ctx.applicationContext)
             settings = Settings(ctx.applicationContext)
+            // older versions saved it: a leftover "on" must not start the demo by itself
+            ctx.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove("demo").apply()
             navPosition.value = settings.navPosition
             bottomBar.value = settings.bottomBar
             topBar.value = settings.topBar
@@ -562,17 +569,3 @@ object Repo {
     }
 }
 
-data class CarModel(val id: String, val name: String, val title: String, val sub: String, val bus: String, val note: String)
-
-object CarModels {
-    val all = listOf(
-        CarModel("SG", "Forester SG", "FORESTER SG5", "2003   EJ20 turbo", "kline", "2002–2007, K-Line, KKL-кабель"),
-        CarModel("SH", "Forester SH", "FORESTER SH", "2008   EJ25", "auto", "2008–2012: ранние евро на K-Line, позже CAN (нужен OpenPort 2.0)"),
-        CarModel("GD", "Impreza GD/GG", "IMPREZA", "EJ20", "kline", "2000–2007, K-Line"),
-        CarModel("BL", "Legacy BL/BP", "LEGACY", "EJ20", "kline", "2003–2009, K-Line"),
-        CarModel("BH", "Legacy BE/BH", "LEGACY", "EJ20", "kline", "1998–2003, K-Line"),
-        CarModel("other", "Другая Subaru", "SUBARU", "", "auto", "SSM2: K-Line или CAN"),
-    )
-
-    fun byId(id: String) = all.firstOrNull { it.id == id } ?: all.first()
-}

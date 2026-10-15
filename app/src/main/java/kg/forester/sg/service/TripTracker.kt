@@ -50,7 +50,7 @@ object FuelCalc {
         if (pw == null || pw !in 0.3f..40f) { source = ""; return 0.0 }
         source = "inj"
         val turbo = runCatching {
-            kg.forester.sg.data.Repo.guard.value.turbo || "turbo" in kg.forester.sg.data.Repo.settings.carSub.lowercase()
+            kg.forester.sg.data.Repo.guard.value.turboCar
         }.getOrDefault(false)
         val ccPerMin = if (turbo) 380.0 else 260.0
         val openMs = (pw - 0.6).coerceAtLeast(0.0)

@@ -129,10 +129,13 @@ class EcuService : Service() {
         startInForeground()
         startGps()
         battery // restore the last battery readings for the UI right away
+        guard.analyzer = RulesHost.create(this)
+        guard.ctx = applicationContext
         Voice.start(this)
         Fyt.bind(this)
         pollJob = scope.launch { pollLoop() }
         wakeWatch.start(scope)
+        scope.launch { headUnitWatch() }
         scope.launch(Dispatchers.Main) {
             while (isActive) { delay(30_000); runCatching { gpsWatchdog() } }
         }
@@ -340,6 +343,8 @@ class EcuService : Service() {
 
     /** Demo data instead of a cable; trips, fuel and logs are left alone. */
     private suspend fun demoLoop() {
+        // nothing learned from the car carries into the demo, nothing from the demo into the car (see the end)
+        guard.reset()
         Repo.link.value = LinkState.CONNECTED
         Repo.linkMessage.value = "Демо-данные (без машины)"
         knock.reset(System.currentTimeMillis(), record = false)
@@ -389,6 +394,16 @@ class EcuService : Service() {
             )
             delay(250)
         }
+        // demo off: none of its made-up numbers may stay on the screen as if they were the car's
+        Repo.live.value = EcuSnapshot()
+        Repo.tcu.value = null
+        history.clear(); Repo.history.value = emptyList()
+        tcuHistory.clear(); Repo.tcuHistory.value = emptyList()
+        Repo.gps.value = null
+        Repo.trip.value = kg.forester.sg.data.TripState()
+        Repo.guard.value = GuardState()
+        guard.reset()
+        RulesHost.restore(this) // this car's own idle samples, not the demo's
         Repo.link.value = LinkState.NO_CABLE
     }
 
@@ -561,7 +576,8 @@ class EcuService : Service() {
         var silentRounds = 0
         var transport: SsmTransport? = null
         var transportKline = true
-        while (scope.isActive) {
+        // demo switched on: leave the car (the demo loop takes over)
+        while (scope.isActive && !Repo.settings.demo) {
             val kline = buses[busIdx % buses.size]
             if (transport == null || transportKline != kline) {
                 transport?.close()
@@ -604,6 +620,7 @@ class EcuService : Service() {
             silentRounds = 0
             Repo.obdMode.value = false
             Repo.ecuInit.value = init
+            runCatching { carFromEcu(init.romId) }
             Repo.link.value = LinkState.CONNECTED
             val car = kg.forester.sg.ssm.EcuIds.car(this, init.romId)
             Repo.linkMessage.value = "ROM ${init.romId}" + (car?.let { " ($it)" } ?: "") + " · ${client.transport.name}"
@@ -633,7 +650,7 @@ class EcuService : Service() {
             tcuAddrs = null
             tcuNextTryMs = 0
             SsmTrace.polling = true
-            while (scope.isActive && failures < 5) {
+            while (scope.isActive && failures < 5 && !Repo.settings.demo) {
                 val raw = EcuLink.mutex.withLock { client.read(addrs) }
                 val now = System.currentTimeMillis()
                 if (raw == null) {
@@ -696,6 +713,54 @@ class EcuService : Service() {
         updateNotification()
     }
 
+    /**
+     * The car is what its ECU says, nothing to set by hand: another ROM than last time is another car (fresh
+     * boost, MAF and load scales), and the 3D car on the home screen follows it unless the driver chose one.
+     */
+    private fun carFromEcu(romId: String) {
+        val s = Repo.settings
+        if (s.lastRomId.isNotEmpty() && s.lastRomId != romId) {
+            // another car: its own scales, IAM, usual boost and idle history
+            kg.forester.sg.data.Scales.reset()
+            RulesHost.forgetCar(this)
+            guard.reset()
+        }
+        s.lastRomId = romId
+        val car = kg.forester.sg.ssm.EcuIds.car(this, romId) ?: return
+        if (!s.car3dCustom) kg.forester.sg.ui.car3dFor(car)?.let { if (it != s.car3d) s.car3d = it }
+        Repo.carVersion.value++
+    }
+
+    /**
+     * The head unit still on long after the ignition went off (the ECU silent after a drive, the screen awake):
+     * an ACC wire on constant 12 V or a unit that never sleeps empties the battery overnight. Said at 10 and 60 min.
+     */
+    private suspend fun headUnitWatch() {
+        var ranMs = 0L
+        var silentSince = 0L
+        var said = 0
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        while (scope.isActive) {
+            delay(30_000)
+            val now = System.currentTimeMillis()
+            if (Repo.settings.demo) { ranMs = 0L; silentSince = 0L; said = 0; continue } // the demo's engine is no drive
+            if (Repo.link.value == LinkState.CONNECTED) {
+                if ((Repo.live.value.rpm ?: 0) > 400) ranMs = now
+                silentSince = 0L; said = 0
+                continue
+            }
+            if (ranMs == 0L || Repo.settings.demo || !Repo.settings.feature("battAlert")) continue
+            if (silentSince == 0L) silentSince = now
+            val off = (now - silentSince) / 60_000L
+            if (pm?.isInteractive != true) continue
+            if ((said == 0 && off >= 10) || (said == 1 && off >= 60)) {
+                said++
+                Alerts.raise("headUnitOn", "Связи с ЭБУ нет уже $off мин, а магнитола работает. Если зажигание выключено, она разряжает аккумулятор: " +
+                    "за ночь он может сесть так, что машина не заведётся. Проверьте, что провод ACC отключается вместе с ключом", Alerts.Level.WARN, 30 * 60_000L)
+            }
+        }
+    }
+
     /** Engine guard, G-meter, acceleration timer: everything that only reads the samples. */
     private fun extras(snap: EcuSnapshot, now: Long) {
         runCatching { guard.process(snap, Repo.tcu.value, now) }.onFailure { SsmTrace.log("guard: $it") }
@@ -719,7 +784,7 @@ class EcuService : Service() {
             Repo.pollAddresses.value = obd.polledCount
             var failures = 0
             SsmTrace.polling = true
-            while (scope.isActive && failures < 5) {
+            while (scope.isActive && failures < 5 && !Repo.settings.demo) {
                 val now = System.currentTimeMillis()
                 val snap = EcuLink.mutex.withLock { runCatching { obd.poll(now) }.getOrNull() }
                 if (snap == null) {
@@ -938,8 +1003,8 @@ class EcuService : Service() {
         val lock = LockState.of(t.lockUpPct, slip, if (lockSlipSinceMs == 0L) 0L else now - lockSlipSinceMs)
         if (lock == LockState.SLIPPING && Repo.settings.feature("atf")) {
             Alerts.raise(
-                "lockSlip", "Гидротрансформатор не держит блокировку: проскальзывание %.0f %% при команде %.0f %%. Проверьте ATF и ошибки АКПП"
-                    .format(slip, t.lockUpPct), Alerts.Level.WARN, 30 * 60_000L,
+                "lockSlip", "Блокировка гидротрансформатора сильно буксует: проскальзывание %.0f %% при команде %.0f %%. Коробка греется и изнашивается, не нагружайте машину и проверьте ATF и ошибки АКПП"
+                    .format(slip, t.lockUpPct), Alerts.Level.DANGER, 30 * 60_000L,
             )
         }
         return t.copy(slipPct = slip, lock = lock)

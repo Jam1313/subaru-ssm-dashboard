@@ -132,6 +132,97 @@ object LocalMusic {
         musicDirs = out
     }
 
+    /** A track found by the search: the file, its title and a line under it (artist, folder). */
+    data class Hit(val file: File, val title: String, val sub: String)
+
+    private class Entry(val file: File, val title: String, val artist: String, val album: String, val key: String)
+
+    @Volatile private var index: List<Entry>? = null
+    @Volatile private var indexAt = 0L
+    @Volatile private var indexRoots = ""
+
+    /** Lower case, ё as е, punctuation as spaces: what both the query and the names are compared in. */
+    internal fun norm(s: String) = s.lowercase().replace('ё', 'е').replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+
+    private const val EN = "qwertyuiop[]asdfghjkl;'zxcvbnm,."
+    private const val RU = "йцукенгшщзхъфывапролджэячсмитьбю"
+
+    /** The same keys in the other layout: "ыгифкг" ↔ "subaru", typed with the wrong keyboard on. */
+    internal fun otherLayout(q: String): String = q.lowercase().map { c ->
+        val i = EN.indexOf(c); val j = RU.indexOf(c)
+        when { i >= 0 -> RU[i]; j >= 0 -> EN[j]; else -> c }
+    }.joinToString("")
+
+    /**
+     * Every music file on the unit, its sticks and cards: Android's media index (titles, artists, albums from the
+     * tags) plus a walk of the drives for what the index hasn't scanned yet (a stick just put in). Kept for two
+     * minutes or until the drives change.
+     */
+    private fun index(ctx: Context): List<Entry> {
+        val roots = roots(ctx)
+        val sig = roots.joinToString { it.dir.path }
+        index?.let { if (sig == indexRoots && System.currentTimeMillis() - indexAt < 120_000) return it }
+        val byPath = LinkedHashMap<String, Entry>()
+        fun add(f: File, title: String?, artist: String?, album: String?) {
+            val t = title?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: pretty(f)
+            val a = artist?.takeIf { it.isNotBlank() && it != "<unknown>" }.orEmpty()
+            val al = album?.takeIf { it.isNotBlank() && it != "<unknown>" }.orEmpty()
+            byPath[f.path] = Entry(f, t, a, al, norm("$t $a $al ${f.nameWithoutExtension} ${f.parentFile?.name.orEmpty()}"))
+        }
+        runCatching {
+            val volumes = if (Build.VERSION.SDK_INT >= 29) android.provider.MediaStore.getExternalVolumeNames(ctx) else setOf("external")
+            for (v in volumes) {
+                @Suppress("DEPRECATION")
+                ctx.contentResolver.query(android.provider.MediaStore.Audio.Media.getContentUri(v),
+                    arrayOf(android.provider.MediaStore.Audio.Media.DATA, android.provider.MediaStore.Audio.Media.TITLE,
+                        android.provider.MediaStore.Audio.Media.ARTIST, android.provider.MediaStore.Audio.Media.ALBUM), null, null, null)?.use { c ->
+                    while (c.moveToNext()) {
+                        val f = File(c.getString(0) ?: continue)
+                        if (isAudio(f)) add(f, c.getString(1), c.getString(2), c.getString(3))
+                    }
+                }
+            }
+        }.onFailure { SsmTrace.log("music search index: $it") }
+        // the walk: no deeper than 10 folders, no more than 30 000 files, skipping Android's own folders
+        var budget = 30_000
+        fun walk(d: File, depth: Int) {
+            if (depth > 10 || budget <= 0) return
+            val all = d.listFiles() ?: return
+            for (f in all) {
+                if (budget-- <= 0) return
+                if (f.name.startsWith(".")) continue
+                if (f.isDirectory) { if (f.name != "Android" && f.name != "LOST.DIR") walk(f, depth + 1) }
+                else if (f.path !in byPath && isAudio(f)) add(f, null, null, null)
+            }
+        }
+        roots.forEach { runCatching { walk(it.dir, 0) } }
+        return byPath.values.toList().also { index = it; indexAt = System.currentTimeMillis(); indexRoots = sig }
+    }
+
+    /**
+     * Tracks matching [query]: every word somewhere in the title, artist, album, file or folder name; the query in
+     * the other keyboard layout counts too. Titles that start with it first. Call off the main thread.
+     */
+    fun search(ctx: Context, query: String): List<Hit> {
+        val q = norm(query)
+        if (q.length < 2) return emptyList()
+        val variants = listOf(q, norm(otherLayout(query))).distinct().map { it.split(' ').filter(String::isNotEmpty) }
+        return index(ctx).asSequence()
+            .filter { e -> variants.any { words -> words.all { it in e.key } } }
+            .sortedWith(compareBy({ e -> if (variants.any { norm(e.title).startsWith(it.joinToString(" ")) }) 0 else 1 }, { it.title.lowercase() }))
+            .take(200)
+            .map { e -> Hit(e.file, e.title, listOf(e.artist, e.file.parentFile?.name.orEmpty()).filter { it.isNotBlank() }.distinct().joinToString(" · ")) }
+            .toList()
+    }
+
+    /** Plays a found track, then the rest of its folder as usual. */
+    fun playFound(ctx: Context, f: File) {
+        val dir = f.parentFile ?: return
+        val tracks = list(dir).tracks
+        val i = tracks.indexOfFirst { it.path == f.path }
+        if (i >= 0) playFolder(ctx, dir, tracks, i) else playFolder(ctx, dir, listOf(f), 0)
+    }
+
     /** A folder's subfolders and music files, in the order people expect ("2 …" before "10 …"). */
     fun list(dir: File): Listing {
         val all = dir.listFiles()?.filter { !it.name.startsWith(".") } ?: emptyList()

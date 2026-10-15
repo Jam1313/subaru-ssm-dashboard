@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -153,6 +154,7 @@ class MainActivity : ComponentActivity() {
     // adb: am start -n kg.forester.sg/.MainActivity --es alert "текст" [--es level danger|warn|info]: how a warning looks
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        if (intent.hasExtra("demo")) Repo.settings.demo = intent.getBooleanExtra("demo", false)
         testAlert(intent)
     }
 
@@ -500,13 +502,15 @@ private fun TopBar(screen: Screen, logo: Boolean) {
             SubaruLogo(Modifier.size(width = 96.dp, height = 50.dp))
             Spacer(Modifier.width(16.dp))
         } else Spacer(Modifier.width(4.dp))
-        Column {
-            Repo.carVersion.collectAsState().value
-            T(Repo.settings.carTitle, 24.sp, weight = FontWeight.Bold, maxLines = 1)
-            T(Repo.settings.carSub, 13.sp, C.Sub, maxLines = 1)
+        // a long model from the ECU ("IMPREZA STI SPEC C") must not push the values aside: a smaller font, then «…»
+        Column(Modifier.widthIn(max = 230.dp)) {
+            val (title, sub) = kg.forester.sg.ui.rememberCarHeader()
+            T(title, if (title.length > 18) 18.sp else if (title.length > 13) 21.sp else 24.sp, weight = FontWeight.Bold, maxLines = 1)
+            T(sub, 13.sp, C.Sub, maxLines = 1)
         }
         Spacer(Modifier.width(14.dp))
         kg.forester.sg.ui.TopValues(Modifier.weight(1f))
+        kg.forester.sg.ui.DemoPill(short = true) // the caption under the name says «демо-данные» already
         kg.forester.sg.ui.StatusPill()
         kg.forester.sg.ui.ThemeButton(22.dp)
         Spacer(Modifier.width(16.dp))

@@ -1,0 +1,13 @@
+{
+ "throttle": "THROTTLE_METAL_0",
+ "maf": [0.0, 8.2, 5.5],
+ "intake": [0.0, 2.0, 6.3],
+ "inj": [7.0, 0.0, 3.0],
+ "knock": [0.0, 0.0, 2.3],
+ "coolant": [-6.0, 7.3, 2.0],
+ "avcs": "CAM SPROCKET2_METAL_0",
+ "alt": "ALTERNATOR_METAL_0",
+ "crank": "CRANKSHAFT PULLEY_METAL_0",
+ "oil": "OIL FILTER_RED METAL_0",
+ "afr": "EXHAUST MANIFOLD_METAL_0"
+}

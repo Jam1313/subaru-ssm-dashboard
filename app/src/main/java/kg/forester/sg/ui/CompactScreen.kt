@@ -82,8 +82,8 @@ fun CompactScreen(onMenu: (() -> Unit)? = null) {
                     ) { Icon(Lucide.Menu, "Меню", tint = C.Text, modifier = Modifier.size(22.dp)) }
                     Spacer(Modifier.width(10.dp))
                 }
-                Repo.carVersion.collectAsState().value
-                T(Repo.settings.carTitle, 16.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
+                T(rememberCarHeader().first, 16.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
+                DemoPill(short = true)
                 ThemeButton(18.dp)
                 Spacer(Modifier.width(4.dp))
                 LinkIcon(18.dp)

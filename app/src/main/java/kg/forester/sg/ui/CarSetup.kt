@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Car
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Usb
-import kg.forester.sg.data.CarModels
 import kg.forester.sg.data.Repo
 import kg.forester.sg.ssm.SsmTrace
 
@@ -68,7 +67,7 @@ private fun adapterNote(k: String) = when (k) {
 private val gearboxes = listOf("at" to "Автомат (АКПП)", "mt" to "Механика")
 private val buses = listOf("auto" to "Авто", "kline" to "K-Line", "can" to "CAN")
 
-/** Settings tab: car model, header text, diagnostic adapter and bus, UI scale, exchange log. */
+/** Settings tab: the car (from its ECU), own name, gearbox, 3D car, diagnostic adapter and bus, UI scale, exchange log. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CarAdapterSettings() {
@@ -85,8 +84,7 @@ fun CarAdapterSettings() {
     val scale by Repo.uiScale.collectAsState()
     var adapter by remember { mutableStateOf(s.adapter) }
     var bus by remember { mutableStateOf(s.bus) }
-    var title by remember { mutableStateOf(s.carTitle) }
-    var sub by remember { mutableStateOf(s.carSub) }
+    var title by remember { mutableStateOf(if (s.carTitleCustom) s.carTitle else "") }
     var trace by remember { mutableStateOf(s.traceEnabled) }
     var gearbox by remember { mutableStateOf(s.gearbox) }
     var demo by remember { mutableStateOf(s.demo) }
@@ -96,20 +94,16 @@ fun CarAdapterSettings() {
         Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
             PanelTitle(Lucide.Car, "Автомобиль")
             Spacer(Modifier.height(10.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CarModels.all.forEach { m ->
-                    Chip(m.name, s.carModel == m.id, {
-                        s.applyModel(m)
-                        title = m.title; sub = m.sub; bus = m.bus
-                    })
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            T(CarModels.byId(s.carModel).note, 12.sp, C.Sub)
-            Spacer(Modifier.height(12.dp))
-            TextBox("Название в шапке", title) { title = it; s.carTitle = it }
-            Spacer(Modifier.height(8.dp))
-            TextBox("Подпись (год, двигатель)", sub) { sub = it; s.carSub = it }
+            // the car is what its ECU says: model, year and engine by the ROM, nothing to pick here
+            val demoOn by Repo.demoOn.collectAsState()
+            val turboCar = Repo.guard.collectAsState().value.turboCar
+            val engine = remember(init, demoOn, turboCar) { kg.forester.sg.ssm.EngineId.detect(ctx) }
+            val (hTitle, hSub) = carHeader(engine, s.carTitle, s.carSub, s.carTitleCustom)
+            T(if (engine.known) "$hTitle · $hSub" else "Модель определится, когда ответит ЭБУ", 16.sp, weight = FontWeight.SemiBold)
+            T(engineSource(engine), 11.sp, C.Sub)
+            Spacer(Modifier.height(10.dp))
+            TextBox("Своё название в шапке (необязательно)", title) { title = it; s.carTitle = it; s.carTitleCustom = it.isNotBlank() }
+            T("Пусто: в шапке модель по ЭБУ.", 11.sp, C.Sub)
             Spacer(Modifier.height(14.dp))
             T("Коробка", 15.sp)
             Spacer(Modifier.height(6.dp))
@@ -134,7 +128,7 @@ fun CarAdapterSettings() {
             val ctx = androidx.compose.ui.platform.LocalContext.current
             // many models now: wrap onto several lines instead of running off the panel
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CarModels3d.forEach { (k, l) -> Chip(l, car3d == k, { s.car3d = k }) }
+                CarModels3d.forEach { (k, l) -> Chip(l, car3d == k, { s.car3d = k; s.car3dCustom = true }) }
             }
             Spacer(Modifier.height(10.dp))
             T("Цвет кузова", 13.sp, C.Sub)
@@ -241,7 +235,7 @@ fun CarAdapterSettings() {
                 Switch(trace, { trace = it; s.traceEnabled = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
             }
             Spacer(Modifier.height(8.dp))
-            fun header() = "Машина: ${s.carModel} «${s.carTitle} ${s.carSub}», коробка ${s.gearbox}; адаптер ${s.adapter}, " +
+            fun header() = "Машина: «${s.carTitle}», коробка ${s.gearbox}; адаптер ${s.adapter}, " +
                 "шина ${s.bus}; найден: ${found.ifEmpty { "—" }}; связь: $msg; ROM ${init?.romId ?: "—"}"
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.weight(1f)) {
@@ -274,12 +268,11 @@ fun CarAdapterSettings() {
     }
 }
 
-/** First start: ask which car and which adapter, everything else stays at the defaults. */
+/** First start: the gearbox and the adapter; the car itself comes from its ECU. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FirstRunSetup(onDone: () -> Unit) {
     val s = Repo.settings
-    var model by remember { mutableStateOf(s.carModel) }
     var adapter by remember { mutableStateOf(s.adapter) }
     var gearbox by remember { mutableStateOf(s.gearbox) }
     Box(
@@ -290,16 +283,8 @@ fun FirstRunSetup(onDone: () -> Unit) {
         Panel(Modifier.widthIn(max = 640.dp).padding(16.dp).verticalScroll(rememberScrollState()), padding = 22.dp) {
             T("Добро пожаловать", 24.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
-            T("Выберите машину и адаптер. Потом это можно поменять в Настройках → «Авто и адаптер».", 13.sp, C.Sub)
+            T("Модель, год и мотор приложение узнает само у блока двигателя. Выберите только коробку и адаптер, потом это можно поменять в Настройках → «Авто и адаптер».", 13.sp, C.Sub)
             Spacer(Modifier.height(16.dp))
-            T("Машина", 15.sp)
-            Spacer(Modifier.height(6.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CarModels.all.forEach { m -> Chip(m.name, model == m.id, { model = m.id }) }
-            }
-            Spacer(Modifier.height(4.dp))
-            T(CarModels.byId(model).note, 12.sp, C.Sub)
-            Spacer(Modifier.height(14.dp))
             T("Коробка", 15.sp)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -315,7 +300,6 @@ fun FirstRunSetup(onDone: () -> Unit) {
             T(if (adapter == "auto") "Не знаете, какой у вас адаптер, — оставьте «Авто»." else adapterNote(adapter), 12.sp, C.Sub)
             Spacer(Modifier.height(18.dp))
             ActionButton("Готово", true) {
-                s.applyModel(CarModels.byId(model))
                 s.adapter = adapter
                 s.gearbox = gearbox
                 s.setupDone = true

@@ -512,7 +512,7 @@ private fun CountryRow(cc: String, onCountry: (String) -> Unit) {
 }
 
 @Composable
-private fun SearchLine(query: String, onChange: (String) -> Unit) {
+internal fun SearchLine(query: String, hint: String = "Название станции", onChange: (String) -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(23.dp)).background(Color.Black.copy(alpha = 0.25f)).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -520,7 +520,7 @@ private fun SearchLine(query: String, onChange: (String) -> Unit) {
         Icon(Lucide.Search, null, tint = C.Sub, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) T("Название станции", 15.sp, C.Sub)
+            if (query.isEmpty()) T(hint, 15.sp, C.Sub, maxLines = 1)
             BasicTextField(query, onChange, singleLine = true, textStyle = TextStyle(color = C.Text, fontSize = 15.sp),
                 cursorBrush = SolidColor(C.Violet), modifier = Modifier.fillMaxWidth())
         }

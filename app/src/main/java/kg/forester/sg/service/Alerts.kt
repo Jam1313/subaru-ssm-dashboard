@@ -24,6 +24,7 @@ object Alerts {
     val history = MutableStateFlow<List<Alert>>(emptyList())
 
     private val lastShown = HashMap<String, Long>()
+    private val lastLevel = HashMap<String, Level>()
     private var prefs: android.content.SharedPreferences? = null
     private var tts: TextToSpeech? = null
     @Volatile private var ttsReady = false
@@ -57,13 +58,18 @@ object Alerts {
         }
     }
 
-    /** Shows (and says) [text] unless the same [id] was raised less than [cooldownMs] ago. */
+    /**
+     * Shows (and says) [text] unless the same [id] was raised less than [cooldownMs] ago; a more serious [level]
+     * than last time gets through all the same (a warning must not hold back the danger that follows it).
+     */
     fun raise(id: String, text: String, level: Level = Level.WARN, cooldownMs: Long = 10 * 60_000L, speak: Boolean = true, banner: Boolean = true) {
         val now = System.currentTimeMillis()
         synchronized(lastShown) {
             val last = lastShown[id]
-            if (last != null && now - last < cooldownMs) return
+            val worse = lastLevel[id]?.let { level > it } ?: false
+            if (last != null && now - last < cooldownMs && !worse) return
             lastShown[id] = now
+            lastLevel[id] = level
         }
         val a = Alert(id, text, level, now)
         if (banner) current.value = a
