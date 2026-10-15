@@ -23,8 +23,33 @@ object Updater {
     fun current(ctx: Context): String =
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
 
-    /** The newest published release that has an APK, or null (no network, GitHub limit). Blocking. */
-    fun latest(): Release? = runCatching {
+    /**
+     * The newest published release that has an APK, or null (no network). Blocking. The GitHub API allows
+     * 60 requests an hour per address, and a mobile operator puts many cars behind one, so when it refuses
+     * the answer comes from latest.json on the main branch (raw files have no such limit).
+     */
+    fun latest(): Release? = fromApi() ?: fromLatestJson()
+
+    private fun fromLatestJson(): Release? = runCatching {
+        val c = URL("https://raw.githubusercontent.com/$REPO/main/latest.json").openConnection() as HttpURLConnection
+        c.connectTimeout = 8000; c.readTimeout = 10_000
+        c.useCaches = false
+        val o = org.json.JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+        Release(o.getString("tag"), o.optString("name"), o.optString("notes"), o.getString("apk"), o.optLong("size"))
+    }.getOrNull()
+
+    /** Looks once a day (from the screen and the service) and puts a notice up when a newer release is out. */
+    fun checkDaily(ctx: Context) {
+        val s = Repo.settings
+        if (!s.feature("update") || System.currentTimeMillis() - s.lastUpdateCheckMs < 24 * 3600_000L) return
+        val r = latest() ?: return
+        s.lastUpdateCheckMs = System.currentTimeMillis()
+        if (!isNewer(r.tag, current(ctx))) return
+        kg.forester.sg.service.Alerts.raise("update", "Вышла версия ${r.tag.removePrefix("v")}: Настройки → Основные → «Обновление приложения»",
+            kg.forester.sg.service.Alerts.Level.INFO, 24 * 3600_000L, speak = false)
+    }
+
+    private fun fromApi(): Release? = runCatching {
         val c = URL("https://api.github.com/repos/$REPO/releases?per_page=15").openConnection() as HttpURLConnection
         c.setRequestProperty("Accept", "application/vnd.github+json")
         c.connectTimeout = 8000; c.readTimeout = 10_000

@@ -146,10 +146,29 @@ object Speech {
         return true
     }
 
-    /** Plays as navigation guidance: the head unit lowers the music for it, as for a navigator's voice. */
+    /**
+     * The voice brought to full scale (the model speaks well below it), then for «громче» and «максимум»
+     * compressed, so the quiet syllables come up too and nothing clips.
+     */
+    private fun loud(samples: FloatArray, level: Int): ShortArray {
+        val peak = samples.maxOf { kotlin.math.abs(it) }.coerceAtLeast(0.05f)
+        val k = when (level) { 0 -> 0f; 1 -> 1.8f; else -> 3f }
+        val norm = if (k > 0f) kotlin.math.tanh(k) else 1f
+        return ShortArray(samples.size) {
+            val x = samples[it] / peak
+            val y = if (k > 0f) kotlin.math.tanh(k * x) / norm else x
+            (y.coerceIn(-1f, 1f) * 0.97f * 32767).toInt().toShort()
+        }
+    }
+
+    /**
+     * Plays as navigation guidance: the head unit lowers the music for it, as for a navigator's voice; at the
+     * loudest setting the music pauses while it speaks.
+     */
     private fun play(samples: FloatArray, rate: Int) {
         if (samples.isEmpty()) return
-        val pcm = ShortArray(samples.size) { (samples[it].coerceIn(-1f, 1f) * 32767).toInt().toShort() }
+        val level = kg.forester.sg.data.Repo.settings.voiceLoud
+        val pcm = loud(samples, level)
         val track = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -161,7 +180,8 @@ object Speech {
             .build()
         // ask the music to step back while speaking (like a navigator's voice), give it back afterwards
         val am = appCtx?.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-        val focus = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        val focus = android.media.AudioFocusRequest.Builder(
+            if (level >= 2) android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT else android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()).build()
         runCatching { am?.requestAudioFocus(focus) }

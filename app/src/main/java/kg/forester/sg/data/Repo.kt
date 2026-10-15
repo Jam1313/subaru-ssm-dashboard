@@ -156,6 +156,11 @@ class Settings(ctx: Context) {
         get() = p.getString("bottomBar", null) ?: kg.forester.sg.ui.BottomBarCfg.DEFAULT
         set(v) { p.edit().putString("bottomBar", v).apply(); Repo.bottomBar.value = v }
 
+    /** Values in the top bar next to the car's name, same catalogue as the bottom bar. */
+    var topBar: String
+        get() = p.getString("topBar", null) ?: kg.forester.sg.ui.BottomBarCfg.TOP_DEFAULT
+        set(v) { p.edit().putString("topBar", v).apply(); Repo.topBar.value = v }
+
     /**
      * Diagnostic adapter: "auto" (find it), "kkl" (USB KKL cable or OpenPort 1.3), "op2" (Tactrix OpenPort 2.0 /
      * clone), "elm_usb", "elm_bt", "elm_wifi" (ELM327 by USB, Bluetooth or Wi-Fi).
@@ -214,6 +219,26 @@ class Settings(ctx: Context) {
     var ttsVoice: String
         get() = p.getString("ttsVoice", "irina")!!
         set(v) = p.edit().putString("ttsVoice", v).apply()
+
+    /** Loudness of the spoken warnings: 0 normal, 1 louder (compressed), 2 loudest (the music pauses for it). */
+    var voiceLoud: Int
+        get() = p.getInt("voiceLoud", 1)
+        set(v) = p.edit().putInt("voiceLoud", v).apply()
+
+    /** Player app the Media screen's «Приложения» shows and controls: a package, "fyt" for the unit's stock player. */
+    var musicApp: String
+        get() = p.getString("musicApp", "")!!
+        set(v) = p.edit().putString("musicApp", v).apply()
+
+    /** The Media screen's source: "files" (own player), "bt", "radio", "apps". */
+    var mediaSource: String
+        get() = p.getString("mediaSource", "files")!!
+        set(v) = p.edit().putString("mediaSource", v).apply()
+
+    /** The last «Обучение» reading (LearnedValues.Result as JSON), shown until the next one. */
+    var learnedLast: String
+        get() = p.getString("learnedLast", "")!!
+        set(v) = p.edit().putString("learnedLast", v).apply()
 
     /** Last automatic look for a newer release. */
     var lastUpdateCheckMs: Long
@@ -464,6 +489,7 @@ object Repo {
     val knock = MutableStateFlow(KnockStats())
     val navPosition = MutableStateFlow("left")
     val bottomBar = MutableStateFlow("")
+    val topBar = MutableStateFlow("")
     val slotVersion = MutableStateFlow(0)
     val customVersion = MutableStateFlow(0)
     /** VIN read from the ECU at connect ("" = not available). */
@@ -515,6 +541,7 @@ object Repo {
             settings = Settings(ctx.applicationContext)
             navPosition.value = settings.navPosition
             bottomBar.value = settings.bottomBar
+            topBar.value = settings.topBar
             uiScale.value = settings.uiScale
             car3d.value = settings.car3d
             carPaint.value = settings.carPaint

@@ -29,6 +29,7 @@ import kg.forester.sg.service.EcuService
 /** Stops the service (polling, fuel, logs) and closes the app, so nothing keeps running on a phone. */
 fun exitApp(ctx: Context) {
     ctx.stopService(Intent(ctx, EcuService::class.java))
+    ctx.stopService(Intent(ctx, kg.forester.sg.service.PlayerService::class.java))
     (ctx as? Activity)?.finishAndRemoveTask()
 }
 
@@ -51,7 +52,7 @@ fun ExitDialog(onClose: () -> Unit) {
         containerColor = C.Card, titleContentColor = C.Text, textContentColor = C.Text,
         icon = { Icon(Lucide.Power, null, tint = C.Red, modifier = Modifier.size(26.dp)) },
         title = { T("Закрыть приложение?", 19.sp, weight = FontWeight.SemiBold) },
-        text = { T("Опрос ЭБУ, подсчёт расхода и запись логов остановятся до следующего запуска.", 14.sp) },
+        text = { T("Опрос ЭБУ, подсчёт расхода, запись логов и музыка остановятся до следующего запуска.", 14.sp) },
         confirmButton = {
             androidx.compose.material3.TextButton({ onClose(); exitApp(ctx) }) {
                 androidx.compose.material3.Text("Выйти", color = C.Red)

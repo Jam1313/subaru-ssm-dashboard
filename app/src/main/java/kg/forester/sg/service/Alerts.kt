@@ -20,7 +20,7 @@ object Alerts {
 
     /** The banner shown now (the latest one), null = none. */
     val current = MutableStateFlow<Alert?>(null)
-    /** Recent warnings, newest first, for the «Здоровье» screen. */
+    /** Recent warnings, newest first, for the «Мониторинг» screen. */
     val history = MutableStateFlow<List<Alert>>(emptyList())
 
     private val lastShown = HashMap<String, Long>()
@@ -48,6 +48,12 @@ object Alerts {
             val t = tts ?: return@TextToSpeech
             ttsReady = status == TextToSpeech.SUCCESS &&
                 t.setLanguage(Locale("ru", "RU")).let { it != TextToSpeech.LANG_MISSING_DATA && it != TextToSpeech.LANG_NOT_SUPPORTED }
+            // like a navigator's voice: over the music, not at the notification volume
+            runCatching {
+                t.setAudioAttributes(android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            }
         }
     }
 
@@ -67,7 +73,8 @@ object Alerts {
         // the app's own voice first, then the head unit's TTS, then a beep
         if (Speech.say(text)) return
         if (ttsReady) {
-            runCatching { tts?.speak(text, TextToSpeech.QUEUE_ADD, null, id) }
+            val loud = android.os.Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f) }
+            runCatching { tts?.speak(text, TextToSpeech.QUEUE_ADD, loud, id) }
         } else if (level != Level.INFO) {
             runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80).startTone(ToneGenerator.TONE_PROP_BEEP2, 300) }
         }

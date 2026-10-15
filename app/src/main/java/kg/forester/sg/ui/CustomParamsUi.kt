@@ -75,7 +75,7 @@ fun CustomParamsDialog(onClose: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             T("Для прошивок, которых нет в базе RomRaider: адрес в памяти ЭБУ, как в поле «Custom field» у BtSSM. " +
                 "Параметр появится на «Датчиках», в логе и в выборе виджетов. С ролью FBKC / FLKC / IAM / целевой наддув " +
-                "его использует и экран «Здоровье» с предупреждениями о детонации.", 12.sp, C.Sub)
+                "его использует и экран «Мониторинг» с предупреждениями о детонации.", 12.sp, C.Sub)
             Spacer(Modifier.height(10.dp))
             if (list.isEmpty()) T("Пока ничего не добавлено.", 14.sp, C.Sub)
             Column(Modifier.verticalScroll(rememberScrollState())) {

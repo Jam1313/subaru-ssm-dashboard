@@ -20,9 +20,55 @@ object MediaSessions {
 
     /** The session that plays now, else the latest one; null without the listener permission. */
     fun controller(ctx: Context): MediaController? = runCatching {
-        val all = ctx.getSystemService(MediaSessionManager::class.java).getActiveSessions(ComponentName(ctx, MediaListener::class.java))
+        val all = sessions(ctx)
         all.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING } ?: all.firstOrNull()
     }.getOrNull()
+
+    private fun sessions(ctx: Context): List<MediaController> = runCatching {
+        ctx.getSystemService(MediaSessionManager::class.java).getActiveSessions(ComponentName(ctx, MediaListener::class.java))
+    }.getOrNull().orEmpty()
+
+    /** The session of the player [pkg], if it has one now (the app was started at least once). */
+    fun controllerOf(ctx: Context, pkg: String): MediaController? = sessions(ctx).firstOrNull { it.packageName == pkg }
+
+    /**
+     * Music players on the unit, as package → name: apps offering a media browser service (Yandex Music, VK,
+     * Spotify, YouTube Music…) and any app that has a media session right now.
+     */
+    fun players(ctx: Context): List<Pair<String, String>> {
+        val pm = ctx.packageManager
+        val pkgs = LinkedHashSet<String>()
+        runCatching {
+            pm.queryIntentServices(android.content.Intent("android.media.browse.MediaBrowserService"), 0)
+                .forEach { pkgs += it.serviceInfo.packageName }
+        }
+        sessions(ctx).forEach { pkgs += it.packageName }
+        pkgs -= ctx.packageName
+        // the FYT stock player and Bluetooth are offered as the head unit's own source
+        pkgs.removeAll { it.startsWith("com.syu.") }
+        return pkgs.mapNotNull { p ->
+            if (pm.getLaunchIntentForPackage(p) == null) return@mapNotNull null
+            val label = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(p, 0)).toString() }.getOrNull() ?: return@mapNotNull null
+            p to label
+        }.sortedBy { it.second.lowercase() }
+    }
+
+    /** Another app that plays right now (not this one, not Bluetooth), as package → name, or null. */
+    fun playingApp(ctx: Context): Pair<String, String>? {
+        val c = sessions(ctx).firstOrNull {
+            it.playbackState?.state == PlaybackState.STATE_PLAYING && it.packageName != ctx.packageName &&
+                !it.packageName.contains("bluetooth") && !it.packageName.startsWith("com.syu.")
+        } ?: return null
+        val pm = ctx.packageManager
+        val name = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(c.packageName, 0)).toString() }.getOrDefault(c.packageName)
+        return c.packageName to name
+    }
+
+    fun open(ctx: Context, pkg: String) {
+        ctx.packageManager.getLaunchIntentForPackage(pkg)?.let {
+            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK); runCatching { ctx.startActivity(it) }
+        }
+    }
 
     // the androidx.media "compat" custom actions every MediaSessionCompat / Media3 session understands
     fun shuffle(ctx: Context, on: Boolean): Boolean = controller(ctx)?.transportControls?.sendCustomAction(

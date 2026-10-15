@@ -30,6 +30,9 @@
     <!-- Bluetooth LE tyre pressure sensors: only listened to, never used to find the location -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- updating the app from its GitHub releases -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -45,6 +48,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />
         </intent>
+        <!-- music players (Yandex Music, VK, Spotify…) the Media screen can pick -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
         <!-- map apps the mini-map can open -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -53,6 +60,7 @@
     </queries>
 
     <application
+        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
@@ -99,6 +107,15 @@
             </intent-filter>
         </service>
 
+        <!-- the Media screen's own player (USB stick, SD card, memory): notification, steering wheel keys -->
+        <service
+            android:name=".service.PlayerService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
         <!-- other players' media sessions for voice (shuffle, repeat, "что играет"): needs «Доступ к уведомлениям» -->
         <service
             android:name=".service.MediaListener"

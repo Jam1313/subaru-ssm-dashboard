@@ -48,6 +48,9 @@ data class BottomSlot(val id: String, val bar: Boolean)
 object BottomBarCfg {
     const val MAX = 6
     const val DEFAULT = "range:1,coolant:1,battery:1,intake:0,altitude:0"
+    /** The top bar, beside the car's name: short values only, no bars. */
+    const val TOP_MAX = 3
+    const val TOP_DEFAULT = "oil:0,tripAvg:0"
 
     fun parse(s: String): List<BottomSlot> = s.split(',').mapNotNull { e ->
         val f = e.trim().split(':')
@@ -112,7 +115,37 @@ private fun BottomValues() {
             BottomItem(m.icon, m.short, text, frac, brush, Modifier.weight(if (s.bar) 1f else 0.7f), m.warn(v))
         }
     }
-    if (editing) BottomBarEditor { editing = false }
+    if (editing) BarEditor("Нижняя панель", BottomBarCfg.MAX, true, Repo.bottomBar, BottomBarCfg.DEFAULT, { Repo.settings.bottomBar = it }) { editing = false }
+}
+
+/**
+ * The values in the top bar, beside the car's name (where the logo was before it moved to the corner). Long press
+ * to choose them, as on the bottom bar.
+ */
+@Composable
+fun TopValues(modifier: Modifier) {
+    val cfg by Repo.topBar.collectAsState()
+    val slots = remember(cfg) { BottomBarCfg.parse(cfg).take(BottomBarCfg.TOP_MAX) }
+    val avail by Repo.rrAvailable.collectAsState()
+    val ctx = rememberMetricCtx()
+    var editing by remember { mutableStateOf(false) }
+    Row(
+        modifier.fillMaxHeight().clip(RoundedCornerShape(12.dp))
+            .pointerInput(Unit) { detectTapGestures(onLongPress = { editing = true }) }
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        if (slots.isEmpty()) T("удерживайте, чтобы вывести показатели", 12.sp, C.Border, maxLines = 1)
+        slots.forEach { s ->
+            val m = Metrics.of(s.id, avail)
+            val v = m?.read(ctx)
+            val text = if (m == null) "—" else m.text(v) + if (m.unit.isEmpty() || v == null) "" else if (m.unit.startsWith("°")) m.unit else " ${m.unit}"
+            BottomItem(m?.icon ?: Lucide.ListChecks, m?.short ?: s.id.removePrefix("rr:"), text, null, null,
+                Modifier.weight(1f, fill = false), m?.warn(v) == true)
+        }
+    }
+    if (editing) BarEditor("Верхняя панель", BottomBarCfg.TOP_MAX, false, Repo.topBar, BottomBarCfg.TOP_DEFAULT, { Repo.settings.topBar = it }) { editing = false }
 }
 
 @Composable
@@ -134,29 +167,35 @@ private fun BottomItem(
     }
 }
 
-/** Pick what the bottom bar shows: the chosen values in order (move, bar on/off, remove) and everything to add. */
+/**
+ * Pick what a bar shows: the chosen values in order (move, bar on/off where [bars], remove) and everything to add.
+ * [flow] is the bar's setting as stored, [store] writes it.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BottomBarEditor(onClose: () -> Unit) {
-    val cfg by Repo.bottomBar.collectAsState()
-    val slots = BottomBarCfg.parse(cfg)
+private fun BarEditor(
+    title: String, max: Int, bars: Boolean, flow: kotlinx.coroutines.flow.StateFlow<String>, default: String,
+    store: (String) -> Unit, onClose: () -> Unit,
+) {
+    val cfg by flow.collectAsState()
+    val slots = BottomBarCfg.parse(cfg).take(max)
     val avail by Repo.rrAvailable.collectAsState()
     Repo.watchVersion.collectAsState().value
     val all = Metrics.all(avail, Repo.settings.watchIds)
-    fun save(l: List<BottomSlot>) { Repo.settings.bottomBar = BottomBarCfg.format(l) }
+    fun save(l: List<BottomSlot>) { store(BottomBarCfg.format(l)) }
     Dialog(onClose, DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier.width(760.dp).heightIn(max = 560.dp).clip(RoundedCornerShape(16.dp)).background(C.Card)
                 .border(1.dp, C.Border, RoundedCornerShape(16.dp)).padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                T("Нижняя панель", 18.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Chip("Как было", false, { Repo.settings.bottomBar = BottomBarCfg.DEFAULT })
+                T(title, 18.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Chip("Как было", false, { store(default) })
                 Spacer(Modifier.width(8.dp))
                 Chip("Готово", true, onClose)
             }
             Spacer(Modifier.height(4.dp))
-            T("До ${BottomBarCfg.MAX} показателей. «Полоска» — шкала рядом с числом, она занимает больше места.", 12.sp, C.Sub)
+            T(if (bars) "До $max показателей. «Полоска» — шкала рядом с числом, она занимает больше места." else "До $max показателей.", 12.sp, C.Sub)
             Spacer(Modifier.height(10.dp))
             slots.forEachIndexed { i, s ->
                 val m = Metrics.of(s.id, avail)
@@ -168,8 +207,10 @@ private fun BottomBarEditor(onClose: () -> Unit) {
                     Icon(m?.icon ?: Lucide.ListChecks, null, tint = C.Violet, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     T(m?.title ?: s.id, 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
-                    Chip("Полоска", s.bar, { save(slots.mapIndexed { j, x -> if (j == i) x.copy(bar = !x.bar) else x }) })
-                    Spacer(Modifier.width(6.dp))
+                    if (bars) {
+                        Chip("Полоска", s.bar, { save(slots.mapIndexed { j, x -> if (j == i) x.copy(bar = !x.bar) else x }) })
+                        Spacer(Modifier.width(6.dp))
+                    }
                     SmallButton(Lucide.ChevronUp, i > 0) {
                         save(slots.toMutableList().also { l -> l[i] = l[i - 1].also { l[i - 1] = l[i] } })
                     }
@@ -180,7 +221,7 @@ private fun BottomBarEditor(onClose: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(10.dp))
-            T(if (slots.size >= BottomBarCfg.MAX) "Панель заполнена: уберите что-нибудь, чтобы добавить другое" else "Добавить:", 13.sp, C.Sub)
+            T(if (slots.size >= max) "Панель заполнена: уберите что-нибудь, чтобы добавить другое" else "Добавить:", 13.sp, C.Sub)
             Spacer(Modifier.height(6.dp))
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 all.groupBy { it.group }.forEach { (group, list) ->
@@ -190,7 +231,7 @@ private fun BottomBarEditor(onClose: () -> Unit) {
                             val on = slots.any { it.id == m.id }
                             Chip(m.title, on, {
                                 if (on) save(slots.filter { it.id != m.id })
-                                else if (slots.size < BottomBarCfg.MAX) save(slots + BottomSlot(m.id, false))
+                                else if (slots.size < max) save(slots + BottomSlot(m.id, false))
                             }, m.icon)
                         }
                     }

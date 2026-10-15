@@ -139,6 +139,8 @@ class EcuService : Service() {
         scope.launch {
             while (isActive) {
                 Housekeeping.run(this@EcuService, Repo.logFile.value)
+                // a head unit keeps the screen alive for days: look for a new version from here too
+                runCatching { kg.forester.sg.data.Updater.checkDaily(this@EcuService) }
                 delay(3600_000)
             }
         }
@@ -150,6 +152,7 @@ class EcuService : Service() {
             ACTION_START_GPS -> { startGps(); Voice.start(this) }
             ACTION_EXIT -> {
                 exitRequested.tryEmit(Unit)
+                stopService(Intent(this, PlayerService::class.java))
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -639,6 +642,14 @@ class EcuService : Service() {
                     continue
                 }
                 failures = 0
+                if (cycle == 0) {
+                    // what the ECU really sends for the values some early ECUs lack (MAF, throttle, injection), skipped or not
+                    val probe = intArrayOf(EcuParams.MAF_H, EcuParams.MAF_L, EcuParams.THROTTLE, EcuParams.INJ_PW)
+                    SsmTrace.log("first read, raw: " + probe.joinToString(" ") { a ->
+                        val i = addrs.indexOf(a)
+                        "%02X=%s".format(a, if (i in raw.indices) "%02X".format(raw[i].toInt() and 0xFF) else "--")
+                    })
+                }
                 var snap = EcuParams.decode(addrs, raw, now, skip)
                 // SSM answers any address; an A/F byte from an ECU without the wideband sensor would fake
                 // "enrichment" in the fuel calculation

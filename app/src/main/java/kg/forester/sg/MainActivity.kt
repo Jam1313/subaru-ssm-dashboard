@@ -81,7 +81,7 @@ enum class Screen(val title: String, val icon: ImageVector) {
     Dtc("Ошибки", Lucide.TriangleAlert),
     Sensors("Датчики", Lucide.ListChecks),
     Perf("Замеры", Lucide.Timer),
-    Health("Здоровье", Lucide.HeartPulse),
+    Health("Мониторинг", Lucide.Activity),
     Log("Лог", Lucide.FileText),
     Apps("Приложения", Lucide.LayoutGrid),
     Settings("Настройки", Lucide.SlidersHorizontal),
@@ -97,16 +97,7 @@ class MainActivity : ComponentActivity() {
         testAlert(intent)
         kg.forester.sg.data.Shortcuts.load(this)
         // once a day: is there a newer release on GitHub?
-        if (Repo.settings.feature("update") && System.currentTimeMillis() - Repo.settings.lastUpdateCheckMs > 24 * 3600_000L) {
-            Thread {
-                val r = kg.forester.sg.data.Updater.latest() ?: return@Thread
-                Repo.settings.lastUpdateCheckMs = System.currentTimeMillis()
-                if (kg.forester.sg.data.Updater.isNewer(r.tag, kg.forester.sg.data.Updater.current(this))) {
-                    kg.forester.sg.service.Alerts.raise("update", "Вышла версия ${r.tag.removePrefix("v")}: Настройки → Основные → «Обновление приложения»",
-                        kg.forester.sg.service.Alerts.Level.INFO, 24 * 3600_000L, speak = false)
-                }
-            }.start()
-        }
+        Thread { runCatching { kg.forester.sg.data.Updater.checkDaily(applicationContext) } }.start()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
         // Phones get the full head-unit layout too, sideways (either way round) and scaled to fit.
@@ -295,7 +286,7 @@ fun App() {
                 kg.forester.sg.service.VoiceTarget.GEARBOX -> if (Repo.settings.gearbox == "mt") screen else Screen.Gearbox
                 kg.forester.sg.service.VoiceTarget.BATTERY -> Screen.Battery
                 kg.forester.sg.service.VoiceTarget.DTC -> Screen.Dtc
-                kg.forester.sg.service.VoiceTarget.MEDIA -> if (kg.forester.sg.service.Fyt.present(ctx)) Screen.Media else screen
+                kg.forester.sg.service.VoiceTarget.MEDIA -> Screen.Media
             }
         }
     }
@@ -342,7 +333,7 @@ fun App() {
         }
         when (navPos) {
             "top", "bottom" -> Column(Modifier.fillMaxSize().padding(10.dp)) {
-                TopBar(screen)
+                TopBar(screen, logo = true)
                 Spacer(Modifier.height(8.dp))
                 if (navPos == "top") { NavBar(screen) { screen = it }; Spacer(Modifier.height(8.dp)) }
                 content(Modifier.weight(1f))
@@ -353,7 +344,7 @@ fun App() {
             else -> Row(Modifier.fillMaxSize().padding(10.dp)) {
                 if (navPos != "right") { NavRail(screen) { screen = it }; Spacer(Modifier.width(10.dp)) }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
-                    TopBar(screen)
+                    TopBar(screen, logo = navPos == "right")
                     Spacer(Modifier.height(10.dp))
                     content(Modifier.weight(1f))
                     Spacer(Modifier.height(10.dp))
@@ -373,11 +364,9 @@ private fun visibleScreens(): List<Screen> {
     Repo.carVersion.collectAsState().value
     Repo.featureVersion.collectAsState().value
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    // Media talks to the FYT system service: only on FYT head units (Teyes etc.), not on phones or other units
-    val fyt = remember { kg.forester.sg.service.Fyt.present(ctx) }
     var list = Screen.entries.toList()
     if (Repo.settings.gearbox == "mt") list = list - Screen.Gearbox
-    if (!fyt) list = list - Screen.Media
+    // Media drives any player (Yandex Music, VK…) through its media session, radio only on FYT head units
     if (isPhone(ctx)) list = list - Screen.Apps // the app launcher is for head units
     val s = Repo.settings
     if (!s.feature("sensors")) list = list - Screen.Sensors
@@ -391,8 +380,13 @@ private fun NavRail(current: Screen, onSelect: (Screen) -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val shortcuts by kg.forester.sg.data.Shortcuts.list.collectAsState()
     val scroll = androidx.compose.foundation.rememberScrollState()
-    // The scrolling area starts below the logo; fades hint that more buttons are above/below.
-    Box(Modifier.width(92.dp).fillMaxHeight().padding(top = 62.dp)) {
+    // The logo in the corner, the scrolling area below it; fades hint that more buttons are above/below.
+    Column(Modifier.width(92.dp).fillMaxHeight()) {
+    Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+        SubaruLogo(Modifier.size(width = 86.dp, height = 46.dp))
+    }
+    Spacer(Modifier.height(10.dp))
+    Box(Modifier.fillMaxWidth().weight(1f)) {
         Column(
             Modifier.fillMaxSize().verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -418,6 +412,7 @@ private fun NavRail(current: Screen, onSelect: (Screen) -> Unit) {
             Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF0A0C16)))))
         }
+    }
     }
 }
 
@@ -478,26 +473,27 @@ private fun RailItem(icon: ImageVector, title: String, selected: Boolean, accent
 }
 
 @Composable
-private fun TopBar(screen: Screen) {
+private fun TopBar(screen: Screen, logo: Boolean) {
     val e by Repo.live.collectAsState()
     val link by Repo.link.collectAsState()
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) { while (true) { now = Date(); delay(5000) } }
 
     Row(Modifier.fillMaxWidth().height(60.dp), verticalAlignment = Alignment.CenterVertically) {
-        SubaruLogo(Modifier.size(width = 96.dp, height = 50.dp))
-        Spacer(Modifier.width(16.dp))
+        // with the side rail on the left the logo sits in the corner above it (see NavRail)
+        if (logo) {
+            SubaruLogo(Modifier.size(width = 96.dp, height = 50.dp))
+            Spacer(Modifier.width(16.dp))
+        } else Spacer(Modifier.width(4.dp))
         Column {
             Repo.carVersion.collectAsState().value
             T(Repo.settings.carTitle, 24.sp, weight = FontWeight.Bold, maxLines = 1)
             T(Repo.settings.carSub, 13.sp, C.Sub, maxLines = 1)
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(14.dp))
+        kg.forester.sg.ui.TopValues(Modifier.weight(1f))
         kg.forester.sg.ui.StatusPill()
         kg.forester.sg.ui.ThemeButton(22.dp)
-        // as the head unit's home screen the app is never closed, so no exit there
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        if (!remember { kg.forester.sg.ui.isDefaultHome(ctx) }) kg.forester.sg.ui.ExitButton(22.dp)
         Spacer(Modifier.width(16.dp))
         Icon(Lucide.BatteryCharging, null, tint = C.Text, modifier = Modifier.size(22.dp))
         T(" ${fmt(e.batteryV?.toDouble())} V", 18.sp)
@@ -508,7 +504,12 @@ private fun TopBar(screen: Screen) {
         LinkIcon(24.dp)
         Spacer(Modifier.width(22.dp))
         T(SimpleDateFormat("HH:mm", Locale.US).format(now), 26.sp, weight = FontWeight.SemiBold)
-        Spacer(Modifier.width(8.dp))
+        // at the far right, away from the status icons; as the head unit's home screen the app is never closed
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        if (!remember { kg.forester.sg.ui.isDefaultHome(ctx) }) {
+            Spacer(Modifier.width(14.dp))
+            kg.forester.sg.ui.ExitButton(22.dp)
+        } else Spacer(Modifier.width(8.dp))
     }
 }
 

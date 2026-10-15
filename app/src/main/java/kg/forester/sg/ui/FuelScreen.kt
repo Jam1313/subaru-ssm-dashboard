@@ -133,6 +133,12 @@ private fun CurrentTab() {
                             T("Мгновенный  ", 13.sp, C.Sub)
                             T("${fmt(ts.instLh)} л/ч", 16.sp, weight = FontWeight.SemiBold)
                         }
+                        // an ECU without a usable MAF: say how the number comes about (or why there is none)
+                        val live by Repo.live.collectAsState()
+                        if ((live.rpm ?: 0) > 300 && live.mafGs == null) {
+                            T(if (kg.forester.sg.service.FuelCalc.source == "inj") "ЭБУ не отдаёт MAF: расход по форсункам, уточнится по заправкам"
+                                else "ЭБУ не отдаёт ни MAF, ни время впрыска: расход не считается", 11.sp, C.Orange, maxLines = 2)
+                        }
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.width(210.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {

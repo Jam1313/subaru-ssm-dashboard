@@ -626,6 +626,17 @@ private fun FeatureSettings() {
                                 kg.forester.sg.service.Speech.prepare(ctx)
                         })
                     }
+                    var loud by remember { mutableStateOf(s.voiceLoud) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        T("Громкость:", 13.sp, C.Sub)
+                        listOf(0 to "Обычная", 1 to "Громче", 2 to "Максимум").forEach { (v, l) ->
+                            Chip(l, loud == v, {
+                                loud = v; s.voiceLoud = v
+                                kg.forester.sg.service.Speech.say("Так звучат предупреждения")
+                            })
+                        }
+                    }
+                    T("На максимуме музыка встаёт на паузу, пока голос говорит. Общую громкость голоса задаёт громкость навигации магнитолы.", 11.sp, C.Sub)
                 }
             }
         }
@@ -636,12 +647,12 @@ private fun FeatureSettings() {
                 F("perf", "Замеры разгона и круги", "Экран «Замеры»: разгон, диностенд, секундомер кругов")
                 F("motion", "G-метр и крен", "Перегрузки и наклон (акселерометр магнитолы, VDC или GPS)")
                 F("sensors", "Экран «Датчики»", "Все параметры ЭБУ из базы RomRaider")
-                F("health", "Экран «Здоровье»", "Мотор, ТО, шины и журнал предупреждений (сами предупреждения настраиваются слева)")
+                F("health", "Экран «Мониторинг»", "Мотор, ТО, шины и журнал предупреждений (сами предупреждения настраиваются слева)")
                 TcuRateSetting()
                 F("minmax", "Мин/макс за поездку на виджетах", "Справа от значения на карточках и метками на полосах и шкалах тахометра/спидометра")
                 if (s.feature("minmax")) Box(Modifier.fillMaxWidth().clip(Rounded).background(C.CardHi).padding(10.dp)) { MinMaxLegend() }
                 F("update", "Проверять обновления", "Раз в день смотреть, нет ли новой версии на GitHub, и сообщить")
-                SettingSwitch("Давление в шинах (TPMS)", "Слушать Bluetooth-датчики давления. Разрешение и порог — в «Здоровье» → «Шины»", tpms) {
+                SettingSwitch("Давление в шинах (TPMS)", "Слушать Bluetooth-датчики давления. Разрешение и порог — в «Мониторинг» → «Шины»", tpms) {
                     tpms = it; s.tpms = it
                     if (it) kg.forester.sg.service.Tpms.start(ctx) else kg.forester.sg.service.Tpms.stop(ctx)
                 }

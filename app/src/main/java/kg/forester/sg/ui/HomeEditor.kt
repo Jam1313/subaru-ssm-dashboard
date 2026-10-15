@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -195,7 +197,10 @@ fun HomeEditBar(onDone: () -> Unit) {
     }
 }
 
-/** Toolbar shown above an editable grid: [leading] screen-specific controls, add, reset, done. */
+/**
+ * Toolbar shown above an editable grid: [leading] screen-specific controls, add, reset, done. On a narrow screen
+ * (an 8" unit is 1024 px wide) the controls scroll sideways and «Готово» stays in sight at the right end.
+ */
 @Composable
 fun BoardEditBar(edit: BoardEdit, names: CardNames, onDone: () -> Unit, leading: @Composable RowScope.() -> Unit = {}) {
     var adding by remember { mutableStateOf(false) }
@@ -206,15 +211,25 @@ fun BoardEditBar(edit: BoardEdit, names: CardNames, onDone: () -> Unit, leading:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        leading()
-        Spacer(Modifier.weight(1f))
-        Chip("Сетка", !free, { edit.setFree(false) }, Lucide.LayoutGrid)
-        Chip("Свободно", free, { edit.setFree(true) }, Lucide.Move)
-        Box {
-            Chip("Добавить виджет", false, { adding = true }, Lucide.Plus)
-            if (adding) AddMenu(edit, names) { adding = false }
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val room = maxWidth
+            Row(
+                // at least the bar's width, so the spacer still pushes the grid controls right on a wide screen
+                Modifier.horizontalScroll(rememberScrollState()).widthIn(min = room),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                leading()
+                Spacer(Modifier.weight(1f))
+                Chip("Сетка", !free, { edit.setFree(false) }, Lucide.LayoutGrid)
+                Chip("Свободно", free, { edit.setFree(true) }, Lucide.Move)
+                Box {
+                    Chip("Добавить виджет", false, { adding = true }, Lucide.Plus)
+                    if (adding) AddMenu(edit, names) { adding = false }
+                }
+                Chip("Сбросить", false, { edit.reset() })
+            }
         }
-        Chip("Сбросить", false, { edit.reset() })
         Chip("Готово", true, onDone)
     }
 }

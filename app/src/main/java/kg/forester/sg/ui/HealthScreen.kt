@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import com.composables.icons.lucide.Wind
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -60,13 +62,17 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** «Здоровье»: engine guard (IAM, knock, turbo, oil, thermostat), maintenance planner, tyres, warnings log. */
+/**
+ * «Мониторинг»: engine guard (IAM, knock, turbo, oil, thermostat), the ECU's learned values, maintenance planner,
+ * tyres, warnings log.
+ */
 @Composable
 fun HealthScreen() {
     var tab by remember { mutableStateOf(0) }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Мотор", tab == 0, { tab = 0 }, Lucide.HeartPulse)
+            Chip("Обучение", tab == 4, { tab = 4 }, Lucide.Wind)
             Chip("ТО", tab == 1, { tab = 1 }, Lucide.Wrench)
             Chip("Шины", tab == 2, { tab = 2 }, Lucide.Disc3)
             Chip("Предупреждения", tab == 3, { tab = 3 }, Lucide.Bell)
@@ -76,6 +82,7 @@ fun HealthScreen() {
                 0 -> EngineTab()
                 1 -> ServiceTab()
                 2 -> TyresTab()
+                4 -> LearningTab()
                 else -> AlertsTab()
             }
         }
@@ -258,7 +265,7 @@ private fun SectionLine(icon: androidx.compose.ui.graphics.vector.ImageVector, t
 }
 
 @Composable
-private fun NoteBox(text: String) {
+internal fun NoteBox(text: String) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.Violet.copy(alpha = 0.10f)).padding(10.dp)) {
         Icon(Lucide.Info, null, tint = C.Violet, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(8.dp))

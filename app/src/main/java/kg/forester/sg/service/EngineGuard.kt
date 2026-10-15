@@ -7,7 +7,7 @@ import kg.forester.sg.ssm.TcuSnapshot
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** What the engine guard knows now; shown on the «Здоровье» screen and in cards. */
+/** What the engine guard knows now; shown on the «Мониторинг» screen and in cards. */
 data class GuardState(
     /** IAM, 0…1 (1 = full timing advance learned); null when this ECU/ROM has no IAM. */
     val iam: Float? = null,

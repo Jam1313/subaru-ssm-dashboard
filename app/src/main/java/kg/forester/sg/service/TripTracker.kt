@@ -19,10 +19,11 @@ object FuelCalc {
      */
     fun litersPerHour(s: EcuSnapshot, k: Double): Double {
         val rpm = s.rpm ?: return 0.0
-        val maf = s.mafGs ?: return 0.0
         if (rpm < 300) return 0.0
         val pw = s.injPwMs
         if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 // deceleration fuel cut
+        val maf = s.mafGs ?: return byInjectors(pw, rpm, k)
+        source = "maf"
         val measured = s.afr?.toDouble()
         val closedLoop = measured == null || measured in 13.5..16.0
         val fuelGs = if (closedLoop) {
@@ -34,6 +35,26 @@ object FuelCalc {
             maf / measured!!.coerceIn(10.0, 18.5)
         } * k
         return fuelGs * 3600.0 / GASOLINE_G_PER_L
+    }
+
+    /** How the last [litersPerHour] got its number: "maf", "inj" (no MAF, by the injectors) or "" (neither). */
+    @Volatile var source = ""
+        private set
+
+    /**
+     * For an ECU without a usable MAF (some early 2000s ones answer 0xFFFF there): four injectors, each firing
+     * once per two turns, open for the pulse width less the time they take to open, at a typical flow for the
+     * engine. The refills calibrate [k] as they do for the MAF way.
+     */
+    private fun byInjectors(pw: Float?, rpm: Int, k: Double): Double {
+        if (pw == null || pw !in 0.3f..40f) { source = ""; return 0.0 }
+        source = "inj"
+        val turbo = runCatching {
+            kg.forester.sg.data.Repo.guard.value.turbo || "turbo" in kg.forester.sg.data.Repo.settings.carSub.lowercase()
+        }.getOrDefault(false)
+        val ccPerMin = if (turbo) 380.0 else 260.0
+        val openMs = (pw - 0.6).coerceAtLeast(0.0)
+        return rpm * openMs * ccPerMin * 2e-6 * k
     }
 }
 

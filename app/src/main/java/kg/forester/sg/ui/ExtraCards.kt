@@ -317,7 +317,7 @@ fun TyresCard(info: String, m: Modifier) {
     val min = Repo.settings.tpmsMinBar
     Card(m, Lucide.Disc3, "Давление в шинах", info) {
         if (t.isEmpty()) {
-            T(if (Repo.settings.tpms) "ищу датчики…" else "включите в «Здоровье» → «Шины»", 12.sp, C.Sub,
+            T(if (Repo.settings.tpms) "ищу датчики…" else "включите в «Мониторинг» → «Шины»", 12.sp, C.Sub,
                 modifier = Modifier.align(Alignment.Center))
         } else Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
             listOf("FL" to "FR", "RL" to "RR").forEach { (a, b) ->
@@ -345,7 +345,7 @@ fun ServiceCard(info: String, m: Modifier) {
     Card(m, Lucide.Wrench, "Ближайшее ТО", info) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
             if (odo == null || next?.used(odo, now) == null) {
-                T("Введите пробег и даты в «Здоровье» → «ТО»", 12.sp, C.Sub, maxLines = 3)
+                T("Введите пробег и даты в «Мониторинг» → «ТО»", 12.sp, C.Sub, maxLines = 3)
             } else {
                 val km = next.kmLeft(odo)?.roundToInt()
                 val days = next.daysLeft(now)
