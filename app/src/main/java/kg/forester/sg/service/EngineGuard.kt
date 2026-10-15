@@ -38,6 +38,8 @@ data class GuardState(
 data class Peaks(
     val boostBar: Float? = null,
     val rpm: Int? = null,
+    val mafGs: Float? = null,
+    val loadGRev: Float? = null,
     val speedKmh: Int? = null,
     val intakeC: Int? = null,
     val coolantC: Int? = null,
@@ -290,6 +292,8 @@ class EngineGuard {
         val lean = e.afr?.takeIf { (e.gaugeKpa ?: 0f) > 30f }
         Repo.peaks.value = p.copy(
             boostBar = mx(p.boostBar, e.boostBar),
+            mafGs = mx(p.mafGs, e.mafGs),
+            loadGRev = mx(p.loadGRev, e.loadGRev),
             rpm = mxi(p.rpm, e.rpm),
             speedKmh = mxi(p.speedKmh, e.speedKmh),
             intakeC = mxi(p.intakeC, e.intakeC),

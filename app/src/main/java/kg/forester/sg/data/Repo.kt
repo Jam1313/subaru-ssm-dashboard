@@ -381,6 +381,11 @@ class Settings(ctx: Context) {
         get() = p.getInt("clusterSize", 1)
         set(v) { p.edit().putInt("clusterSize", v).apply(); Repo.clusterSize.value = v }
 
+    /** Interface colour theme (see ui.AccentTheme). */
+    var accentTheme: String
+        get() = p.getString("accentTheme", "violet")!!
+        set(v) { p.edit().putString("accentTheme", v).apply(); kg.forester.sg.ui.C.theme = kg.forester.sg.ui.AccentTheme.byId(v) }
+
     /** Gauge designs (see DialStyles), separately for the tachometer and the speedometer. */
     var tachStyle: String
         get() = p.getString("tachStyle", "neon")!!
@@ -401,7 +406,7 @@ class Settings(ctx: Context) {
         set(v) = p.edit().putBoolean("setupDone", v).apply()
 
     fun applyModel(m: CarModel) {
-        if (m.id != carModel) BoostScale.reset() // another car: its own boost
+        if (m.id != carModel) Scales.reset() // another car: its own boost, MAF and load
         carModel = m.id
         carTitle = m.title
         carSub = m.sub
@@ -410,7 +415,7 @@ class Settings(ctx: Context) {
         car3d = when (m.id) {
             "SG" -> "SG"
             "SH" -> "SHNA"
-            "GD" -> "GG"
+            "GD" -> "GD"
             "BL", "BH" -> "BM"
             else -> "SK"
         }
@@ -516,9 +521,10 @@ object Repo {
             tcuTiles.value = settings.board("tcuTiles")
             dialStyles.value = settings.tachStyle to settings.speedoStyle
             clusterSize.value = settings.clusterSize
+            kg.forester.sg.ui.C.theme = kg.forester.sg.ui.AccentTheme.byId(settings.accentTheme)
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled
             CustomGauges.init(ctx)
-            BoostScale.init(ctx)
+            Scales.init(ctx)
         }
     }
 

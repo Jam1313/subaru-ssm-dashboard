@@ -20,6 +20,7 @@ file_of() {  # (no associative arrays in the macOS bash 3.2)
     gv) echo subaru_impreza_wrx_sti_special_edition.glb ;;
     22b) echo 1998_subaru_impreza_22b_sti.glb ;;
     gc) echo subaru_impreza_coupe_wrx_type_r_sti.glb ;;
+    gd) echo generic_toyama_xr_sedan.glb ;;
   esac
 }
 # the SH model is built along X with the front at -X: its first frame needs the camera on the other side
@@ -34,7 +35,7 @@ pack_args() {
   esac
 }
 mkdir -p "$work"
-ids=${*:-"sg sgna sk grc bm va gg gv 22b gc shna"}
+ids=${*:-"sg sgna sk grc bm va gg gv 22b gc gd shna"}
 for id in $ids; do
   for mode in ${PASSES:-chameleon white mask}; do
     "$BLENDER" -b -P "$here/render_turntable.py" -- --model "$MODELS/$(file_of $id)" --fix "$id" $(render_args $id) \

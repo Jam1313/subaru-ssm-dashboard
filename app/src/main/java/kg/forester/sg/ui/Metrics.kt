@@ -5,7 +5,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.composables.icons.lucide.*
-import kg.forester.sg.data.BoostScale
+import kg.forester.sg.data.Scales
 import kg.forester.sg.data.GpsFix
 import kg.forester.sg.data.Repo
 import kg.forester.sg.data.TripState
@@ -65,11 +65,11 @@ object Metrics {
         Indicator("battery", "Напряжение", "Напряжение", Lucide.BatteryCharging, "В", "%.1f", 10f, 15f, "Двигатель", warnBelow = 12f) { it.e.batteryV },
         Indicator("throttle", "Дроссель", "Дроссель", Lucide.Disc, "%", "%.0f", 0f, 100f, "Двигатель") { it.e.throttlePct },
         Indicator("pedal", "Педаль газа", "Педаль", Lucide.ChevronsUp, "%", "%.0f", 0f, 100f, "Двигатель") { it.e.pedalPct },
-        Indicator("load", "Нагрузка", "Нагрузка", Lucide.Weight, "г/об", "%.2f", 0f, 3f, "Двигатель") { it.e.loadGRev },
+        Indicator("load", "Нагрузка", "Нагрузка", Lucide.Weight, "г/об", "%.2f", 0f, 2.5f, "Двигатель", maxNow = { Scales.load.top.value }) { it.e.loadGRev },
         Indicator("avcs", "AVCS", "AVCS", Lucide.Timer, "°", "%.0f", -10f, 50f, "Двигатель") { it.e.avcsDeg },
         Indicator("alt", "Генератор", "Генератор", Lucide.Activity, "%", "%.0f", 0f, 100f, "Двигатель") { it.e.altDutyPct },
         // fuel
-        Indicator("maf", "MAF", "MAF", Lucide.Wind, "г/с", "%.1f", 0f, 150f, "Топливо") { it.e.mafGs },
+        Indicator("maf", "MAF", "MAF", Lucide.Wind, "г/с", "%.1f", 0f, 150f, "Топливо", maxNow = { Scales.maf.top.value }) { it.e.mafGs },
         Indicator("inj", "Впрыск", "Впрыск", Lucide.Syringe, "мс", "%.2f", 0f, 20f, "Топливо") { it.e.injPwMs },
         Indicator("injDuty", "Загрузка форсунок", "Форсунки", Lucide.Percent, "%", "%.0f", 0f, 100f, "Топливо", warnAbove = 85f) { it.e.injDutyPct },
         Indicator("afr", "AFR", "AFR", Lucide.Flame, "", "%.1f", 10f, 20f, "Топливо") { it.e.afr },
@@ -90,10 +90,10 @@ object Metrics {
         Indicator("fbkc", "FBKC (откат)", "FBKC", Lucide.SquareActivity, "°", "%.1f", -8f, 0f, "Зажигание", warnBelow = -2f) { it.guard.fbkc },
         Indicator("flkc", "FLKC (обучение)", "FLKC", Lucide.Waves, "°", "%.1f", -8f, 0f, "Зажигание", warnBelow = -2f) { it.guard.flkc },
         // boost
-        Indicator("boost", "Наддув", "Наддув", Lucide.Fan, "бар", "%.2f", 0f, 1.2f, "Наддув", maxNow = { BoostScale.top.value }) { it.e.boostBar },
-        Indicator("gaugeKpa", "Наддув / разрежение", "Наддув", Lucide.CircleArrowUp, "кПа", "%.0f", -80f, 120f, "Наддув", maxNow = { BoostScale.topKpa }) { it.e.gaugeKpa },
-        Indicator("targetBoost", "Целевой наддув", "Цель", Lucide.Target, "кПа", "%.0f", 0f, 120f, "Наддув", maxNow = { BoostScale.topKpa }) { it.guard.targetBoostKpa },
-        Indicator("map", "Абс. давление", "Абс. давл.", Lucide.Gauge, "кПа", "%.0f", 20f, 220f, "Наддув", maxNow = { 100f + BoostScale.topKpa }) { it.e.mapKpa },
+        Indicator("boost", "Наддув", "Наддув", Lucide.Fan, "бар", "%.2f", 0f, 1.2f, "Наддув", maxNow = { Scales.boost.top.value }) { it.e.boostBar },
+        Indicator("gaugeKpa", "Наддув / разрежение", "Наддув", Lucide.CircleArrowUp, "кПа", "%.0f", -80f, 120f, "Наддув", maxNow = { Scales.boostKpa }) { it.e.gaugeKpa },
+        Indicator("targetBoost", "Целевой наддув", "Цель", Lucide.Target, "кПа", "%.0f", 0f, 120f, "Наддув", maxNow = { Scales.boostKpa }) { it.guard.targetBoostKpa },
+        Indicator("map", "Абс. давление", "Абс. давл.", Lucide.Gauge, "кПа", "%.0f", 20f, 220f, "Наддув", maxNow = { 100f + Scales.boostKpa }) { it.e.mapKpa },
         Indicator("atm", "Атм. давление", "Атм.", Lucide.Cloudy, "кПа", "%.0f", 70f, 105f, "Наддув") { it.e.atmKpa },
         Indicator("wgdc", "Wastegate", "Wastegate", Lucide.Tornado, "%", "%.0f", 0f, 100f, "Наддув") { it.e.wastegatePct },
         // transmission
@@ -140,6 +140,10 @@ fun rememberMetricCtx(): MetricCtx {
     return MetricCtx(e, t, trip, gps, guard, rr)
 }
 
-/** Top of the boost scales, bar: 1.2 for a stock turbo, wider once the car has pulled more. */
+/** Tops of the scales that grow with the car (see [Scales]): boost in bar, MAF in g/s, load in g/rev. */
 val boostTop: Float
-    @Composable get() = BoostScale.top.collectAsState().value
+    @Composable get() = Scales.boost.top.collectAsState().value
+val mafTop: Float
+    @Composable get() = Scales.maf.top.collectAsState().value
+val loadTop: Float
+    @Composable get() = Scales.load.top.collectAsState().value

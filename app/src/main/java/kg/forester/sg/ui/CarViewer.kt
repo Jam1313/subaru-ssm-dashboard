@@ -48,6 +48,7 @@ val CarModels3d = listOf(
     "BM" to "Legacy 2.5GT tS (BM9)",
     "VA" to "WRX STI 2018 (VA)",
     "GG" to "Impreza WRX Wagon (GG)",
+    "GD" to "Impreza WRX STI (GD)",
     "GV" to "Impreza WRX STI (GV)",
     "22B" to "Impreza 22B STi",
     "GC" to "Impreza Coupe WRX Type R (GC)",

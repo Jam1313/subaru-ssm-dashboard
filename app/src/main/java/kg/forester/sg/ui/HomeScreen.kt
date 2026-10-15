@@ -193,7 +193,7 @@ private fun HomeTile(
         "intake" -> BarCard(st, "home.$id", icon, title, e.intakeC?.toFloat(), -20f, 70f, "°C", "%.0f", m, warnAbove = 55f)
         "battery" -> BarCard(st, "home.$id", icon, title, e.batteryV, 10f, 15f, "В", "%.1f", m, warnBelow = 12f)
         "throttle" -> BarCard(st, "home.$id", icon, title, e.throttlePct, 0f, 100f, "%", "%.0f", m)
-        "maf" -> BarCard(st, "home.$id", icon, title, e.mafGs, 0f, 150f, "г/с", "%.1f", m)
+        "maf" -> BarCard(st, "home.$id", icon, title, e.mafGs, 0f, mafTop, "г/с", "%.1f", m)
         "afr" -> BarCard(st, "home.$id", icon, title, e.afr, 10f, 20f, "", "%.1f", m)
         "afcorr" -> BarCard(st, "home.$id", icon, title, e.afCorrPct, -25f, 25f, "%", "%+.1f", m, warnAbs = 15f)
         "aflearn" -> BarCard(st, "home.$id", icon, title, e.afLearnPct, -25f, 25f, "%", "%+.1f", m, warnAbs = 10f)

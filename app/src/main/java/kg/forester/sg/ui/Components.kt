@@ -26,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.composables.icons.lucide.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,21 +50,40 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.cos
 import kotlin.math.sin
 
+/**
+ * Interface colour themes, like the dash lighting of the cars: [main] is the highlight colour (C.Violet),
+ * [deep] the selection (C.Purple), [second] the other end of the accent gradient. Ids are stored in the settings.
+ */
+enum class AccentTheme(val id: String, val title: String, val main: Color, val deep: Color, val second: Color) {
+    VIOLET("violet", "Фиолетовый", Color(0xFFA855F7), Color(0xFF8B5CF6), Color(0xFF3B82F6)),
+    GREEN("green", "Зелёный", Color(0xFF4ADE80), Color(0xFF16A34A), Color(0xFF0D9488)),
+    RED("red", "Красный", Color(0xFFFF4D5E), Color(0xFFE11D48), Color(0xFFF97316)),
+    BLUE("blue", "Синий", Color(0xFF60A5FA), Color(0xFF2563EB), Color(0xFF06B6D4)),
+    ORANGE("orange", "Оранжевый", Color(0xFFFB923C), Color(0xFFEA580C), Color(0xFFE11D48));
+
+    companion object {
+        fun byId(id: String?) = entries.firstOrNull { it.id == id } ?: VIOLET
+    }
+}
+
 object C {
+    /** The chosen [AccentTheme]; Compose state, so everything drawn in the accent colours follows a change. */
+    var theme by mutableStateOf(AccentTheme.VIOLET)
+
     val Bg = Color(0xFF080A12)
     val Card = Color(0xFF111522)
     val CardHi = Color(0xFF181D2E)
     val Border = Color(0xFF232A40)
     val Text = Color(0xFFEDEFF5)
     val Sub = Color(0xFF8E95AB)
-    val Purple = Color(0xFF8B5CF6)
-    val Violet = Color(0xFFA855F7)
+    val Purple: Color get() = theme.deep
+    val Violet: Color get() = theme.main
     val Blue = Color(0xFF3B82F6)
     val Green = Color(0xFF22C55E)
     val Orange = Color(0xFFF59E0B)
     val Red = Color(0xFFEF4444)
     val Gray = Color(0xFF64748B)
-    val Accent = Brush.horizontalGradient(listOf(Blue, Violet))
+    val Accent: Brush get() = Brush.horizontalGradient(listOf(theme.second, theme.main))
 }
 
 val Rounded = RoundedCornerShape(14.dp)

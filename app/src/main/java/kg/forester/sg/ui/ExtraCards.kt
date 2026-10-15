@@ -242,6 +242,8 @@ fun PeaksCard(info: String, m: Modifier) {
         }
         val rows = listOfNotNull(
             p.boostBar?.let { "наддув" to "%.2f бар".format(it) },
+            p.mafGs?.let { "MAF" to "%.0f г/с".format(it) },
+            p.loadGRev?.let { "нагрузка" to "%.2f г/об".format(it) },
             p.rpm?.let { "обороты" to "$it" },
             p.speedKmh?.let { "скорость" to "$it км/ч" },
             p.intakeC?.let { "впуск" to "$it°" },

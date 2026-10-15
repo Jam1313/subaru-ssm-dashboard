@@ -282,7 +282,10 @@ private val PhotoStyle = DialStyle(
 fun dialStyle(id: String): DialStyle = when {
     id.startsWith("photo:") -> PhotoStyle.copy(id = id, image = id.removePrefix("photo:"))
     id.startsWith("custom:") -> kg.forester.sg.data.CustomGauges.byStyleId(id)?.toStyle() ?: DialStyles.first()
-    else -> DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()
+    else -> (DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()).let { st ->
+        // the default design is drawn in the interface colours, so it follows the chosen theme
+        if (st.id == "neon") st.copy(arc = listOf(C.theme.second, C.Violet, C.Purple, C.theme.second)) else st
+    }
 }
 
 private val SegmentFont = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(kg.forester.sg.R.font.dseg7_bold_italic))

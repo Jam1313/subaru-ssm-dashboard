@@ -953,6 +953,19 @@ def fix_gc_model():
                       tinted_glass())
 
 
+def fix_gd_model():
+    """'Generic Toyama XR Sedan', an Impreza GD look-alike (2003-05 front): metres, front at -Y. A ground
+    shadow card sits under the car; the rear plate is part of the shared 'Textures' atlas."""
+    FIX_PAINT["gd"] = ["Body_Paint"]
+    drop_objects(lambda o: "Shadow" in mat_names(o))
+    normalise(None)
+    replace_materials(["Body_Glass"], tinted_glass())
+    # one tailpipe, on the right under the bumper
+    exhausts_from_faces(in_box(faces_where(by_mat("Body_Chrome")), y0=1.9, z1=0.4))
+    plate_on_surface("PlateFront", 0.36, -1)  # flat recess in the lower bumper
+    plate_on_surface("PlateRear", 0.53, 1)  # over the model's own plate
+
+
 def flatten_bulge(obj_names, x0, x1, y0, y1, ring=0.16, feather=0.08, other_drop=True, patch_mat=None):
     """Remove a bonnet scoop that is modelled into the bonnet mesh: fit a smooth (quadratic) surface to the
     bonnet top around the box [x0..x1] x [y0..y1] (world, z up), pull every bonnet vertex in the box down/up
@@ -1084,7 +1097,7 @@ def fix_shna_model():
 
 
 FIXES = {"sk": fix_sk_model, "grc": fix_grc_model, "bm": fix_bm_model, "va": fix_va_model, "gg": fix_gg_model,
-         "gv": fix_gv_model, "22b": fix_22b_model, "gc": fix_gc_model, "shna": fix_shna_model,
+         "gv": fix_gv_model, "22b": fix_22b_model, "gc": fix_gc_model, "gd": fix_gd_model, "shna": fix_shna_model,
          "sg": fix_sg_model, "sgna": fix_sgna_model}
 
 if args.fix == 'sh':

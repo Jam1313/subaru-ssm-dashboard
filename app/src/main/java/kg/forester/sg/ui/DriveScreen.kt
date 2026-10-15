@@ -112,7 +112,7 @@ fun DriveScreen() {
             "throttle" -> Mini(Lucide.Disc, "Дроссель", e.throttlePct, 0f, 100f, "%", "%.0f")
             "boost" -> Mini(Lucide.Fan, "Наддув", e.boostBar, 0f, boostTop, "бар", "%.2f",
                 sub = e.vacuumKpa?.takeIf { it > 1f }?.let { "разрежение %.0f кПа".format(it) })
-            "load" -> Mini(Lucide.Activity, "Нагрузка", e.loadGRev, 0f, 2.5f, "г/об", "%.2f")
+            "load" -> Mini(Lucide.Activity, "Нагрузка", e.loadGRev, 0f, loadTop, "г/об", "%.2f")
             "rpm" -> Mini(Lucide.Gauge, "Обороты", e.rpm?.toFloat(), 0f, 7000f, "об/мин", "%.0f", red = 6000f)
             "knock" -> KnockCard(knock, e.knockDeg, m)
             "chartPedal" -> Chart(
@@ -133,10 +133,10 @@ fun DriveScreen() {
                 listOf(Series("коррекция", h.map { it.afCorrPct }, C.Orange), Series("обучение", h.map { it.afLearnPct }, C.Blue)),
                 -25f, 25f, "%.0f", zero = true,
             )
-            "chartMaf" -> Chart("MAF, г/с", listOf(Series("MAF", h.map { it.mafGs }, C.Blue)), 0f, 150f, "%.0f")
+            "chartMaf" -> Chart("MAF, г/с", listOf(Series("MAF", h.map { it.mafGs }, C.Blue)), 0f, mafTop, "%.0f")
             "avcs" -> Small(Lucide.RefreshCw, "AVCS (впуск)", e.avcsDeg, -10f, 50f, "°", "%.0f")
             "injDuty" -> Small(Lucide.Droplets, "Загрузка форсунок", e.injDutyPct, 0f, 100f, "%", "%.0f")
-            "maf" -> Small(Lucide.Wind, "MAF", e.mafGs, 0f, 150f, "г/с", "%.1f")
+            "maf" -> Small(Lucide.Wind, "MAF", e.mafGs, 0f, mafTop, "г/с", "%.1f")
             "throttleMotor" -> Small(Lucide.Cog, "Привод дросселя", e.throttleMotorPct, -100f, 100f, "%", "%.0f")
             "wgdc" -> Small(Lucide.Wind, "Wastegate", e.wastegatePct, 0f, 100f, "%", "%.0f")
             "pressure" -> Tile(Lucide.Gauge, "Абс. давление", "${fmtF(e.mapKpa, 0)} / ${fmtF(e.atmKpa, 0)}", "кПа", m, info)
