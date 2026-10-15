@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -61,7 +62,7 @@ internal fun SoundDialog(onClose: () -> Unit) {
         Column(
             Modifier.width(900.dp).heightIn(max = 600.dp).clip(RoundedCornerShape(20.dp))
                 .background(C.Card).background(Brush.verticalGradient(listOf(C.Violet.copy(alpha = 0.14f), C.Card, C.Card)))
-                .border(1.dp, C.Border, RoundedCornerShape(20.dp)).padding(20.dp),
+                .border(1.dp, C.Border, RoundedCornerShape(20.dp)).verticalScroll(rememberScrollState()).padding(20.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T("Звук", 20.sp, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -97,6 +98,15 @@ internal fun SoundDialog(onClose: () -> Unit) {
                     "Громче на трассе, тише в пробке: до +6 дБ к 130 км/ч" + if (AudioFx.speedBoostDb > 0) " · сейчас +%.1f".format(AudioFx.speedBoostDb) else "",
                     cfg.speedVolume) { on -> AudioFx.update { it.copy(speedVolume = on) } }
                 Toggle("Плавное начало", "Музыка нарастает за секунду, без удара по ушам", cfg.fadeIn) { on -> AudioFx.update { it.copy(fadeIn = on) } }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                T("Визуализация:", 14.sp, C.Sub)
+                listOf("bars" to "Полосы", "wave" to "Волна", "off" to "Без неё").forEach { (id, name) ->
+                    Pill(name, null, cfg.vis == id, 38.dp) { AudioFx.update { it.copy(vis = id) } }
+                }
+                Spacer(Modifier.width(8.dp))
+                Pill("Кольцо вокруг обложки", Lucide.CircleDashed, cfg.ring, 38.dp) { AudioFx.update { it.copy(ring = !cfg.ring) } }
             }
         }
     }

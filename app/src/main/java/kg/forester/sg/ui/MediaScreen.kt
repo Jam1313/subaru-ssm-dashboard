@@ -282,21 +282,65 @@ internal fun Hero(
     }
 }
 
-/** A cover with a glow behind it that breathes with the bass while the music plays. */
+/**
+ * The music's levels, [AudioFx.BARS] bands, bass first: from the player's own output when the unit lets the app
+ * listen to it, else a calm made-up movement while it plays (Bluetooth, other apps), still when paused.
+ */
+@Composable
+internal fun rememberLevels(playing: Boolean): FloatArray {
+    val live by AudioFx.live.collectAsState()
+    val levels by AudioFx.spectrum.collectAsState()
+    val t = rememberInfiniteTransition(label = "wave")
+    val phase by t.animateFloat(0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "phase")
+    val n = AudioFx.BARS
+    return when {
+        !playing -> FloatArray(n) { 0.04f }
+        live -> levels
+        else -> FloatArray(n) { i ->
+            ((0.38f + 0.22f * sin(phase + i * 0.45f) + 0.14f * sin(phase * 2 - i * 0.8f) + 0.08f * sin(phase * 3 + i * 1.3f))
+                * (1f - i / (n * 1.5f))).coerceIn(0.04f, 1f)
+        }
+    }
+}
+
+/**
+ * The cover with a glow that breathes with the bass and, when chosen in «Звук», rays round it that move with
+ * the music (like a CircleLine visualizer).
+ */
 @Composable
 internal fun GlowCover(art: Bitmap?, placeholder: ImageVector, playing: Boolean, modifier: Modifier, whiteBack: Boolean = false) {
-    val levels by AudioFx.spectrum.collectAsState()
-    val live by AudioFx.live.collectAsState()
-    val bass = if (playing && live) levels.take(4).average().toFloat() else if (playing) 0.25f else 0f
+    val cfg by AudioFx.cfg.collectAsState()
+    val lv = rememberLevels(playing)
+    val bass = if (playing) lv.take(5).average().toFloat() else 0f
     val glow by animateFloatAsState(bass, tween(140), label = "glow")
-    val violet = C.Violet
+    val main = C.Violet
+    val second = C.theme.second
+    val ring = cfg.ring && cfg.vis != "off"
     Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize().scale(1.14f + glow * 0.10f)) {
-            drawCircle(Brush.radialGradient(listOf(violet.copy(alpha = 0.22f + glow * 0.4f), Color.Transparent)), size.minDimension / 2)
+        Canvas(Modifier.fillMaxSize()) {
+            val c = center
+            val s = size.minDimension
+            drawCircle(Brush.radialGradient(listOf(main.copy(alpha = 0.20f + glow * 0.40f), Color.Transparent), c, s * (0.55f + glow * 0.08f)), s * (0.55f + glow * 0.08f), c)
+            if (ring) {
+                val rays = 96
+                val r0 = s * 0.44f
+                for (k in 0 until rays) {
+                    val a = (k.toFloat() / rays) * 2 * Math.PI.toFloat() - Math.PI.toFloat() / 2
+                    // mirrored left and right, bass at the bottom
+                    val half = abs(((k.toFloat() / rays) * 2f) - 1f)
+                    val band = ((1f - half) * (lv.size - 1)).toInt().coerceIn(0, lv.size - 1)
+                    val v = lv[band]
+                    val len = s * (0.025f + v * 0.11f)
+                    val dx = kotlin.math.cos(a); val dy = kotlin.math.sin(a)
+                    val col = androidx.compose.ui.graphics.lerp(second, main, half)
+                    drawLine(col.copy(alpha = 0.35f + v * 0.6f), Offset(c.x + dx * r0, c.y + dy * r0), Offset(c.x + dx * (r0 + len), c.y + dy * (r0 + len)),
+                        strokeWidth = s * 0.012f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                }
+            }
         }
         val shape = RoundedCornerShape(20.dp)
         Box(
-            Modifier.fillMaxSize(0.92f).scale(1f + glow * 0.02f).clip(shape)
+            Modifier.fillMaxSize(if (ring) 0.80f else 0.92f).scale(1f + glow * 0.02f).clip(shape)
                 .background(if (whiteBack && art != null) Brush.verticalGradient(listOf(Color.White, Color.White))
                     else Brush.linearGradient(listOf(C.Violet.copy(alpha = 0.6f), C.Purple.copy(alpha = 0.4f), C.CardHi)))
                 .border(1.dp, Color.White.copy(alpha = 0.12f), shape),
@@ -330,33 +374,72 @@ internal fun ColumnScope.TrackInfo(kicker: String, title: String, artist: String
     }
 }
 
-/**
- * Bars over the frequencies, bass on the left: the music's own spectrum when the unit lets the app listen to its
- * output (the microphone permission the voice already has), else a calm wave that moves while it plays.
- */
+/** The picture of the music under the cover, in the style chosen in «Звук»: bars with falling peaks or a wave. */
 @Composable
 internal fun Spectrum(playing: Boolean, modifier: Modifier) {
-    val live by AudioFx.live.collectAsState()
-    val levels by AudioFx.spectrum.collectAsState()
-    val t = rememberInfiniteTransition(label = "wave")
-    val phase by t.animateFloat(0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "phase")
+    val cfg by AudioFx.cfg.collectAsState()
+    val lv = rememberLevels(playing)
+    when (cfg.vis) {
+        "off" -> Spacer(modifier)
+        "wave" -> WaveVis(lv, modifier)
+        else -> BarsVis(lv, modifier)
+    }
+}
+
+/** Bars with a cap that floats at the peak and sinks slowly (the classic stereo look), and their reflection. */
+@Composable
+private fun BarsVis(lv: FloatArray, modifier: Modifier) {
+    val peaks = remember { FloatArray(AudioFx.BARS) }
     val main = C.Violet
     val second = C.theme.second
     Canvas(modifier) {
-        val n = AudioFx.BARS
-        val gap = size.width / n * 0.30f
+        val n = lv.size
+        val base = size.height * 0.78f
+        val gap = size.width / n * 0.28f
         val w = size.width / n - gap
         for (i in 0 until n) {
-            val v = when {
-                !playing -> 0.05f
-                live -> levels[i].coerceAtLeast(0.04f)
-                else -> (0.35f + 0.25f * sin(phase + i * 0.55f) + 0.15f * sin(phase * 2 - i * 0.9f)).coerceIn(0.05f, 1f) * (1f - i / (n * 1.6f))
-            }
-            val h = size.height * v
+            val v = lv[i].coerceIn(0f, 1f)
+            peaks[i] = maxOf(v, peaks[i] - 0.012f)
+            val h = (base - 6f) * v
             val x = i * (w + gap) + gap / 2
-            drawRoundRect(Brush.verticalGradient(listOf(main, second.copy(alpha = 0.5f)), startY = size.height - h, endY = size.height),
-                Offset(x, size.height - h), Size(w, h), CornerRadius(w / 2, w / 2))
+            drawRoundRect(Brush.verticalGradient(listOf(main, second.copy(alpha = 0.55f)), startY = base - h, endY = base),
+                Offset(x, base - h), Size(w, h), CornerRadius(w / 3, w / 3))
+            // the reflection on a glossy floor
+            drawRoundRect(Brush.verticalGradient(listOf(main.copy(alpha = 0.22f), Color.Transparent), startY = base + 2f, endY = base + 2f + h * 0.28f),
+                Offset(x, base + 2f), Size(w, h * 0.28f), CornerRadius(w / 3, w / 3))
+            val py = base - 6f - (base - 6f) * peaks[i] - 4f
+            drawRoundRect(Color.White.copy(alpha = 0.85f), Offset(x, py), Size(w, 3.5f), CornerRadius(2f, 2f))
         }
+    }
+}
+
+/** A smooth curve mirrored over the middle line, filled and glowing. */
+@Composable
+private fun WaveVis(lv: FloatArray, modifier: Modifier) {
+    val main = C.Violet
+    val second = C.theme.second
+    Canvas(modifier) {
+        val n = lv.size
+        val mid = size.height / 2
+        fun pts(sign: Float) = List(n) { i ->
+            Offset(size.width * i / (n - 1), mid - sign * (mid - 2f) * lv[i].coerceIn(0.03f, 1f))
+        }
+        fun path(p: List<Offset>) = androidx.compose.ui.graphics.Path().apply {
+            moveTo(p[0].x, p[0].y)
+            for (i in 1 until p.size) { val a = p[i - 1]; val b = p[i]; val mx = (a.x + b.x) / 2; cubicTo(mx, a.y, mx, b.y, b.x, b.y) }
+        }
+        val top = pts(1f)
+        val bottom = pts(-1f)
+        val fill = path(top).apply {
+            lineTo(bottom.last().x, bottom.last().y)
+            for (i in bottom.size - 2 downTo 0) { val a = bottom[i + 1]; val b = bottom[i]; val mx = (a.x + b.x) / 2; cubicTo(mx, a.y, mx, b.y, b.x, b.y) }
+            close()
+        }
+        drawPath(fill, Brush.verticalGradient(listOf(main.copy(alpha = 0.10f), main.copy(alpha = 0.45f), main.copy(alpha = 0.10f))))
+        val edge = Brush.horizontalGradient(listOf(second, main, second))
+        drawPath(path(top), edge, style = androidx.compose.ui.graphics.drawscope.Stroke(8f), alpha = 0.25f)
+        drawPath(path(top), edge, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
+        drawPath(path(bottom), edge, style = androidx.compose.ui.graphics.drawscope.Stroke(3f), alpha = 0.6f)
     }
 }
 
@@ -482,7 +565,7 @@ internal fun ColumnScope.OwnMiddle(st: LocalMusic.State, pos: Long, onSeek: ((Lo
         if (canListen) AudioFx.startSpectrum(st.audioSession)
         onDispose { AudioFx.stopSpectrum() }
     }
-    Spectrum(st.playing, Modifier.fillMaxWidth().height(44.dp))
+    Spectrum(st.playing, Modifier.fillMaxWidth().height(56.dp))
     Spacer(Modifier.height(4.dp))
     if (!live) SeekBar(pos, st.durMs, onSeek)
     else Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {

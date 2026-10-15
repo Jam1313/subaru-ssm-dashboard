@@ -32,6 +32,10 @@ object AudioFx {
         val loud: Float = 0f,
         val speedVolume: Boolean = true,
         val fadeIn: Boolean = true,
+        /** The picture of the music: "bars" (with falling peaks), "wave" (a mirrored curve), "off". */
+        val vis: String = "bars",
+        /** Rays round the cover that move with the music. */
+        val ring: Boolean = true,
     )
 
     /** Gains (dB) at 60, 230, 910, 3600, 14000 Hz; other band layouts get them interpolated. */
@@ -74,6 +78,7 @@ object AudioFx {
                 bass = o.optDouble("bass", 0.3).toFloat(), surround = o.optDouble("surround", 0.0).toFloat(),
                 loud = o.optDouble("loud", 0.0).toFloat(), speedVolume = o.optBoolean("speedVolume", true),
                 fadeIn = o.optBoolean("fadeIn", true),
+                vis = o.optString("vis", "bars"), ring = o.optBoolean("ring", true),
             )
         }
     }
@@ -83,7 +88,7 @@ object AudioFx {
         appCtx?.getSharedPreferences("music", Context.MODE_PRIVATE)?.edit()?.putString("fx", JSONObject().apply {
             put("preset", c.preset); put("bands", JSONArray(c.bands)); put("bass", c.bass.toDouble())
             put("surround", c.surround.toDouble()); put("loud", c.loud.toDouble())
-            put("speedVolume", c.speedVolume); put("fadeIn", c.fadeIn)
+            put("speedVolume", c.speedVolume); put("fadeIn", c.fadeIn); put("vis", c.vis); put("ring", c.ring)
         }.toString())?.apply()
     }
 
@@ -171,7 +176,7 @@ object AudioFx {
     // --- spectrum for the screen ------------------------------------------------------------------------
 
     /** 0..1 levels of [BARS] log-spaced bands, smoothed, while the screen shows them. */
-    const val BARS = 28
+    const val BARS = 40
     val spectrum = MutableStateFlow(FloatArray(BARS))
     /** True when the levels come from the music itself (Visualizer allowed), else the screen animates on its own. */
     val live = MutableStateFlow(false)
