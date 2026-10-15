@@ -37,6 +37,12 @@ object Voice {
     val lastHeard = MutableStateFlow("")
     val toast = MutableStateFlow<Pair<Long, String>?>(null)
     val navigate = MutableStateFlow<Pair<Long, VoiceTarget>?>(null)
+    /** True from the moment the name is heard until the command is done: the screen shows the listening orb. */
+    val listening = MutableStateFlow(false)
+    /** Loudness of the microphone, 0..1, for the orb to move with the voice. */
+    val level = MutableStateFlow(0f)
+    /** What is being said right now (the recogniser's partial text), shown under the orb. */
+    val partial = MutableStateFlow("")
 
     private var service: Thread? = null
     @Volatile private var running = false
@@ -139,7 +145,13 @@ object Voice {
                 if (g != 1f) for (i in 0 until n) {
                     buf[i] = (buf[i] * g).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
                 }
+                // how loud: the orb follows the voice
+                var sum = 0.0
+                for (i in 0 until n) sum += buf[i].toDouble() * buf[i]
+                val rms = kotlin.math.sqrt(sum / n) / 32768.0
+                level.value = (kotlin.math.log10(rms.coerceAtLeast(1e-4)) / 2.5 + 1.6).toFloat().coerceIn(0f, 1f)
                 if (rec.acceptWaveForm(buf, n)) handle(rec.result)
+                else onPartial(rec.partialResult)
             }
         } catch (e: Exception) {
             status.value = "ошибка микрофона: ${e.message}"
@@ -149,6 +161,32 @@ object Voice {
     }
 
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** The name heard in the middle of a phrase: show that it listens before the phrase is over. */
+    private fun onPartial(json: String?) {
+        val text = runCatching { JSONObject(json ?: "").optString("partial") }.getOrDefault("").trim().lowercase()
+        if (text.isEmpty()) return
+        val words = text.split(" ").filter { it.isNotBlank() }
+        val at = Commands.wakeEnd(words, wakeWord(app))
+        val armed = SystemClock.elapsedRealtime() < armedUntil
+        if (at >= 0 || armed) {
+            main.post {
+                listening.value = true
+                partial.value = if (at >= 0) words.drop(at).joinToString(" ") else text
+                main.removeCallbacks(stopListening)
+                main.postDelayed(stopListening, 8000)
+            }
+        }
+    }
+
+    private val stopListening = Runnable { listening.value = false; partial.value = "" }
+
+    /** The orb stays a moment after the command, with what was understood, then goes. */
+    private fun doneListening(text: String) {
+        partial.value = text
+        main.removeCallbacks(stopListening)
+        main.postDelayed(stopListening, 1400)
+    }
 
     private fun handle(json: String?) = main.post { handleOnMain(json) }
 
@@ -168,11 +206,17 @@ object Voice {
         }
         if (command.isBlank()) {
             armedUntil = now + 6000
+            listening.value = true
+            partial.value = ""
+            main.removeCallbacks(stopListening)
+            main.postDelayed(stopListening, 6000)
             beep()
             say("Слушаю…")
             return
         }
         armedUntil = 0
+        listening.value = true
+        doneListening(command)
         execute(command)
     }
 

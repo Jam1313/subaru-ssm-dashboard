@@ -32,8 +32,8 @@ object AudioFx {
         val loud: Float = 0f,
         val speedVolume: Boolean = true,
         val fadeIn: Boolean = true,
-        /** The picture of the music: "bars" (with falling peaks), "wave" (a mirrored curve), "off". */
-        val vis: String = "bars",
+        /** A strip under the cover: "bars" (with falling peaks), "wave" (a mirrored curve), "off" (the default). */
+        val vis: String = "off",
         /** Rays round the cover that move with the music. */
         val ring: Boolean = true,
     )
@@ -78,7 +78,7 @@ object AudioFx {
                 bass = o.optDouble("bass", 0.3).toFloat(), surround = o.optDouble("surround", 0.0).toFloat(),
                 loud = o.optDouble("loud", 0.0).toFloat(), speedVolume = o.optBoolean("speedVolume", true),
                 fadeIn = o.optBoolean("fadeIn", true),
-                vis = o.optString("vis", "bars"), ring = o.optBoolean("ring", true),
+                vis = o.optString("strip", "off"), ring = o.optBoolean("ring", true),
             )
         }
     }
@@ -88,7 +88,7 @@ object AudioFx {
         appCtx?.getSharedPreferences("music", Context.MODE_PRIVATE)?.edit()?.putString("fx", JSONObject().apply {
             put("preset", c.preset); put("bands", JSONArray(c.bands)); put("bass", c.bass.toDouble())
             put("surround", c.surround.toDouble()); put("loud", c.loud.toDouble())
-            put("speedVolume", c.speedVolume); put("fadeIn", c.fadeIn); put("vis", c.vis); put("ring", c.ring)
+            put("speedVolume", c.speedVolume); put("fadeIn", c.fadeIn); put("strip", c.vis); put("ring", c.ring)
         }.toString())?.apply()
     }
 

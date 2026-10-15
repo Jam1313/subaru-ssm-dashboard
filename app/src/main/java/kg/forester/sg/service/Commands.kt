@@ -1,5 +1,7 @@
 package kg.forester.sg.service
 
+import kotlin.math.abs
+
 /*
  * Russian voice commands: the text Vosk heard (after the wake word) → what to do.
  * Pure Kotlin, no Android, so it can be tested on the desktop; Voice.kt maps the result to actions.
@@ -113,6 +115,62 @@ object Commands {
         "срочно", "короче", "типа", "блин", "уже", "быстренько", "быстро",
     )
 
+    /**
+     * Street words → the words the rules know, so the meaning gets through: "включи музло" is "включи музыку",
+     * "выруби" is "выключи", "погнали на хату" is "поехали домой".
+     */
+    private val SLANG = mapOf(
+        "музло" to "музыку", "музон" to "музыку", "музончик" to "музыку", "музыченьку" to "музыку", "музычку" to "музыку",
+        "музяку" to "музыку", "музыкой" to "музыку", "мьюзик" to "музыку", "музла" to "музыки", "музона" to "музыки",
+        "песенку" to "песню", "песенки" to "песни", "трэчок" to "трек", "трекан" to "трек", "трекос" to "трек",
+        "врубай" to "включи", "врубани" to "включи", "вруби" to "включи", "врубить" to "включи", "запили" to "включи",
+        "запуляй" to "включи", "заводи" to "включи", "зарядь" to "включи", "газуй" to "включи",
+        "выруби" to "выключи", "вырубай" to "выключи", "вырубить" to "выключи", "туши" to "выключи", "потуши" to "выключи",
+        "глуши" to "выключи", "заглохни" to "пауза", "тормозни" to "пауза", "стопни" to "пауза", "стопэ" to "пауза",
+        "скипни" to "следующую", "скипай" to "следующую", "скипнуть" to "следующую", "перекинь" to "следующую",
+        "листани" to "следующую", "перелистни" to "следующую", "мотни" to "следующую",
+        "радиво" to "радио", "радиву" to "радио", "радейку" to "радио", "радиоху" to "радио", "радивочку" to "радио", "радиоточку" to "радио",
+        "погнали" to "поехали", "погнал" to "поехали", "гоним" to "поехали", "двинули" to "поехали", "валим" to "поехали", "рванули" to "поехали",
+        "хату" to "домой", "хате" to "домой", "хаты" to "домой", "домик" to "домой", "хаус" to "домой",
+        "бенз" to "бензин", "бенза" to "бензина", "заправон" to "заправку", "заправочку" to "заправку", "запраку" to "заправку",
+        "навик" to "навигатор", "навигашку" to "навигатор", "навигашка" to "навигатор",
+        "громчей" to "громче", "громчее" to "громче", "погромчей" to "громче", "тишей" to "тише", "потишей" to "тише",
+    )
+
+    /**
+     * Whole phrases that mean a plain command (what was meant, not what was said). Checked by stems, in order;
+     * the first that fits replaces the phrase.
+     */
+    private val MEANINGS = listOf(
+        listOf("скучн") to "включи музыку",
+        listOf("=тишина") to "включи музыку",
+        listOf("хочу", "музык") to "включи музыку",
+        listOf("что", "нибудь", "послуша") to "включи музыку",
+        listOf("надоел") to "следующая",
+        listOf("=не", "то") to "следующая",
+        listOf("друг", "песн") to "следующая",
+        listOf("уши", "вян") to "тише",
+        listOf("оглох") to "тише",
+        listOf("орет") to "тише",
+        listOf("=ору") to "тише",
+        listOf("не", "слыш") to "громче",
+        listOf("еле", "слыш") to "громче",
+        listOf("кушать") to "хочу есть",
+        listOf("голод") to "хочу есть",
+        listOf("перекус") to "хочу есть",
+        listOf("бензин", "кончает") to "найди ближайшую заправку",
+        listOf("заправ", "надо") to "найди ближайшую заправку",
+        listOf("горит", "лампочк") to "покажи ошибки",
+        listOf("загорел", "чек") to "покажи ошибки",
+    )
+
+    private fun meaning(words: List<String>): String? = MEANINGS.firstOrNull { (stems, _) ->
+        stems.all { st -> words.any { stemOk(it, st) } }
+    }?.second?.takeIf { _ ->
+        // only when the phrase isn't already a command of its own kind (a song name with "надоел" in it…)
+        words.none { it in PLAY_VERBS } || words.size <= 3
+    }
+
     /** Lower case, ё→е, no punctuation, abbreviations joined, fillers removed; "" if nothing is left. */
     fun normalize(text: String): String {
         var s = text.lowercase().replace('ё', 'е').replace('-', ' ')
@@ -122,7 +180,7 @@ object Commands {
         for ((a, b) in SPELLINGS) s = s.replace(a, b)
         s = " " + s.split(' ').filter { it.isNotBlank() }.joinToString(" ") + " "
         for ((a, b) in JOINS) s = s.replace(" $a ", " $b ")
-        return s.split(' ').filter { it.isNotBlank() && it !in FILLERS }.joinToString(" ")
+        return s.split(' ').filter { it.isNotBlank() && it !in FILLERS }.map { SLANG[it] ?: it }.joinToString(" ")
     }
 
     // --- word helpers ----------------------------------------------------------------------------
@@ -421,8 +479,31 @@ object Commands {
         val t = normalize(text)
         if (t.isEmpty()) return null
         val w = t.split(' ')
-        return (dialog(w) ?: navigation(w) ?: volume(w) ?: radio(w) ?: media(w) ?: readValue(w) ?: screen(w) ?: openApp(w))
-            ?.copy(text = t)
+        // what the phrase means, when it is said in other words
+        meaning(w)?.let { m -> return rules(m.split(' '))?.copy(text = t) }
+        rules(w)?.let { return it.copy(text = t) }
+        // a word the recogniser got slightly wrong ("громкасть", "следущую"): the nearest known word, then once more
+        val fixed = w.map { correct(it) }
+        if (fixed != w) rules(fixed)?.let { return it.copy(text = t) }
+        return null
+    }
+
+    private fun rules(w: List<String>): VoiceCommand? =
+        dialog(w) ?: navigation(w) ?: volume(w) ?: radio(w) ?: media(w) ?: readValue(w) ?: screen(w) ?: openApp(w)
+
+    /** The words commands are made of, for [correct]. */
+    private val VOCAB by lazy { (listOf(
+        "включи", "выключи", "следующую", "следующая", "предыдущую", "пауза", "продолжи", "громче", "тише", "громкость", "звук",
+        "радио", "станцию", "частоту", "музыку", "песню", "трек", "перемешай", "повтори", "заправку", "маршрут", "поехали",
+        "домой", "работу", "навигатор", "пробки", "температура", "бензина", "напряжение", "расход", "коробка", "аккумулятор",
+        "ошибки", "открой", "покажи", "главную", "блютуз", "флешку", "избранное", "плейлист", "альбом", "исполнителя", "отмена",
+    ) + PLAY_VERBS + OPEN_VERBS).toSet() }
+
+    private fun correct(word: String): String {
+        if (word.length < 5 || word in VOCAB || word.any { it.isDigit() }) return word
+        val max = if (word.length >= 8) 2 else 1
+        return VOCAB.filter { it[0] == word[0] && abs(it.length - word.length) <= max }
+            .map { it to levenshtein(it, word) }.filter { it.second <= max }.minByOrNull { it.second }?.first ?: word
     }
 
     private fun cmd(i: VoiceIntent, query: String? = null, target: String? = null, number: Int? = null) =
@@ -958,6 +1039,20 @@ object Commands {
         Case("ничего не надо", VoiceIntent.CANCEL),
         Case("что ты умеешь", VoiceIntent.HELP),
         Case("включи кондиционер", VoiceIntent.UNSUPPORTED, target = "climate"),
+        // the meaning, said in other words
+        Case("включи музло", VoiceIntent.PLAY),
+        Case("врубай музон", VoiceIntent.PLAY),
+        Case("мне скучно", VoiceIntent.PLAY),
+        Case("выруби музыку", VoiceIntent.PAUSE),
+        Case("скипни", VoiceIntent.NEXT),
+        Case("надоела эта песня", VoiceIntent.NEXT),
+        Case("уши вянут", VoiceIntent.VOLUME_DOWN),
+        Case("еле слышно", VoiceIntent.VOLUME_UP),
+        Case("врубай радиво", VoiceIntent.RADIO),
+        Case("погнали на хату", VoiceIntent.NAV_HOME),
+        Case("бензин кончается", VoiceIntent.NAV_NEARBY, target = "АЗС"),
+        Case("громкасть двадцать", VoiceIntent.VOLUME_SET, number = 20),
+        Case("следущую песню", VoiceIntent.NEXT),
         Case("открой телеграм", VoiceIntent.APP_OPEN, query = "телеграм"),
         Case("", null),
     )

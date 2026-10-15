@@ -315,7 +315,7 @@ internal fun GlowCover(art: Bitmap?, placeholder: ImageVector, playing: Boolean,
     val glow by animateFloatAsState(bass, tween(140), label = "glow")
     val main = C.Violet
     val second = C.theme.second
-    val ring = cfg.ring && cfg.vis != "off"
+    val ring = cfg.ring
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val c = center
@@ -379,10 +379,10 @@ internal fun ColumnScope.TrackInfo(kicker: String, title: String, artist: String
 internal fun Spectrum(playing: Boolean, modifier: Modifier) {
     val cfg by AudioFx.cfg.collectAsState()
     val lv = rememberLevels(playing)
+    // off (the default): nothing, the cover gets the room
     when (cfg.vis) {
-        "off" -> Spacer(modifier)
         "wave" -> WaveVis(lv, modifier)
-        else -> BarsVis(lv, modifier)
+        "bars" -> BarsVis(lv, modifier)
     }
 }
 
@@ -565,8 +565,7 @@ internal fun ColumnScope.OwnMiddle(st: LocalMusic.State, pos: Long, onSeek: ((Lo
         if (canListen) AudioFx.startSpectrum(st.audioSession)
         onDispose { AudioFx.stopSpectrum() }
     }
-    Spectrum(st.playing, Modifier.fillMaxWidth().height(56.dp))
-    Spacer(Modifier.height(4.dp))
+    Spectrum(st.playing, Modifier.fillMaxWidth().height(56.dp).padding(bottom = 4.dp))
     if (!live) SeekBar(pos, st.durMs, onSeek)
     else Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
         // a stream has no length: say it is live instead of an empty bar
@@ -759,7 +758,7 @@ private fun BluetoothHero(fyt: Boolean) {
         cover = { GlowCover(if (fyt) null else ext.art, Lucide.Bluetooth, playing, it) },
         onNext = ::next, onPrev = ::prev,
         info = { TrackInfo("Bluetooth · телефон", title, artist) },
-        middle = { Spectrum(playing, Modifier.fillMaxWidth().height(44.dp)); Spacer(Modifier.height(4.dp)); SeekBar(pos, dur, null) },
+        middle = { Spectrum(playing, Modifier.fillMaxWidth().height(48.dp).padding(bottom = 4.dp)); SeekBar(pos, dur, null) },
         controls = {
             Control(Lucide.SkipBack, 68.dp) { prev() }
             Control(if (playing) Lucide.Pause else Lucide.Play, 96.dp, primary = true) {
@@ -865,8 +864,7 @@ private fun AppsHero(fyt: Boolean) {
             }
         },
         middle = {
-            Spectrum(playing, Modifier.fillMaxWidth().height(44.dp))
-            Spacer(Modifier.height(4.dp))
+            Spectrum(playing, Modifier.fillMaxWidth().height(48.dp).padding(bottom = 4.dp))
             SeekBar(if (stock) m.posMs else ext.posMs, if (stock) m.totalMs else ext.totalMs,
                 if (!stock && ext.session && ext.totalMs > 0) { ms -> control { it.seekTo(ms) } } else null)
         },

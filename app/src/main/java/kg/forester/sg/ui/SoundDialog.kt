@@ -101,12 +101,13 @@ internal fun SoundDialog(onClose: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                T("Визуализация:", 14.sp, C.Sub)
-                listOf("bars" to "Полосы", "wave" to "Волна", "off" to "Без неё").forEach { (id, name) ->
+                T("Эффект:", 14.sp, C.Sub)
+                Pill("Кольцо вокруг обложки", Lucide.CircleDashed, cfg.ring, 38.dp) { AudioFx.update { it.copy(ring = !cfg.ring) } }
+                Spacer(Modifier.width(8.dp))
+                T("Полоса под обложкой:", 14.sp, C.Sub)
+                listOf("off" to "Нет", "bars" to "Столбики", "wave" to "Волна").forEach { (id, name) ->
                     Pill(name, null, cfg.vis == id, 38.dp) { AudioFx.update { it.copy(vis = id) } }
                 }
-                Spacer(Modifier.width(8.dp))
-                Pill("Кольцо вокруг обложки", Lucide.CircleDashed, cfg.ring, 38.dp) { AudioFx.update { it.copy(ring = !cfg.ring) } }
             }
         }
     }

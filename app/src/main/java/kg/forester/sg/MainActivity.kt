@@ -95,6 +95,18 @@ class MainActivity : ComponentActivity() {
         if (intent?.hasExtra("demo") == true) Repo.settings.demo = intent.getBooleanExtra("demo", false)
         if (intent?.getBooleanExtra("skipSetup", false) == true) Repo.settings.setupDone = true
         testAlert(intent)
+        // adb: am start -n kg.forester.sg/.MainActivity --es orbDemo "включи музло" (the listening orb without a microphone)
+        intent?.getStringExtra("orbDemo")?.let { text ->
+            lifecycleScope.launch {
+                kg.forester.sg.service.Voice.listening.value = true
+                for (i in 0 until 90) {
+                    kg.forester.sg.service.Voice.level.value = (0.35 + 0.35 * kotlin.math.sin(i * 0.5) * kotlin.math.sin(i * 0.13)).toFloat().coerceIn(0f, 1f)
+                    kg.forester.sg.service.Voice.partial.value = text.split(' ').take(1 + i / 12).joinToString(" ")
+                    delay(100)
+                }
+                kg.forester.sg.service.Voice.listening.value = false
+            }
+        }
         kg.forester.sg.data.Shortcuts.load(this)
         // once a day: is there a newer release on GitHub?
         Thread { runCatching { kg.forester.sg.data.Updater.checkDaily(applicationContext) } }.start()
@@ -354,6 +366,7 @@ fun App() {
             }
         }
         kg.forester.sg.ui.VoiceToast(Modifier.align(Alignment.TopCenter).padding(top = 14.dp))
+        kg.forester.sg.ui.VoiceOrb()
         DriverOverlays(floating = false)
     }
 }

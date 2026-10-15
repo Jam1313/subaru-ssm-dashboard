@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
@@ -111,6 +112,52 @@ internal class RadioUi(val fyt: Boolean, internet: Boolean, cc: String, named: M
     var tuning by mutableStateOf(false)
     var fmLogo by mutableStateOf<Bitmap?>(null)
     var netLogo by mutableStateOf<Bitmap?>(null)
+    /** The driver's own stations (FM frequency in 10 kHz units → name), in the order they were saved. */
+    var mine by mutableStateOf<List<Pair<Int, String>>>(emptyList())
+    private var sp: android.content.SharedPreferences? = null
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
+
+    fun load(prefs: android.content.SharedPreferences) {
+        sp = prefs
+        mine = prefs.getString("mine", "").orEmpty().split(';').mapNotNull { e ->
+            val f = e.substringBefore('|').toIntOrNull() ?: return@mapNotNull null
+            f to e.substringAfter('|', "")
+        }
+    }
+
+    private fun saveMine() { sp?.edit()?.putString("mine", mine.joinToString(";") { "${it.first}|${it.second.replace(";", " ").replace("|", " ")}" })?.apply() }
+    fun addMine(freq: Int, name: String) { if (mine.none { abs(it.first - freq) < 5 }) { mine = mine + (freq to name); saveMine() } }
+    fun removeMine(freq: Int) { mine = mine.filter { it.first != freq }; saveMine() }
+
+    /** To [target]: exactly in the demo; on FYT by seeking towards it, station by station, until it is reached. */
+    fun tune(target: Int) {
+        if (!fyt) { DemoRadio.set(target); return }
+        if (tuning) return
+        tuning = true
+        scope.launch {
+            Fyt.ensureRadio()
+            for (i in 0 until 12) {
+                val cur = Fyt.radio.value.freq
+                val fm = Fyt.radio.value.isFm || Fyt.radio.value.band == -1
+                val tol = if (fm) 15 else 9
+                if (abs(cur - target) <= tol) break
+                val up = target > cur
+                Fyt.radioSeek(up)
+                val now = withTimeoutOrNull(8000) { Fyt.radio.first { it.freq != cur } }?.freq ?: break
+                // past the target, or round the end of the band: stop at this station
+                if ((up && (now >= target - tol || now < cur)) || (!up && (now <= target + tol || now > cur))) break
+            }
+        }.invokeOnCompletion { tuning = false }
+    }
+
+    /** ⏮ ⏭: through the own stations when there are any, else the tuner's presets. */
+    fun step(cur: Int, next: Boolean, tunerPreset: (Boolean) -> Unit) {
+        if (mine.isEmpty()) { tunerPreset(next); return }
+        val i = mine.indexOfFirst { abs(it.first - cur) <= 15 }
+        val j = if (i < 0) (if (next) 0 else mine.size - 1) else (i + if (next) 1 else -1 + mine.size) % mine.size
+        tune(mine[j].first)
+    }
+
     val demoFm get() = !fyt && Repo.settings.demo
     /** FM is there on an FYT unit (and in the demo). */
     val hasFm get() = fyt || demoFm
@@ -124,6 +171,7 @@ internal fun rememberRadioUi(fyt: Boolean): RadioUi {
     val ui = remember {
         val cc = RadioLogos.country(ctx)
         RadioUi(fyt, sp.getBoolean("internet", !(fyt || Repo.settings.demo)) || !(fyt || Repo.settings.demo), cc, RadioLogos.allNamed(ctx, cc))
+            .also { it.load(sp) }
     }
     val real by Fyt.radio.collectAsState()
     val fake by DemoRadio.state.collectAsState()
@@ -189,28 +237,9 @@ private fun FmHero(ui: RadioUi) {
         DemoRadio.set(DemoRadio.presets[p])
     }
     fun band() = if (fyt) Fyt.radioBand() else DemoRadio.state.value = r.copy(band = when (r.band) { 65538 -> 0; 0, 1 -> 65536; else -> r.band + 1 })
-    /** To [target]: exactly in the demo; on FYT by seeking towards it, station by station, until it is reached. */
-    fun tune(target: Int) {
-        if (!fyt) { DemoRadio.set(target); return }
-        if (ui.tuning) return
-        ui.tuning = true
-        scope.launch {
-            Fyt.ensureRadio()
-            for (i in 0 until 12) {
-                val cur = Fyt.radio.value.freq
-                val tol = if (fm) 15 else 9
-                if (abs(cur - target) <= tol) break
-                val up = target > cur
-                Fyt.radioSeek(up)
-                val now = withTimeoutOrNull(8000) { Fyt.radio.first { it.freq != cur } }?.freq ?: break
-                // past the target, or round the end of the band: stop at this station
-                if ((up && (now >= target - tol || now < cur)) || (!up && (now <= target + tol || now > cur))) break
-            }
-        }.invokeOnCompletion { ui.tuning = false }
-    }
     Hero(
         cover = { m -> Box(m.clip(RoundedCornerShape(22.dp)).clickable { ui.picking = true }) { GlowCover(ui.fmLogo, Lucide.Radio, on, Modifier.fillMaxSize(), whiteBack = true) } },
-        onNext = { preset(true) }, onPrev = { preset(false) },
+        onNext = { ui.step(r.freq, true, ::preset) }, onPrev = { ui.step(r.freq, false, ::preset) },
         info = {
             RadioKind(ui)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -232,13 +261,13 @@ private fun FmHero(ui: RadioUi) {
             }, 19.sp, if (r.name.isBlank() && station == null && p == null) C.Sub else C.Text.copy(alpha = 0.8f), FontWeight.Medium, maxLines = 1)
             if (r.preset > 0) { Spacer(Modifier.height(4.dp)); T("${r.bandText} · пресет ${r.preset}", 13.sp, C.Sub) }
         },
-        middle = { Dial(r, ui.named.keys.mapNotNull { k -> k.toDoubleOrNull()?.let { (it * 100).toInt() } }, { ui.preview = it }, ::tune) },
+        middle = { Dial(r, (ui.named.keys.mapNotNull { k -> k.toDoubleOrNull()?.let { (it * 100).toInt() } } + ui.mine.map { it.first }).distinct(), { ui.preview = it }, ui::tune) },
         controls = {
-            Control(Lucide.SkipBack, 60.dp) { preset(false) }
+            Control(Lucide.SkipBack, 60.dp) { ui.step(r.freq, false, ::preset) }
             Control(Lucide.ChevronsLeft, 68.dp) { seek(false) }
             Control(if (on) Lucide.Radio else Lucide.Power, 96.dp, primary = true) { if (fyt) Fyt.ensureRadio() }
             Control(Lucide.ChevronsRight, 68.dp) { seek(true) }
-            Control(Lucide.SkipForward, 60.dp) { preset(true) }
+            Control(Lucide.SkipForward, 60.dp) { ui.step(r.freq, true, ::preset) }
         },
     )
     if (ui.picking) StationPicker(r.freqText, if (fm) "МГц" else "кГц", ui.cc, station != null,
@@ -329,56 +358,80 @@ private fun FmPanel(ui: RadioUi) {
             known = known + (r.preset to v)
         }
     }
-    PanelBox(Lucide.Star, "Пресеты", trailing = { if (fyt) Pill("Настройки", Lucide.Settings, height = 38.dp) { Fyt.openRadio() } }) {
-        Presets(r, known, ui.named, Modifier.weight(1f)) { target ->
-            // the FYT tuner only steps through presets: walk the short way round to the one tapped
-            val cur = r.preset.takeIf { it in 1..6 } ?: 1
-            val fwd = (target - cur + 6) % 6
-            if (fyt) { if (fwd <= 3) repeat(fwd) { Fyt.radioPreset(true) } else repeat(6 - fwd) { Fyt.radioPreset(false) } }
-            else DemoRadio.set(DemoRadio.presets[target - 1])
+    val fm = r.isFm || r.band == -1
+    PanelBox(Lucide.Star, "Мои станции", trailing = { if (fyt) Pill("Настройки", Lucide.Settings, height = 38.dp) { Fyt.openRadio() } }) {
+        val saved = ui.mine.any { abs(it.first - r.freq) <= 5 }
+        Column(Modifier.weight(1f).verticalScrollCompat()) {
+            MineGrid(ui, r)
+            if (fm && r.freq > 0 && !saved) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, C.Violet.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                        .clickable { ui.addMine(r.freq, r.name.ifBlank { ui.named[r.freqText]?.name.orEmpty() }) }.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Lucide.Plus, null, tint = C.Violet, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    T("Сохранить ${r.freqText} МГц", 15.sp, C.Text, FontWeight.SemiBold)
+                }
+            }
         }
+        // the tuner's own presets, as a row of small buttons
         Spacer(Modifier.height(8.dp))
-        T(if (fyt) "Частоты пресетов запоминаются, когда они играют. Сканировать диапазон и сохранить станцию: «Настройки» (штатное радио)."
-            else "Демо-режим: пример станций.", 12.sp, C.Sub)
+        T("Пресеты тюнера", 12.sp, C.Sub)
+        Spacer(Modifier.height(4.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            (1..6).forEach { p ->
+                val f = known[p]?.substringBefore('|')
+                Pill(if (f != null) "P$p $f" else "P$p", null, r.preset == p, 36.dp) {
+                    val cur = r.preset.takeIf { it in 1..6 } ?: 1
+                    val fwd = (p - cur + 6) % 6
+                    if (fyt) { if (fwd <= 3) repeat(fwd) { Fyt.radioPreset(true) } else repeat(6 - fwd) { Fyt.radioPreset(false) } }
+                    else DemoRadio.set(DemoRadio.presets[p - 1])
+                }
+            }
+        }
     }
 }
 
+/** The own stations as tiles: logo, name, frequency; tap to tune, ✕ to forget. */
 @Composable
-private fun Presets(r: RadioState, known: Map<Int, String?>, named: Map<String, RadioLogos.Station>, modifier: Modifier, onPick: (Int) -> Unit) {
-    BoxWithConstraints(modifier.fillMaxWidth()) {
+private fun MineGrid(ui: RadioUi, r: RadioState) {
+    if (ui.mine.isEmpty()) {
+        T("Настройтесь на станцию и нажмите «Сохранить»: она появится здесь, ⏮ ⏭ будут листать ваши станции.", 13.sp, C.Sub)
+        return
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
         val w = (maxWidth - 8.dp) / 2
-        val h = ((maxHeight - 16.dp) / 3).coerceAtMost(96.dp)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            (1..6).chunked(2).forEach { row ->
+            ui.mine.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { p ->
-                        val sel = r.preset == p
-                        val k = known[p]?.split('|')
-                        val freq = if (sel) r.freqText else k?.getOrNull(0)
-                        val st = freq?.let { named[it] }
-                        val name = (if (sel) r.name else k?.getOrNull(1)).orEmpty().ifBlank { st?.name.orEmpty() }
+                    row.forEach { (f, name) ->
+                        val sel = abs(r.freq - f) <= 5
+                        val st = ui.named[fmText(f)]
                         val logo = rememberLogo(st?.logo)
                         val shape = RoundedCornerShape(16.dp)
                         Row(
-                            Modifier.width(w).height(h).clip(shape)
+                            Modifier.width(w).height(72.dp).clip(shape)
                                 .background(if (sel) Brush.verticalGradient(listOf(C.Violet.copy(alpha = 0.30f), C.Purple.copy(alpha = 0.16f)))
                                     else Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.06f), Color.White.copy(alpha = 0.03f))))
                                 .border(1.dp, if (sel) C.Violet else Color.Transparent, shape)
-                                .clickable { onPick(p) }.padding(horizontal = 10.dp, vertical = 8.dp),
+                                .clickable { ui.tune(f) }.padding(start = 10.dp, end = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            if (logo != null) {
-                                Box(Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(Color.White), contentAlignment = Alignment.Center) {
-                                    Image(logo.asImageBitmap(), null, Modifier.fillMaxSize().padding(3.dp), contentScale = ContentScale.Fit)
-                                }
-                                Spacer(Modifier.width(10.dp))
+                            Box(Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(if (logo != null) Color.White else C.Violet.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center) {
+                                if (logo != null) Image(logo.asImageBitmap(), null, Modifier.fillMaxSize().padding(3.dp), contentScale = ContentScale.Fit)
+                                else Icon(Lucide.Radio, null, tint = C.Violet, modifier = Modifier.size(18.dp))
                             }
+                            Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    T("P$p", 12.sp, if (sel) C.Violet else C.Sub, FontWeight.SemiBold)
-                                    if (name.isNotBlank()) T("  $name", 12.sp, C.Sub, maxLines = 1)
-                                }
-                                T(freq ?: "—", 21.sp, if (sel) C.Text else C.Sub, FontWeight.Bold, maxLines = 1)
+                                T(fmText(f), 19.sp, if (sel) C.Text else C.Text.copy(alpha = 0.85f), FontWeight.Bold, maxLines = 1)
+                                val n = name.ifBlank { st?.name.orEmpty() }
+                                if (n.isNotBlank()) T(n, 12.sp, C.Sub, maxLines = 1)
+                            }
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(18.dp)).clickable { ui.removeMine(f) }, contentAlignment = Alignment.Center) {
+                                Icon(Lucide.X, "Убрать", tint = C.Sub, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -387,6 +440,9 @@ private fun Presets(r: RadioState, known: Map<Int, String?>, named: Map<String, 
         }
     }
 }
+
+@Composable
+private fun Modifier.verticalScrollCompat(): Modifier = this.then(Modifier.verticalScroll(rememberScrollState()))
 
 /**
  * «Какая станция на 101.70?»: the country's popular stations with logos (radio-browser.info), a search line,
