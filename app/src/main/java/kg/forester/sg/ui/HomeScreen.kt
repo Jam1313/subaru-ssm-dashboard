@@ -202,7 +202,7 @@ private fun HomeTile(
         "inj" -> BarCard(st, "home.$id", icon, title, e.injPwMs, 0f, 20f, "мс", "%.2f", m)
         "wgdc" -> BarCard(st, "home.$id", icon, title, e.wastegatePct, 0f, 100f, "%", "%.0f", m)
         "fuel" -> BarCard(st, "home.$id", icon, "Расход", ts.instLh.toFloat(), 0f, 40f, "л/ч", "%.1f", m)
-        "boost" -> BarCard(st, "home.$id", icon, title, e.boostBar, 0f, 1.2f, "бар", "%.2f", m)
+        "boost" -> BarCard(st, "home.$id", icon, title, e.boostBar, 0f, boostTop, "бар", "%.2f", m)
         "gps" -> BarCard(st, "home.$id", icon, title, gps?.speedKmh, 0f, 200f, "км/ч", "%.0f", m,
             extra = gps?.let { "спутников ${it.satellites}, ±${it.accuracyM.toInt()} м" }
                 ?: Repo.gpsStatus.collectAsState().value.ifEmpty { "нет сигнала" })

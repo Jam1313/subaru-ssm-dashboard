@@ -211,8 +211,9 @@ fun BoostTargetCard(info: String, m: Modifier) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)) {
             val fact = e.boostBar
             val target = g.targetBoostKpa?.let { maxOf(0f, it) / 100f }
-            Bar("цель", target, 1.4f, C.Blue)
-            Bar("факт", fact, 1.4f, if (target != null && fact != null && fact > target + 0.15f) C.Red else C.Green)
+            val top = maxOf(1.4f, boostTop, (target ?: 0f) + 0.1f)
+            Bar("цель", target, top, C.Blue)
+            Bar("факт", fact, top, if (target != null && fact != null && fact > target + 0.15f) C.Red else C.Green)
             if (target == null) T("цели нет в определениях этой прошивки", 10.sp, C.Sub, maxLines = 1)
         }
     }

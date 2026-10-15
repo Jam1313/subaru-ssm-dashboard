@@ -401,6 +401,7 @@ class Settings(ctx: Context) {
         set(v) = p.edit().putBoolean("setupDone", v).apply()
 
     fun applyModel(m: CarModel) {
+        if (m.id != carModel) BoostScale.reset() // another car: its own boost
         carModel = m.id
         carTitle = m.title
         carSub = m.sub
@@ -517,6 +518,7 @@ object Repo {
             clusterSize.value = settings.clusterSize
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled
             CustomGauges.init(ctx)
+            BoostScale.init(ctx)
         }
     }
 

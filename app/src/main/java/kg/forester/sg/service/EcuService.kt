@@ -662,6 +662,7 @@ class EcuService : Service() {
         Repo.history.value = history.toList()
         battery.process(snap)
         tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
+        kg.forester.sg.data.BoostScale.process(snap)
         knock.process(snap)
         extras(snap, now)
         if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {

@@ -5,6 +5,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.composables.icons.lucide.*
+import kg.forester.sg.data.BoostScale
 import kg.forester.sg.data.GpsFix
 import kg.forester.sg.data.Repo
 import kg.forester.sg.data.TripState
@@ -35,12 +36,16 @@ class Indicator(
     val unit: String,
     val format: String,
     val min: Float,
-    val max: Float,
+    max: Float,
     val group: String,
     val warnAbove: Float? = null,
     val warnBelow: Float? = null,
+    /** Scale top that can change at run time (boost), instead of the fixed max. */
+    private val maxNow: (() -> Float)? = null,
     val read: (MetricCtx) -> Float?,
 ) {
+    private val fixedMax = max
+    val max: Float get() = maxNow?.invoke() ?: fixedMax
     fun text(v: Float?) = v?.takeIf { !it.isNaN() }?.let { format.format(it) } ?: "—"
     fun warn(v: Float?) = v != null && ((warnAbove != null && v > warnAbove) || (warnBelow != null && v < warnBelow))
 }
@@ -85,10 +90,10 @@ object Metrics {
         Indicator("fbkc", "FBKC (откат)", "FBKC", Lucide.SquareActivity, "°", "%.1f", -8f, 0f, "Зажигание", warnBelow = -2f) { it.guard.fbkc },
         Indicator("flkc", "FLKC (обучение)", "FLKC", Lucide.Waves, "°", "%.1f", -8f, 0f, "Зажигание", warnBelow = -2f) { it.guard.flkc },
         // boost
-        Indicator("boost", "Наддув", "Наддув", Lucide.Fan, "бар", "%.2f", 0f, 1.2f, "Наддув") { it.e.boostBar },
-        Indicator("gaugeKpa", "Наддув / разрежение", "Наддув", Lucide.CircleArrowUp, "кПа", "%.0f", -80f, 120f, "Наддув") { it.e.gaugeKpa },
-        Indicator("targetBoost", "Целевой наддув", "Цель", Lucide.Target, "кПа", "%.0f", 0f, 120f, "Наддув") { it.guard.targetBoostKpa },
-        Indicator("map", "Абс. давление", "Абс. давл.", Lucide.Gauge, "кПа", "%.0f", 20f, 220f, "Наддув") { it.e.mapKpa },
+        Indicator("boost", "Наддув", "Наддув", Lucide.Fan, "бар", "%.2f", 0f, 1.2f, "Наддув", maxNow = { BoostScale.top.value }) { it.e.boostBar },
+        Indicator("gaugeKpa", "Наддув / разрежение", "Наддув", Lucide.CircleArrowUp, "кПа", "%.0f", -80f, 120f, "Наддув", maxNow = { BoostScale.topKpa }) { it.e.gaugeKpa },
+        Indicator("targetBoost", "Целевой наддув", "Цель", Lucide.Target, "кПа", "%.0f", 0f, 120f, "Наддув", maxNow = { BoostScale.topKpa }) { it.guard.targetBoostKpa },
+        Indicator("map", "Абс. давление", "Абс. давл.", Lucide.Gauge, "кПа", "%.0f", 20f, 220f, "Наддув", maxNow = { 100f + BoostScale.topKpa }) { it.e.mapKpa },
         Indicator("atm", "Атм. давление", "Атм.", Lucide.Cloudy, "кПа", "%.0f", 70f, 105f, "Наддув") { it.e.atmKpa },
         Indicator("wgdc", "Wastegate", "Wastegate", Lucide.Tornado, "%", "%.0f", 0f, 100f, "Наддув") { it.e.wastegatePct },
         // transmission
@@ -134,3 +139,7 @@ fun rememberMetricCtx(): MetricCtx {
     val rr by Repo.rrValues.collectAsState()
     return MetricCtx(e, t, trip, gps, guard, rr)
 }
+
+/** Top of the boost scales, bar: 1.2 for a stock turbo, wider once the car has pulled more. */
+val boostTop: Float
+    @Composable get() = BoostScale.top.collectAsState().value

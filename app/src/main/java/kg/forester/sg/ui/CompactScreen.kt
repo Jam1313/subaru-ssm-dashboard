@@ -127,7 +127,7 @@ fun CompactScreen(onMenu: (() -> Unit)? = null) {
             // metrics grid
             val per = ts.instPer100
             val metrics = listOf(
-                Metric("Наддув", fmtF(e.boostBar, 2), "бар", e.boostBar?.let { it / 1.2f }),
+                Metric("Наддув", fmtF(e.boostBar, 2), "бар", e.boostBar?.let { it / boostTop }),
                 Metric("Расход", if (per != null) fmt(per) else fmt(ts.instLh), if (per != null) "л/100" else "л/ч", null),
                 Metric("Запас хода", fmt(ts.rangeKm, 0), "км", null),
                 Metric("ОЖ", e.coolantC?.toString() ?: "—", "°C", e.coolantC?.let { (it - 40) / 70f }, (e.coolantC ?: 0) > 102),

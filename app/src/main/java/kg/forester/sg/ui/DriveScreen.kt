@@ -110,7 +110,7 @@ fun DriveScreen() {
         when (t.id) {
             "pedal" -> Mini(Lucide.ChevronsUp, "Педаль газа", e.pedalPct, 0f, 100f, "%", "%.0f")
             "throttle" -> Mini(Lucide.Disc, "Дроссель", e.throttlePct, 0f, 100f, "%", "%.0f")
-            "boost" -> Mini(Lucide.Fan, "Наддув", e.boostBar, 0f, 1.2f, "бар", "%.2f",
+            "boost" -> Mini(Lucide.Fan, "Наддув", e.boostBar, 0f, boostTop, "бар", "%.2f",
                 sub = e.vacuumKpa?.takeIf { it > 1f }?.let { "разрежение %.0f кПа".format(it) })
             "load" -> Mini(Lucide.Activity, "Нагрузка", e.loadGRev, 0f, 2.5f, "г/об", "%.2f")
             "rpm" -> Mini(Lucide.Gauge, "Обороты", e.rpm?.toFloat(), 0f, 7000f, "об/мин", "%.0f", red = 6000f)
@@ -120,7 +120,7 @@ fun DriveScreen() {
                 listOf(Series("педаль", h.map { it.pedalPct }, C.Violet), Series("дроссель", h.map { it.throttlePct }, C.Blue)),
                 0f, 100f, "%.0f",
             )
-            "chartBoost" -> Chart("Наддув, бар", listOf(Series("наддув", h.map { it.boostBar }, C.Green)), 0f, 1.2f, "%.2f")
+            "chartBoost" -> Chart("Наддув, бар", listOf(Series("наддув", h.map { it.boostBar }, C.Green)), 0f, boostTop, "%.2f")
             "chartAfr" -> Chart("Смесь (AFR)", listOf(Series("AFR", h.map { it.afr }, C.Orange)), 10f, 20f)
             "chartTiming" -> Chart(
                 "Зажигание и детонация, °",
