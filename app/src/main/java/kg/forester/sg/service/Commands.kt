@@ -131,6 +131,9 @@ object Commands {
         "листани" to "следующую", "перелистни" to "следующую", "мотни" to "следующую",
         "радиво" to "радио", "радиву" to "радио", "радейку" to "радио", "радиоху" to "радио", "радивочку" to "радио", "радиоточку" to "радио",
         "погнали" to "поехали", "погнал" to "поехали", "гоним" to "поехали", "двинули" to "поехали", "валим" to "поехали", "рванули" to "поехали",
+        "гони" to "поехали", "гоните" to "поехали", "гнать" to "поехали", "гоню" to "поехали", "мчи" to "поехали", "мчим" to "поехали",
+        "летим" to "поехали", "полетели" to "поехали", "покатили" to "поехали", "катим" to "поехали", "дуй" to "поехали", "дуем" to "поехали",
+        "двигай" to "поехали", "двигаем" to "поехали", "чеши" to "поехали", "топи" to "поехали",
         "хату" to "домой", "хате" to "домой", "хаты" to "домой", "домик" to "домой", "хаус" to "домой",
         "бенз" to "бензин", "бенза" to "бензина", "заправон" to "заправку", "заправочку" to "заправку", "запраку" to "заправку",
         "навик" to "навигатор", "навигашку" to "навигатор", "навигашка" to "навигатор",
@@ -571,7 +574,12 @@ object Commands {
                 return VoiceCommand(VoiceIntent.NAV_NEARBY, query = q, target = place.first, app = app?.third)
             }
         }
-        if (routeAt >= 0) return route(w.drop(routeAt))
+        if (routeAt >= 0) {
+            // the place said first, the verb last ("домой гони", "в аэропорт погнали"): the place goes after the verb
+            val after = w.drop(routeAt + 1).filter { it !in ROUTE_LEAD }
+            if (after.isEmpty() && routeAt > 0) return route(listOf(w[routeAt]) + w.take(routeAt))
+            return route(w.drop(routeAt))
+        }
         if (near) {
             val q = w.without(app).filter { it !in PLACE_FILLER }
             if (q.isNotEmpty()) return VoiceCommand(VoiceIntent.NAV_NEARBY, query = numbersToDigits(q), app = app?.third)
@@ -1050,6 +1058,13 @@ object Commands {
         Case("еле слышно", VoiceIntent.VOLUME_UP),
         Case("врубай радиво", VoiceIntent.RADIO),
         Case("погнали на хату", VoiceIntent.NAV_HOME),
+        Case("гони домой", VoiceIntent.NAV_HOME),
+        Case("домой гони", VoiceIntent.NAV_HOME),
+        Case("гони на работу", VoiceIntent.NAV_WORK),
+        Case("гони на заправку", VoiceIntent.NAV_NEARBY, target = "АЗС"),
+        Case("летим в аэропорт", VoiceIntent.NAV_ROUTE, query = "аэропорт"),
+        Case("в аэропорт погнали", VoiceIntent.NAV_ROUTE, query = "аэропорт"),
+        Case("на работу поехали", VoiceIntent.NAV_WORK),
         Case("бензин кончается", VoiceIntent.NAV_NEARBY, target = "АЗС"),
         Case("громкасть двадцать", VoiceIntent.VOLUME_SET, number = 20),
         Case("следущую песню", VoiceIntent.NEXT),
