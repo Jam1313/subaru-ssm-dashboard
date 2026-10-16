@@ -1,7 +1,7 @@
 {
- "tag": "v0.9-beta17",
- "name": "0.9-beta17",
- "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta17/subaru-ssm-dashboard.apk",
- "size": 117345457,
- "notes": "Мотор в 3D на вкладке Мотор, умный анализатор по заводским мануалам с меньшим числом ложных тревог, проверка холостого хода с историей, машина определяется по ЭБУ, поиск музыки."
+ "tag": "v0.9-beta18",
+ "name": "0.9-beta18",
+ "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta18/subaru-ssm-dashboard.apk",
+ "size": 126257021,
+ "notes": "Экраны на Arduino и цветные USB-экраны на ESP32-S3, уровень топлива с провода датчика бака с автокалибровкой, тихий режим рядом с ноутбуком, прослушка CAN, фазы распредвалов, раскладка по клеткам и карусель экранов."
 }
