@@ -35,6 +35,7 @@ object CanBroadcast {
     /** A frame off the bus (any id): kept by id, the latest wins. */
     fun feed(id: Int, data: ByteArray, now: Long = System.currentTimeMillis()) {
         if (id in 0x7E0..0x7EF) return // diagnostics, not broadcast
+        CanMonitor.feed(id, false, data, now)
         frames[id] = Frame(data, now)
         lastMs = now
         if (id == 0x362 && now - fuelLoggedMs > 5000) { fuelLoggedMs = now; SsmTrace.log("CAN 362 (Fuel, not decoded yet)", data) }

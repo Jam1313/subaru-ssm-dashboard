@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.Activity
 import com.composables.icons.lucide.Car
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Usb
@@ -48,7 +49,7 @@ import kg.forester.sg.ssm.SsmTrace
 
 private val adapters = listOf(
     "auto" to "Авто", "kkl" to "KKL-кабель", "op2" to "OpenPort 2.0",
-    "elm_usb" to "ELM327 USB", "elm_bt" to "ELM327 Bluetooth", "elm_wifi" to "ELM327 Wi-Fi",
+    "elm_usb" to "ELM327 USB", "elm_bt" to "ELM327 Bluetooth", "elm_wifi" to "ELM327 Wi-Fi", "canable" to "CANable (Link)",
 )
 
 private fun adapterNote(k: String) = when (k) {
@@ -56,6 +57,9 @@ private fun adapterNote(k: String) = when (k) {
         "подключена магнитола, или сопряжённый Bluetooth-адаптер. Если ЭБУ не отвечает по протоколу Subaru (SSM), " +
         "ELM327 и OpenPort 2.0 переходят на стандартный OBD-II: основные параметры и ошибки."
     "op2" -> "Tactrix OpenPort 2.0 или китайский клон. Умеет K-Line и CAN, а без SSM — стандартный OBD-II по CAN."
+    "canable" -> "Экспериментально. USB-CAN адаптер CANable (прошивка slcan, как для RealDash) на шине для дашбордов спортивного ЭБУ: " +
+        "Link G4+/G4X с потоком Dash2Pro или Generic Dash распознаётся сам, остальное добавляется своими значениями. Ничего не запрашивает, " +
+        "только слушает. Коды ошибок Subaru, IAM и проверки по заводским таблицам при этом недоступны."
     "elm_usb" -> "ELM327 с USB-шнуром. SSM по CAN (SH 2009+); K-Line только у оригинальных ELM327 v1.4+. " +
         "Если SSM не отвечает — стандартный OBD-II."
     "elm_bt" -> "Bluetooth-свисток ELM327. SSM по CAN (SH 2009+); K-Line только у оригинальных ELM327 v1.4+, многие " +
@@ -201,20 +205,24 @@ fun CarAdapterSettings() {
                 TextBox("Адрес Wi-Fi адаптера (IP:порт)", wifiHost) { wifiHost = it; s.wifiHost = it.trim() }
             }
             Spacer(Modifier.height(14.dp))
-            val multiBus = adapter != "kkl"
-            T("Шина", 15.sp, if (multiBus) C.Text else C.Sub)
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                buses.forEach { (k, l) ->
-                    Chip(l, multiBus && bus == k, { if (multiBus) { bus = k; s.bus = k } })
+            // the CANable's own settings: picked, or found on USB in «Авто» (a Subaru owner never sees them)
+            if (adapter == "canable" || (adapter == "auto" && "CANable" in found)) CanablePanel()
+            if (adapter != "canable") {
+                val multiBus = adapter != "kkl"
+                T("Шина", 15.sp, if (multiBus) C.Text else C.Sub)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    buses.forEach { (k, l) ->
+                        Chip(l, multiBus && bus == k, { if (multiBus) { bus = k; s.bus = k } })
+                    }
                 }
+                Spacer(Modifier.height(6.dp))
+                T(
+                    if (multiBus) "«Авто»: сначала K-Line, если ЭБУ молчит, то CAN (Forester SH 2009+)."
+                    else "KKL-кабель работает только по K-Line.",
+                    12.sp, C.Sub,
+                )
             }
-            Spacer(Modifier.height(6.dp))
-            T(
-                if (multiBus) "«Авто»: сначала K-Line, если ЭБУ молчит, то CAN (Forester SH 2009+)."
-                else "KKL-кабель работает только по K-Line.",
-                12.sp, C.Sub,
-            )
             if (adapter == "op2" || adapter == "auto") {
                 Spacer(Modifier.height(10.dp))
                 var listen by remember { mutableStateOf(s.canListen) }
@@ -227,6 +235,12 @@ fun CarAdapterSettings() {
                             "с OBD-разъёма не видны: их отсекает блок кузова", 11.sp, C.Sub)
                     }
                     Switch(listen, { listen = it; s.canListen = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
+                }
+                if (listen) {
+                    var monitor by remember { mutableStateOf(false) }
+                    Spacer(Modifier.height(6.dp))
+                    Chip("Что идёт по CAN", false, { monitor = true }, Lucide.Activity)
+                    if (monitor) CanMonitorDialog { monitor = false }
                 }
             }
             Spacer(Modifier.height(14.dp))

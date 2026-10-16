@@ -157,7 +157,7 @@ private fun CustomParamForm(start: CustomParam, onDone: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Labeled(label: String, content: @Composable () -> Unit) {
+internal fun Labeled(label: String, content: @Composable () -> Unit) {
     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         T(label, 13.sp, C.Sub, modifier = Modifier.width(170.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
@@ -165,7 +165,7 @@ private fun Labeled(label: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun FormField(
+internal fun FormField(
     label: String, value: String, modifier: Modifier, type: KeyboardType = KeyboardType.Text,
     caps: KeyboardCapitalization = KeyboardCapitalization.Sentences, onChange: (String) -> Unit,
 ) {

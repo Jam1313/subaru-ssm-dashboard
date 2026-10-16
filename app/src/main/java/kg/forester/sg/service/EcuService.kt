@@ -75,6 +75,9 @@ import java.util.Locale
 private val adapterProber = UsbSerialProber(UsbSerialProber.getDefaultProbeTable().apply {
     OpenPort2.PIDS.forEach { addProduct(OpenPort2.VID, it, CdcAcmSerialDriver::class.java) }
     OpenPort13.PIDS.forEach { addProduct(OpenPort13.VID, it, FtdiSerialDriver::class.java) }
+    // CANable / CANtact with the slcan firmware: a sports ECU's dash CAN
+    addProduct(0xAD50, 0x60C4, CdcAcmSerialDriver::class.java)
+    addProduct(0x16D0, 0x117E, CdcAcmSerialDriver::class.java)
 })
 
 /** Shared access to the ECU for one-off requests (DTC read/clear) between poll cycles. */
@@ -137,7 +140,7 @@ class EcuService : Service() {
         (getSystemService(Context.USB_SERVICE) as UsbManager).let { usb ->
             RelayEngine.start(scope)
             SensorBoxLink.start(scope, usb, { SensorBoxLink.drivers(usb).let { it + unknownSerial(usb, it) } },
-                { isOp2(it) || isOp13(it) }) { requestUsbPermission(usb, it) }
+                { isOp2(it) || isOp13(it) || isCanable(it) }) { requestUsbPermission(usb, it) }
             ScreenLink.start(scope, this, usb) { requestUsbPermission(usb, it) }
         }
         wakeWatch.start(scope)
@@ -184,6 +187,11 @@ class EcuService : Service() {
         while (scope.isActive) {
             val s = Repo.settings
             if (s.demo) { demoLoop(); continue }
+            if (Repo.linkDemo.value) {
+                Repo.adapterFound.value = "Демо Link: CANable не нужен"
+                kg.forester.sg.ssm.LinkDemo().use { canSession(it, 500) { Repo.linkDemo.value } }
+                continue
+            }
             SsmTrace.enabled = s.traceEnabled
             SsmTrace.polling = false
             tracker.tick(System.currentTimeMillis())
@@ -215,6 +223,9 @@ class EcuService : Service() {
                     other != null && kind == "op2" -> "Найден KKL-кабель, а в настройках выбран OpenPort 2.0"
                     other != null -> "Найден OpenPort 2.0: выберите его в Настройках → Адаптер (или «Авто»)"
                     kind == "op2" -> "OpenPort 2.0 не найден"
+                    kind == "canable" && usb.deviceList.values.any { kg.forester.sg.ssm.Slcan.isCandleLight(it.vendorId, it.productId) } ->
+                        "CANable с прошивкой candleLight: приложение работает с прошивкой slcan (как RealDash). Перепрошейте адаптер на slcan"
+                    kind == "canable" -> "CANable не найден: подключите его к USB магнитолы"
                     kind == "elm_usb" -> "USB-адаптер ELM327 не найден"
                     else -> "Кабель KKL не найден (если он подключён — «Отправить журнал»: в журнале коды всех USB-устройств)"
                 }
@@ -246,6 +257,10 @@ class EcuService : Service() {
                 port.open(conn)
                 val id = "%04X:%04X".format(driver.device.vendorId, driver.device.productId)
                 when {
+                    isCanable(driver) -> {
+                        Repo.adapterFound.value = "USB $id → CANable (slcan)"
+                        canableSession(port)
+                    }
                     isOp2(driver) -> {
                         Repo.adapterFound.value = "USB $id → OpenPort 2.0"
                         op2 = OpenPort2(port).also { it.open() }
@@ -313,8 +328,8 @@ class EcuService : Service() {
                     0x1A86 -> com.hoho.android.usbserial.driver.Ch34xSerialDriver(d)
                     0x067B -> com.hoho.android.usbserial.driver.ProlificSerialDriver(d)
                     0x10C4 -> com.hoho.android.usbserial.driver.Cp21xxSerialDriver(d)
-                    // not a generic CDC-ACM fallback: a head unit's internal 4G modem looks like one
-                    else -> null
+                    // not a generic CDC-ACM fallback: a head unit's internal 4G modem looks like one; a CANable by its name only
+                    else -> if (kg.forester.sg.ssm.Slcan.matches(d.vendorId, d.productId, runCatching { d.productName }.getOrNull())) CdcAcmSerialDriver(d) else null
                 }
             }.getOrNull()?.takeIf { it.ports.isNotEmpty() }
         }
@@ -328,11 +343,16 @@ class EcuService : Service() {
     private fun isOp13(d: UsbSerialDriver) = OpenPort13.matches(d.device.vendorId, d.device.productId) ||
         (d.device.vendorId == OpenPort13.VID && runCatching { d.device.productName }.getOrNull()?.contains("OpenPort 1.3", true) == true)
 
+    /** A USB-CAN stick speaking slcan (CANable): the dash CAN of a sports ECU, not a diagnostic cable. */
+    private fun isCanable(d: UsbSerialDriver) = kg.forester.sg.ssm.Slcan.matches(
+        d.device.vendorId, d.device.productId, runCatching { d.device.productName }.getOrNull())
+
     private fun pickDriver(kind: String, drivers: List<UsbSerialDriver>): UsbSerialDriver? = when (kind) {
         // "OpenPort" picked for an OpenPort 1.3: it is a K-line cable like a KKL, just use it as one
         "op2" -> drivers.firstOrNull { isOp2(it) } ?: drivers.firstOrNull { isOp13(it) }
-        "auto" -> drivers.firstOrNull { isOp2(it) } ?: drivers.firstOrNull { isOp13(it) } ?: drivers.firstOrNull()
-        else -> drivers.firstOrNull { !isOp2(it) }
+        "canable" -> drivers.firstOrNull { isCanable(it) }
+        "auto" -> drivers.firstOrNull { isOp2(it) } ?: drivers.firstOrNull { isOp13(it) } ?: drivers.firstOrNull { isCanable(it) } ?: drivers.firstOrNull()
+        else -> drivers.firstOrNull { !isOp2(it) && !isCanable(it) }
     }
 
     private var lastUsbList = ""
@@ -759,11 +779,12 @@ class EcuService : Service() {
         while (history.size > 240) history.removeFirst()
         Repo.history.value = history.toList()
         battery.process(snap)
-        tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
+        // the Link demo's made-up drive is no trip of this car (as the regular demo's isn't)
+        if (!Repo.linkDemo.value) tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
         kg.forester.sg.data.Scales.process(snap)
         knock.process(snap)
         extras(snap, now)
-        if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
+        if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0 && !Repo.linkDemo.value) {
             // the ticked parameters are extra columns: a new file when the choice changes
             val extras = LogColumns.extras(Repo.rrPolled.value, guard.roleIds())
             if (logger != null && (logger?.extras != extras || logger?.columns?.map { it.key } != LogColumns.enabled().map { it.key })) {
@@ -831,6 +852,76 @@ class EcuService : Service() {
         val s = Repo.settings
         if (s.feature("motion")) runCatching { Motion.process(snap, Repo.gps.value, now) }
         if (s.feature("perf")) runCatching { Perf.process(snap, Repo.gps.value, now) }.onFailure { SsmTrace.log("perf: $it") }
+    }
+
+    /**
+     * A CANable on the dash CAN of a sports ECU (Link G4X…): nothing is asked, the ECU streams by itself. The Link's
+     * Dash2Pro or Generic Dash is found on its own; anything else is read with the driver's own CAN channels.
+     */
+    private suspend fun canableSession(port: UsbSerialPort) {
+        val kbit = Repo.settings.canKbit
+        val bus = kg.forester.sg.ssm.SlcanPort(port)
+        bus.open(kbit)
+        SsmTrace.log("CANable: bus open at $kbit kbit/s")
+        canSession(bus, kbit) { Repo.settings.canKbit == kbit }
+    }
+
+    /** The frames of [bus] (a CANable or the Link demo) through the Link's decoding, while [on]. */
+    private suspend fun canSession(bus: kg.forester.sg.ssm.CanSource, kbit: Int, on: () -> Boolean) {
+        val link = kg.forester.sg.ssm.LinkDash
+        link.reset()
+        kg.forester.sg.ssm.CanMonitor.clear()
+        kg.forester.sg.data.CanChannels.clearValues()
+        kg.forester.sg.data.CanEcu.reset()
+        kg.forester.sg.data.CanEcu.active = true
+        ecuWatch.clear(); tcuWatch.clear()
+        Repo.obdMode.value = false
+        Repo.ecuInit.value = null
+        Repo.tcuStatus.value = "АКПП: нет (спортивный ЭБУ по CAN)"
+        Repo.link.value = LinkState.CONNECTING
+        Repo.linkMessage.value = "CANable: шина $kbit кбит открыта, жду кадры"
+        var lastFrame = System.currentTimeMillis()
+        var lastSample = 0L
+        var linkLogged = false
+        var limitsLogged = emptyList<String>()
+        try {
+            while (scope.isActive && !Repo.settings.demo && on()) {
+                val frames = bus.read(100)
+                val now = System.currentTimeMillis()
+                for (f in frames) {
+                    val mux = link.feed(f.id, f.ext, f.data, now)
+                    kg.forester.sg.ssm.CanMonitor.feed(f.id, f.ext, f.data, now, mux)
+                    kg.forester.sg.data.CanChannels.feed(f.id, f.ext, f.data, now)
+                }
+                if (frames.isNotEmpty()) lastFrame = now
+                if (now - lastSample < 200) continue
+                lastSample = now
+                if (now - lastFrame > 3000) {
+                    Repo.link.value = LinkState.NO_ECU
+                    Repo.linkMessage.value = "CANable на связи, но шина молчит. Зажигание включено? Скорость $kbit кбит та же, что в настройках CAN у ЭБУ?" +
+                        if (bus.errors > 0) " Адаптер отвечает ошибкой (${bus.errors})" else ""
+                    tracker.tick(now)
+                    continue
+                }
+                val id = link.id
+                if (id != null && !linkLogged) { linkLogged = true; SsmTrace.log("Link ${link.format?.title} on CAN id %03X (%d)".format(id, id)) }
+                link.limits(now).takeIf { it != limitsLogged }?.let { limitsLogged = it; if (it.isNotEmpty()) SsmTrace.log("Link limits: ${it.joinToString()}") }
+                Repo.link.value = LinkState.CONNECTED
+                Repo.linkMessage.value = if (id != null) "Link (${link.format?.title}, ID %d) · CANable %d кбит".format(id, kbit)
+                    else "CANable: на шине ${kg.forester.sg.ssm.CanMonitor.idsSeen(now)} ID, поток Link (Dash2Pro или Generic Dash) не найден. Что идёт по CAN: Настройки, Авто и адаптер"
+                Repo.rrAvailable.value = kg.forester.sg.data.CanEcu.params()
+                Repo.rrPolled.value = Repo.rrAvailable.value
+                Repo.rrValues.value = kg.forester.sg.data.CanEcu.values(now)
+                Repo.pollAddresses.value = Repo.rrAvailable.value.size
+                val snap = if (link.fresh(now)) link.snapshot(now) else EcuSnapshot(timeMs = now)
+                onSnapshot(snap, now)
+            }
+        } finally {
+            kg.forester.sg.data.CanEcu.active = false
+            bus.close()
+            Repo.rrAvailable.value = emptyList(); Repo.rrPolled.value = emptyList(); Repo.rrValues.value = emptyMap()
+            Repo.link.value = LinkState.NO_CABLE
+        }
     }
 
     /** Standard OBD-II polling until the ECU goes silent. Returns false if the ECU did not answer at all. */

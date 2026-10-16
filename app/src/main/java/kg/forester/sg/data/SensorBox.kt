@@ -536,10 +536,14 @@ object SensorBox {
         return k
     }
 
-    /** The value of the input with [role], for the engine guard; with several (an EGT per cylinder), the highest. */
+    /**
+     * The value of the input with [role], for the engine guard; with several (an EGT per cylinder), the highest.
+     * Without one on the box, a sports ECU's on the CAN bus (CanEcu) stands in.
+     */
     fun role(role: String): Float? {
-        if (!enabled.value && !Repo.demoOn.value) return null
-        return slots.value.filter { it.role == role }.mapNotNull { readings.value[it.input]?.value }.maxOrNull()
+        val box = if (!enabled.value && !Repo.demoOn.value) null
+            else slots.value.filter { it.role == role }.mapNotNull { readings.value[it.input]?.value }.maxOrNull()
+        return box ?: CanEcu.role(role)
     }
 
     /** Values by indicator id ("box_A0"), for the home cards and the bottom bar. */

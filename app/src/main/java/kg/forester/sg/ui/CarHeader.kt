@@ -53,7 +53,9 @@ fun carHeader(e: EngineInfo, title: String, sub: String, custom: Boolean): Pair<
     if (!e.known) return (if (custom && title.isNotBlank()) title else "SUBARU") to when (e.source) {
         "демо" -> "демо-данные"
         "ЭБУ без модели" -> "ЭБУ ${e.romId}"
-        else -> "подключите ЭБУ"
+        // a sports ECU on a CANable has no ROM to tell the car by
+        else -> if (!kg.forester.sg.data.CanEcu.active) "подключите ЭБУ"
+            else if (kg.forester.sg.ssm.LinkDash.id != null) "ЭБУ Link по CAN" else "CANable на шине"
     }
     val car = e.car
     val words = car?.split(' ')?.filter { it.isNotBlank() }.orEmpty()

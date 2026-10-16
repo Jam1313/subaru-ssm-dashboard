@@ -156,7 +156,8 @@ object Metrics {
 
     /** Built-in ones plus the parameters ticked on «Датчики» and the SensorBox inputs. */
     fun all(avail: List<RrParam>, watch: Set<String>): List<Indicator> =
-        builtIn + avail.filter { it.id in watch }.map(::ofParam) + kg.forester.sg.data.SensorBox.slots.value.map(::ofBox)
+        builtIn + avail.filter { it.id in watch || it.id.startsWith(kg.forester.sg.data.CanEcu.PREFIX) }.map(::ofParam) +
+            kg.forester.sg.data.SensorBox.slots.value.map(::ofBox)
 }
 
 /** This frame's values, for composables. */
