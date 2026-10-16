@@ -1,7 +1,7 @@
 {
- "tag": "v0.9-beta18",
- "name": "0.9-beta18",
- "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta18/subaru-ssm-dashboard.apk",
- "size": 126257021,
- "notes": "Экраны на Arduino и цветные USB-экраны на ESP32-S3, уровень топлива с провода датчика бака с автокалибровкой, тихий режим рядом с ноутбуком, прослушка CAN, фазы распредвалов, раскладка по клеткам и карусель экранов."
+ "tag": "v0.9-beta19",
+ "name": "0.9-beta19",
+ "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta19/subaru-ssm-dashboard.apk",
+ "size": 126306173,
+ "notes": "Спортивный ЭБУ Link G4X по CAN через CANable (экспериментально), монитор CAN и свои значения, Мой экран без пустых полос в правке, «включи музыку» и ответы про масло у ассистента, проверка команд без голоса."
 }
