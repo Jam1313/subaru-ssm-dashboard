@@ -29,7 +29,7 @@ data class CanChannel(
     val formula: String,
     val units: String,
     val decimals: Int,
-    /** "", "egt", "oilP" (bar), "oil" (°C). */
+    /** "", "egt", "oilP" (bar), "oil" (°C), "fault" (the Link's current fault code number). */
     val role: String,
 ) {
     private val expr by lazy { RrExpr.parse(formula.ifBlank { "x" }) }
@@ -64,7 +64,8 @@ data class CanChannel(
         .put("units", units).put("dec", decimals).put("role", role)
 
     companion object {
-        val ROLES = listOf("" to "нет", "egt" to "ЕГТ, °C", "oilP" to "Давление масла, бар", "oil" to "Темп. масла, °C")
+        val ROLES = listOf("" to "нет", "egt" to "ЕГТ, °C", "oilP" to "Давление масла, бар", "oil" to "Темп. масла, °C",
+            "fault" to "Код ошибки Link")
 
         fun fromJson(o: JSONObject) = CanChannel(
             o.getString("id"), o.optString("name"), o.getInt("can"), o.optBoolean("ext"), o.optInt("mux", -1),

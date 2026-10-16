@@ -154,7 +154,11 @@ class BatteryMonitor(private val ctx: Context) {
                         "выключите лишние потребители и проверьте ремень, клеммы и генератор", Alerts.Level.DANGER, 30 * 60_000L)
                     avg < 13.0f && !seenCharging && runMin >= 5f -> Alerts.raise("altLow", "Похоже, генератор не заряжает: %.2f В, и с пуска напряжение ни разу не поднималось до 13,6 В. ".format(avg) +
                         "Проверьте ремень и генератор", Alerts.Level.WARN, 30 * 60_000L)
-                    avg < 13.15f && seenCharging && window30.maxOf { it.second } - window30.minOf { it.second } < 0.3f -> cutoutInfo(avg, now)
+                    // the factory ECU's cut-out is no excuse on a sports ECU: it rarely drives the alternator that way
+                    avg < 13.15f && seenCharging && window30.maxOf { it.second } - window30.minOf { it.second } < 0.3f ->
+                        if (kg.forester.sg.data.CanEcu.active) Alerts.raise("altLow", "Напряжение на ходу %.2f В. Со штатным ЭБУ так бывает при умной зарядке, у Link её обычно нет: ".format(avg) +
+                            "генератор должен давать 13,6–14,6 В, проверьте его и ремень", Alerts.Level.INFO, 60 * 60_000L)
+                        else cutoutInfo(avg, now)
                     last5.size >= 2 && last5.min() > 15.5f -> Alerts.raise("altHigh", "Перезаряд: %.2f В. Неисправен регулятор генератора, это портит аккумулятор и электронику".format(last5.average()),
                         Alerts.Level.DANGER, 30 * 60_000L)
                     avg > 15.0f && (runMin >= 10f || (s.coolantC ?: 0) >= 60) -> Alerts.raise("altHigh", "Напряжение зарядки высокое: %.2f В. Проверьте регулятор генератора".format(avg),

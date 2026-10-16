@@ -127,11 +127,34 @@ object Metrics {
         else -> v
     }
 
+    /** An icon for [p] by what it measures (its name and units): the «Датчики» list and its cards. */
+    fun iconOf(p: RrParam): androidx.compose.ui.graphics.vector.ImageVector {
+        val n = (p.name + " " + p.nameEn).lowercase()
+        val u = p.unitsRu
+        return when {
+            p.kind == RrParam.Kind.SWITCH -> Lucide.ToggleRight
+            "детонац" in n || "knock" in n -> Lucide.AudioWaveform
+            "ошибк" in n || "fault" in n || "error" in n -> Lucide.TriangleAlert
+            "передач" in n || "gear" in n || p.target == 2 -> Lucide.Cog
+            "вал" in n || "cam" in n || "avcs" in n -> Lucide.Timer
+            "колес" in n || "wheel" in n || "скорост" in n -> Lucide.Car
+            "темп" in n || u == "°C" -> Lucide.Thermometer
+            "лямбд" in n || "lambda" in n || u == "λ" || "afr" in n || "смес" in n -> Lucide.Flame
+            "форсун" in n || "inject" in n || "впрыск" in n || u == "мс" -> Lucide.Syringe
+            "давлен" in n || "наддув" in n || u == "бар" || u.startsWith("кПа") || u == "МПа" -> Lucide.Gauge
+            u == "В" -> Lucide.BatteryCharging
+            u == "г/с" -> Lucide.Wind
+            "отсечк" in n || "срез" in n || "cut" in n -> Lucide.Scissors
+            u == "°" -> Lucide.Zap
+            else -> Lucide.ListChecks
+        }
+    }
+
     /** A ticked «Датчики» parameter (or the user's own address) as a metric; its scale comes from what it has shown. */
     fun ofParam(p: RrParam): Indicator {
         val dec = p.format.substringAfter('.', "").length.coerceAtMost(3)
         return Indicator(
-            "rr:${p.id}", p.name, p.name, if (p.target == 2) Lucide.Cog else Lucide.ListChecks, p.unitsRu,
+            "rr:${p.id}", p.name, p.name, iconOf(p), p.unitsRu,
             "%.${dec}f", 0f, 100f, if (p.target == 2) "АКПП (датчики)" else "Датчики",
         ) { it.rr[p.id]?.toFloat() }
     }

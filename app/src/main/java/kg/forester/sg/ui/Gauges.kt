@@ -315,11 +315,12 @@ fun Dial(
     val photo = remember(style.image) { style.image?.let { kg.forester.sg.data.GaugeImages.bitmap(ctx, it)?.asImageBitmap() } }
     val ringFill = if (style.rings.isEmpty()) emptyList() else ringValues()
     Box(modifier, contentAlignment = Alignment.Center) {
+        val ro = style.readout
+        // a read-out sits below the hub, where the needle passes at the bottom of the scale: the needle goes over it
         Canvas(Modifier.fillMaxSize()) {
-            drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill)
+            drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill, if (ro != null) DialLayer.FACE else DialLayer.ALL)
             if (range != null) drawPeakMarks(range, min, max, style, minMark)
         }
-        val ro = style.readout
         if (ro != null) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val d = minOf(maxWidth, maxHeight)
@@ -331,6 +332,7 @@ fun Dial(
                     T(unit, (d.value * 0.075f).coerceIn(8f, 13f).sp, style.unit, maxLines = 1)
                 }
             }
+            Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill, DialLayer.NEEDLE) }
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 4.dp)) {
                 BoxWithConstraints(Modifier.fillMaxWidth(if (style.minimal) 0.62f else 0.5f)) {
@@ -426,6 +428,8 @@ internal fun DrawScope.drawDial(
     v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle,
     photo: androidx.compose.ui.graphics.ImageBitmap? = null,
     ringFill: List<Float?> = emptyList(),
+    /** [DialLayer.FACE] without the needle, [DialLayer.NEEDLE] the needle alone: a read-out goes between them. */
+    layer: DialLayer = DialLayer.ALL,
 ) {
     val r = size.minDimension / 2f * (if (st.outer != null || st.rings.isNotEmpty()) 0.9f else 1f)
     val c = center
@@ -437,6 +441,25 @@ internal fun DrawScope.drawDial(
         val a = Math.toRadians(deg.toDouble())
         return Offset(c.x + rr * kotlin.math.cos(a).toFloat(), c.y + rr * kotlin.math.sin(a).toFloat())
     }
+    val band = st.band
+    val arcR = if (band != null) r * 0.80f else r * 0.86f
+    val stroke = r * (if (st.minimal) 0.035f else 0.07f)
+    fun needle() {
+        if (st.needle.alpha <= 0f || st.segments) return
+        val na = ang(v)
+        val w = r * st.needleWidth
+        val inner = if (st.shortNeedle) arcR - stroke * 4.5f else r * 0.10f
+        val tip = if (band != null) arcR + r * 0.08f else arcR - stroke * 0.3f
+        drawLine(st.needle.copy(alpha = 0.35f), pt(na, inner), pt(na, tip), w * 2.2f, cap = StrokeCap.Round)
+        drawLine(st.needle, pt(na, inner), pt(na, tip), w, cap = StrokeCap.Round)
+        if (st.pattern == FacePattern.SPARKLES) sparkle(pt(na, tip), r * 0.09f, Color.White)
+        if (!st.shortNeedle) {
+            val hub = st.hub ?: st.rim.takeIf { it.alpha > 0f } ?: Color(0xFF2A3150)
+            drawCircle(hub, r * 0.075f, c)
+            drawCircle(Color.White.copy(alpha = 0.18f), r * 0.03f, Offset(c.x - r * 0.02f, c.y - r * 0.02f))
+        }
+    }
+    if (layer == DialLayer.NEEDLE) { needle(); return }
     // outer two-tone ring (Most Wanted: nitrous / speedbreaker bars)
     st.outer?.let { (left, right) ->
         val or = r * 1.06f
@@ -472,11 +495,8 @@ internal fun DrawScope.drawDial(
         facePattern(st.pattern, st.patternColor, c, r)
         if (st.rim.alpha > 0f) drawCircle(st.rim, r - 1.5f, c, style = Stroke(if (st.glow != null) 2.5f else 1.5f))
     }
-    val band = st.band
-    val arcR = if (band != null) r * 0.80f else r * 0.86f
     val tl = Offset(c.x - arcR, c.y - arcR)
     val sz = Size(arcR * 2, arcR * 2)
-    val stroke = r * (if (st.minimal) 0.035f else 0.07f)
     if (band != null) {
         val bw = r * 0.26f
         drawArc(Brush.sweepGradient(band, c), start, sweep, false, tl, sz, style = Stroke(bw, cap = StrokeCap.Butt))
@@ -551,23 +571,12 @@ internal fun DrawScope.drawDial(
             drawContext.canvas.nativeCanvas.drawText(label, p.x, p.y + paint.textSize * 0.35f, paint)
         }
     }
-    // needle
-    if (st.needle.alpha > 0f && !st.segments) {
-        val na = ang(v)
-        val w = r * st.needleWidth
-        val inner = if (st.shortNeedle) arcR - stroke * 4.5f else r * 0.10f
-        val tip = if (band != null) arcR + r * 0.08f else arcR - stroke * 0.3f
-        drawLine(st.needle.copy(alpha = 0.35f), pt(na, inner), pt(na, tip), w * 2.2f, cap = StrokeCap.Round)
-        drawLine(st.needle, pt(na, inner), pt(na, tip), w, cap = StrokeCap.Round)
-        if (st.pattern == FacePattern.SPARKLES) sparkle(pt(na, tip), r * 0.09f, Color.White)
-        if (!st.shortNeedle) {
-            val hub = st.hub ?: st.rim.takeIf { it.alpha > 0f } ?: Color(0xFF2A3150)
-            drawCircle(hub, r * 0.075f, c)
-            drawCircle(Color.White.copy(alpha = 0.18f), r * 0.03f, Offset(c.x - r * 0.02f, c.y - r * 0.02f))
-        }
-    }
+    if (layer == DialLayer.ALL) needle()
     if (st.readout?.segments == false) drawCircle(st.tickMajor, r * 0.5f, c, style = Stroke(2.5f))
 }
+
+/** What [drawDial] draws: all of it, or the face and the needle apart, with a read-out laid between them. */
+enum class DialLayer { ALL, FACE, NEEDLE }
 
 /** Face artwork, clipped to the face circle. */
 private fun DrawScope.facePattern(p: FacePattern, col: Color, c: Offset, r: Float) {

@@ -874,6 +874,11 @@ class EcuService : Service() {
         kg.forester.sg.data.CanChannels.clearValues()
         kg.forester.sg.data.CanEcu.reset()
         kg.forester.sg.data.CanEcu.active = true
+        // the Link car is a car of its own: switching to it (or back to the stock ECU) starts its scales, usual boost
+        // and idle history afresh, as another ROM does
+        runCatching { carFromEcu("LINK") }
+        // the untouched factory screen: the cards a Link fills, not the stock ECU's it leaves empty
+        if (Repo.settings.homeTiles.isEmpty()) Repo.settings.homeTiles = kg.forester.sg.data.HomeLayout.linkDefault()
         ecuWatch.clear(); tcuWatch.clear()
         Repo.obdMode.value = false
         Repo.ecuInit.value = null

@@ -159,10 +159,11 @@ object ScreenRenderer {
         val div = if (hi >= 1000f) 1000f else 1f
         val photo = st.image?.let { name -> kg.forester.sg.data.GaugeImages.bitmap(ctx, name)?.asImageBitmap() }
         inset(l, t, size.width - l - side, size.height - t - side) {
-            drawDial((v ?: lo).coerceIn(lo, hi), lo, hi, step, div, ind.warnAbove, st, photo)
+            val ro = st.readout
+            val at = (v ?: lo).coerceIn(lo, hi)
+            drawDial(at, lo, hi, step, div, ind.warnAbove, st, photo, layer = if (ro != null && !st.hideValue) DialLayer.FACE else DialLayer.ALL)
             val c = center
             val hot = ind.warn(v)
-            val ro = st.readout
             if (!st.hideValue) {
                 if (ro != null) {
                     val bw = side * 0.44f
@@ -172,6 +173,8 @@ object ScreenRenderer {
                     drawRoundRect(ro.border, Offset(c.x - bw / 2, top), Size(bw, bh), CornerRadius(bw * 0.08f), style = Stroke(2f))
                     val p = paint(bh * 0.62f, if (hot) C.Red else ro.fg, align = Paint.Align.RIGHT, face = if (ro.segments) segment else null)
                     text(ind.text(v).replace('—', '-'), c.x + bw / 2 - bw * 0.06f, top + bh * 0.78f, p)
+                    // the needle passes over the read-out window, as on the cards
+                    drawDial(at, lo, hi, step, div, ind.warnAbove, st, photo, layer = DialLayer.NEEDLE)
                 } else {
                     val p = paint(side * 0.13f, if (hot) C.Red else st.value, align = Paint.Align.CENTER)
                     text(shrink(ind.text(v), p, side * 0.34f), c.x, c.y + side * 0.2f, p)

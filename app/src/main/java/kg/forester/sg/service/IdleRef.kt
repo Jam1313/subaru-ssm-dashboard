@@ -35,7 +35,8 @@ object IdleRef {
 
     /** The table for [e]'s engine, null when there is none (FA/FB/EZ, diesel) or the ECU hasn't said which. */
     fun forEngine(e: EngineInfo): Table? = when {
-        e.source == "нет" -> null
+        // a tuned engine on a sports ECU (cams, its own idle) is not held to the factory numbers
+        e.source == "нет" || e.source == "Link" -> null
         // an EJ whose size the ROM ID doesn't give: what both the 2.0 and the 2.5 allow
         e.family == "EJ" && e.turbo -> Table(
             "Общие заводские значения EJ турбо (объём ЭБУ не сообщил, границы для 2,0 и 2,5)",

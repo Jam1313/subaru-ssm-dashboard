@@ -152,6 +152,17 @@ class AnalyzerTest {
         assertFalse(r.ids().contains("atm"))
     }
 
+    @Test fun tunedIdleOnALinkIsNoFault() {
+        // cams and a raised idle target: 1150 rpm at 50 kPa
+        val idle = { r: Run, sport: Boolean -> r.feed(120) { RuleInput(cruise(it).copy(rpm = 1150, speedKmh = 0, throttlePct = 0f, mafGs = 4f, mapKpa = 50f), sportEcu = sport) } }
+        val stock = Run(); warmUp(stock); idle(stock, false)
+        assertTrue(stock.ids().contains("idleMap"))
+        assertTrue(stock.ids().contains("idleHigh"))
+        val link = Run(); warmUp(link); idle(link, true)
+        assertFalse(link.ids().contains("idleMap"))
+        assertFalse(link.ids().contains("idleHigh"))
+    }
+
     @Test fun iamRecoveringAfterBadFuelIsNotAReset() {
         val r = Run(MemoryRuleStore().apply { lastIam = 0.81f })
         var iam = 0.81f

@@ -428,6 +428,16 @@ class Settings(ctx: Context) {
         get() = p.getString("lastRomId", "")!!
         set(v) = p.edit().putString("lastRomId", v).apply()
 
+    /** The car on the sports ECU (CanEcu) is a turbo: boost was seen once; a Link says nothing about its engine. */
+    var linkTurbo: Boolean
+        get() = p.getBoolean("linkTurbo", false)
+        set(v) = p.edit().putBoolean("linkTurbo", v).apply()
+
+    /** Injector flow, cc/min, for the fuel count without a MAF (a Link car's injectors are rarely stock); 0 = by the engine. */
+    var injectorCc: Int
+        get() = p.getInt("injectorCc", 0)
+        set(v) = p.edit().putInt("injectorCc", v).apply()
+
     /** Body colour of the 3D car (see CarPaints). */
     var carPaint: String
         get() = p.getString("carPaint", "chameleon")!!

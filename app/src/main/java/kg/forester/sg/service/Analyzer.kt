@@ -17,6 +17,8 @@ data class RuleInput(
     val oilC: Float? = null,
     val turbo: Boolean = false,
     val targetBoostKpa: Float? = null,
+    /** A sports ECU (Link on the CAN): no wastegate duty, IAM or factory idle to judge by. */
+    val sportEcu: Boolean = false,
 )
 
 /** What the rules keep between drives: in the app's preferences, in memory for the tests. */
@@ -138,7 +140,11 @@ class Analyzer(
     fun reset() { lastSampleMs = Long.MIN_VALUE; runningSince = 0L; lastIamSeen = null }
     private fun say(id: String, text: String, level: Alerts.Level, cooldownMs: Long) = sink.raise(id, text, level, cooldownMs)
 
+    /** The current sample is from a sports ECU (see [RuleInput.sportEcu]). */
+    private var sport = false
+
     fun process(x: RuleInput) {
+        sport = x.sportEcu
         val e = x.e
         val now = x.now
         val rpm = e.rpm ?: 0
@@ -406,7 +412,8 @@ class Analyzer(
         }
         val map = e.mapKpa
         // absolute: a healthy engine idles at about the same manifold pressure at any altitude (the factory 24–41 kPa)
-        if (on("idle") && map != null && mapHold.ms(hotIdle && map > 43f, now) >= 30_000L) {
+        // the factory 24–41 kPa: a tuned engine on a sports ECU (cams, its own idle) is no fault above it
+        if (on("idle") && !sport && map != null && mapHold.ms(hotIdle && map > 43f, now) >= 30_000L) {
             say("idleMap", "На холостых во впуске слабое разрежение (%.0f кПа). Так бывает при большом подсосе воздуха, низкой компрессии или сбитых фазах".format(map),
                 Alerts.Level.WARN, 6 * 3600_000L)
         }
@@ -473,6 +480,8 @@ class Analyzer(
         while (pullLows.size > 3) pullLows.removeFirst()
         if (low && base >= 40f && pullLows.count { it } >= 2) {
             val text = when {
+                // a Link sends no wastegate duty nor IAM: nothing to blame the ECU with
+                x.sportEcu -> "Наддув на разгоне ниже обычного: %.2f бар вместо %.2f. Проверьте впуск на утечки, шланги соленоида и буст-контроль в настройке Link".format(pullPeak / 100f, base / 100f)
                 pullMaxWgdc >= 70f -> "Турбина не даёт положенного наддува (%.2f бар вместо обычных %.2f), хотя ЭБУ его просит. ".format(pullPeak / 100f, base / 100f) +
                     "Обычно это утечка во впуске после турбины или заклинивший вестгейт: проверьте хомуты и патрубки интеркулера"
                 (x.iam ?: 1f) < 0.75f || pullMaxWgdc < 20f -> "ЭБУ сам ограничивает наддув (%.2f бар вместо %.2f). Чаще всего после детонации или из-за ошибки: ".format(pullPeak / 100f, base / 100f) +
@@ -486,7 +495,7 @@ class Analyzer(
     // ---------------------------------------------------------------- idle (I01, I02, V01) and the idle sample
 
     private fun idle(e: EcuSnapshot, now: Long, hotIdle: Boolean, rpm: Int) {
-        if (idleHighHold.ms(hotIdle && (e.batteryV ?: 0f) > 12.8f && rpm > 1050, now) >= 60_000L) {
+        if (idleHighHold.ms(hotIdle && !sport && (e.batteryV ?: 0f) > 12.8f && rpm > 1050, now) >= 60_000L) {
             say("idleHigh", "Прогретый мотор держит повышенные обороты на холостых ($rpm). Обычно это подсос воздуха или грязный дроссель и клапан холостого хода",
                 Alerts.Level.INFO, 6 * 3600_000L)
         }

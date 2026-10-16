@@ -103,11 +103,18 @@ fun CarAdapterSettings() {
             val turboCar = Repo.guard.collectAsState().value.turboCar
             val engine = remember(init, demoOn, turboCar) { kg.forester.sg.ssm.EngineId.detect(ctx) }
             val (hTitle, hSub) = carHeader(engine, s.carTitle, s.carSub, s.carTitleCustom)
-            T(if (engine.known) "$hTitle · $hSub" else "Модель определится, когда ответит ЭБУ", 16.sp, weight = FontWeight.SemiBold)
+            val link = engine.source == "Link"
+            T(when {
+                engine.known -> "$hTitle · $hSub"
+                link -> "ЭБУ Link: модель машины впишите ниже"
+                else -> "Модель определится, когда ответит ЭБУ"
+            }, 16.sp, weight = FontWeight.SemiBold)
             T(engineSource(engine), 11.sp, C.Sub)
             Spacer(Modifier.height(10.dp))
-            TextBox("Своё название в шапке (необязательно)", title) { title = it; s.carTitle = it; s.carTitleCustom = it.isNotBlank() }
-            T("Пусто: в шапке модель по ЭБУ.", 11.sp, C.Sub)
+            TextBox(if (link) "Название в шапке, например WRX STI 2018" else "Своё название в шапке (необязательно)", title) {
+                title = it; s.carTitle = it; s.carTitleCustom = it.isNotBlank()
+            }
+            T(if (link) "Пусто: в шапке SUBARU." else "Пусто: в шапке модель по ЭБУ.", 11.sp, C.Sub)
             Spacer(Modifier.height(14.dp))
             T("Коробка", 15.sp)
             Spacer(Modifier.height(6.dp))

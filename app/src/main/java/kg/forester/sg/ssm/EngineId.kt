@@ -16,7 +16,8 @@ data class EngineInfo(
     /** The likely code, e.g. "EJ205"; may be just the family. */
     val code: String,
     /** How it was found: "ЭБУ" (ROM in the base), "ROM" (decoded from the ROM ID), "прошлое" (the last connection),
-     *  "ЭБУ без модели" (the ECU answered, its ROM ID says nothing), "демо", "нет" (no ECU yet). */
+     *  "ЭБУ без модели" (the ECU answered, its ROM ID says nothing), "демо", "Link" (a sports ECU on the CAN),
+     *  "нет" (no ECU yet). */
     val source: String,
     val romId: String? = null,
     val car: String? = null,
@@ -102,6 +103,8 @@ object EngineId {
     /** The best guess now: the ECU's ROM, else what the ECU said last time; a wastegate or boost seen makes it a turbo. */
     fun detect(ctx: Context): EngineInfo {
         if (Repo.settings.demo) return EngineInfo("EJ20", true, "EJ205", "демо")
+        // a sports ECU tells nothing of the engine: not the last Subaru's either; turbo once boost was seen on it
+        if (kg.forester.sg.data.CanEcu.active) return EngineInfo("EJ", Repo.guard.value.turboCar || Repo.settings.linkTurbo, "Link", "Link")
         val init = Repo.ecuInit.value
         val base = when {
             init != null -> EcuIds.car(ctx, init.romId)?.let { fromCar(it, "ЭБУ", init.romId) }

@@ -184,4 +184,14 @@ class LinkCanTest {
         assertEquals(1200, LinkDash.id)
         assertEquals(2500, LinkDash.snapshot(2000L).rpm)
     }
+
+    @Test fun linkHomeLayoutShowsWhatTheStreamGives() {
+        val l = kg.forester.sg.data.HomeLayout.parse(kg.forester.sg.data.HomeLayout.linkDefault())
+        val on = l.filter { it.on }.map { it.id }
+        assertEquals(15, on.size)
+        assertTrue(on.containsAll(listOf("oil", "map", "gaugeKpa", "afr", "timing")))
+        assertTrue(on.none { it in setOf("maf", "afcorr", "aflearn", "knock", "wgdc") })
+        // every card of the factory board is still there to switch on
+        assertEquals(kg.forester.sg.data.HomeLayout.board.defaults.map { it.id }.toSet(), l.map { it.id }.toSet())
+    }
 }

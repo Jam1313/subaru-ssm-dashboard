@@ -69,6 +69,17 @@ fun CanablePanel() {
     Spacer(Modifier.height(4.dp))
     T("Та же, что у CAN-шины ЭБУ, к которой подключён адаптер (у Link в PCLink: ECU Controls, CAN Setup). Потоки Link " +
         "Dash2Pro и Generic Dash приложение находит само; другие данные, например ЕГТ в своём потоке, добавляются в «Свои значения»", 11.sp, C.Sub)
+    Spacer(Modifier.height(10.dp))
+    var cc by remember { mutableStateOf(s.injectorCc.takeIf { it > 0 }?.toString() ?: "") }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        FormField("Форсунки, cc/мин", cc, Modifier.width(170.dp), KeyboardType.Number) { t ->
+            cc = t.filter { it.isDigit() }.take(4)
+            s.injectorCc = cc.toIntOrNull()?.takeIf { it in 100..3000 } ?: 0
+        }
+        Spacer(Modifier.width(10.dp))
+        T("Без MAF расход считается по времени впрыска: впишите производительность своих форсунок (как в настройке Link). " +
+            "Пусто: штатные 380 у турбо, 260 у атмо. Точнее станет после заправок до полного", 11.sp, C.Sub, modifier = Modifier.weight(1f))
+    }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Chip("Что идёт по CAN", false, { monitor = true }, Lucide.Activity)

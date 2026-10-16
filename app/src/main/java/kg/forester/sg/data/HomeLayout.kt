@@ -138,6 +138,19 @@ object HomeLayout {
     }.sortedBy { if (it.id == "range" || it.id == "atf") board.defaults.indexOfFirst { d -> d.id == "wgdc" } else board.defaults.indexOf(it) })
 
     /**
+     * The factory layout for a sports ECU on the CAN (Link): what its stream gives instead of the cards it leaves
+     * empty (MAF, the A/F trims, knock correction, wastegate).
+     */
+    fun linkDefault(): String {
+        val on = listOf(
+            "coolant", "intake", "battery", "throttle", "oil",
+            "afr", "timing", "map", "inj", "gaugeKpa",
+            "boost", "fuel", "per100", "range", "gps",
+        )
+        return board.format(on.map { TileCfg(it, true) } + board.defaults.filter { it.id !in on }.map { it.copy(on = false) })
+    }
+
+    /**
      * "Просто": a large 3D block with the dials and five big numbers that matter while driving, for those who
      * find the factory screen too busy. [turbo] picks boost over ATF.
      */

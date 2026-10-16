@@ -86,6 +86,8 @@ fun SensorsScreen() {
             T(
                 when {
                     obd -> "Машина отвечает только по стандартному OBD-II: расширенных параметров Subaru нет."
+                    kg.forester.sg.data.CanEcu.active -> "Спортивный ЭБУ по CAN: ${avail.size} значений из его потока и своих значений из CAN " +
+                        "(Настройки, Авто и адаптер). Отметьте, что смотреть."
                     init == null -> "Список зависит от ЭБУ и его прошивки: подключитесь к машине (в демо-режиме его нет)."
                     else -> "ROM ${init?.romId}: доступно ${avail.size} (база RomRaider). Отметьте, что смотреть."
                 },
@@ -132,6 +134,8 @@ fun SensorsScreen() {
                             contentAlignment = Alignment.Center,
                         ) { if (on) Icon(Lucide.Check, null, tint = C.Text, modifier = Modifier.size(16.dp)) }
                         Spacer(Modifier.width(10.dp))
+                        Icon(Metrics.iconOf(p), null, tint = if (on) C.Violet else C.Sub, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
                             T(p.name, 14.sp, maxLines = 2)
                             T(listOfNotNull(

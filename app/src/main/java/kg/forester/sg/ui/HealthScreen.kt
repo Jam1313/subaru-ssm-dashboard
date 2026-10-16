@@ -124,7 +124,11 @@ private fun CheckTab() {
             PanelTitle(Lucide.Stethoscope, "Холостой ход против заводских значений")
             Spacer(Modifier.height(6.dp))
             T("${engine.title} · ${engineSource(engine)}", 12.sp, C.Sub)
-            T(table?.source ?: if (engine.source == "нет") "Таблица выберется по мотору, который определит ЭБУ" else "Заводской таблицы для этого мотора нет", 12.sp, C.Sub)
+            T(table?.source ?: when (engine.source) {
+                "нет" -> "Таблица выберется по мотору, который определит ЭБУ"
+                "Link" -> "С Link заводские нормы не применяются: у настроенного мотора свои холостые. Замеры копятся для сравнения между собой"
+                else -> "Заводской таблицы для этого мотора нет"
+            }, 12.sp, C.Sub)
             Spacer(Modifier.height(6.dp))
             NoteBox(sample?.let { (if (picked != null) "Замер из истории, ${fmt.format(Date(it.timeMs))}: " else "Замер ${fmt.format(Date(it.timeMs))}: ") +
                 "среднее за полминуты прогретого холостого хода. Обновляется сам, когда мотор прогрет до 80° и стоит на холостых." }
@@ -350,7 +354,9 @@ internal fun KnockDetails() {
     }
     if (iam == null) {
         Spacer(Modifier.height(8.dp))
-        NoteBox("В определениях этой прошивки нет IAM — приложение следит за коррекцией детонации.")
+        NoteBox(if (kg.forester.sg.data.CanEcu.active) "Link не передаёт IAM и коррекции детонации: ими управляет сам ЭБУ. " +
+            "Уровень детонации из его потока есть на «Датчиках» (Детонация, по цилиндрам в Generic Dash)."
+            else "В определениях этой прошивки нет IAM — приложение следит за коррекцией детонации.")
     }
     Spacer(Modifier.height(12.dp))
     SectionLine(Lucide.History, "IAM по поездкам")

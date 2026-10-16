@@ -196,6 +196,21 @@ fun DtcScreen() {
     var confirmClear by remember { mutableStateOf(false) }
 
     fun readNow() {
+        // a sports ECU keeps its codes to its own software: say how many it reports, nothing to read here
+        if (kg.forester.sg.data.CanEcu.active) {
+            val n = kg.forester.sg.data.CanEcu.values()["${kg.forester.sg.data.CanEcu.PREFIX}FAULTS"]?.toInt()
+            // the code itself only when the tuner put Link's «Fault Code» into a stream and it is set up as an own value
+            val code = kg.forester.sg.data.CanEcu.role("fault")?.toInt()?.takeIf { it > 0 }
+            hits = emptyList()
+            status = when {
+                code != null -> "ЭБУ Link: код ошибки $code (что он значит, смотрите в PCLink или справке Link)" + (n?.takeIf { it > 1 }?.let { ". Всего ошибок: $it" } ?: "")
+                n == null -> "ЭБУ Link: число ошибок в этом потоке не передаётся, коды читаются в PCLink"
+                n == 0 -> "ЭБУ Link: ошибок нет"
+                else -> "ЭБУ Link: ошибок $n. Сами коды Link в поток для дашбордов не кладёт: добавьте в свой поток параметр Fault Code " +
+                    "и заведите его в «Своих значениях из CAN» с ролью «Код ошибки Link», или смотрите их в PCLink"
+            }
+            return
+        }
         busy = true; status = "Чтение…"
         scope.launch {
             val r = withContext(Dispatchers.IO) { if (obdMode) DtcRepo.readObd(ctx) else DtcRepo.read(defs, dest) }
@@ -242,7 +257,8 @@ fun DtcScreen() {
             Spacer(Modifier.height(20.dp))
             ActionButton("Прочитать ошибки", !busy) { readNow() }
             Spacer(Modifier.height(10.dp))
-            ActionButton("Сбросить ошибки", !busy, danger = true) { confirmClear = true }
+            // a Link's codes are cleared in PCLink: the Subaru clear command means nothing to it
+            ActionButton("Сбросить ошибки", !busy && !kg.forester.sg.data.CanEcu.active, danger = true) { confirmClear = true }
             Spacer(Modifier.height(16.dp))
             T(status, 14.sp)
             if (unitTcu) {

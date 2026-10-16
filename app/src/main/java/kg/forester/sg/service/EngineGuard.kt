@@ -271,7 +271,9 @@ class EngineGuard {
             romTurbo = init != null && ((ctx?.let { kg.forester.sg.ssm.EngineId.romTurbo(it, init.romId) } ?: kg.forester.sg.ssm.EngineId.fromRomId(init.romId)?.turbo) == true ||
                 (kg.forester.sg.ssm.EcuParams.reported(init, kg.forester.sg.ssm.EcuParams.WGDC) && init.capabilities.size > 4))
         }
-        val turboCar = turboSeen || romTurbo || s.demo
+        val sport = kg.forester.sg.data.CanEcu.active
+        if (sport && turboSeen && !s.linkTurbo) s.linkTurbo = true
+        val turboCar = turboSeen || romTurbo || s.demo || (sport && s.linkTurbo)
         val turbo = fTurbo && turboCar
         val speed = e.speedKmh ?: 0
         val idle = running && rpm < 1300 && speed < 3
@@ -353,7 +355,7 @@ class EngineGuard {
         // a rule failing must not cost the guard's own update below
         runCatching {
             analyzer?.process(RuleInput(e, tFresh, now, iam = if (fKnock) iam else null, fbkc = if (fKnock) fbkc else null, flkc = if (fKnock) flkc else null,
-                oilC = oil, turbo = turboCar, targetBoostKpa = target))
+                oilC = oil, turbo = turboCar, targetBoostKpa = target, sportEcu = sport))
         }.onFailure { kg.forester.sg.ssm.SsmTrace.log("analyzer: $it") }
 
         // --- maintenance reminder once a day when driving off
