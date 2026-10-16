@@ -467,6 +467,19 @@ object LocalMusic {
 
     fun pause() { exo?.pause() }
 
+    /**
+     * «Включи музыку» with nothing playing: the app's own player goes on where it stopped, else plays the folder
+     * played last. False when it has never played anything (nothing to go on with).
+     */
+    fun resume(ctx: Context): Boolean {
+        val p = player(ctx)
+        if (p.isPlaying) return true
+        if (p.mediaItemCount > 0) { toggle(ctx); return true }
+        val dir = recent().firstOrNull { list(it).tracks.isNotEmpty() } ?: return false
+        playFolder(ctx, dir, list(dir).tracks, 0)
+        return true
+    }
+
     fun next(ctx: Context) = player(ctx).let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
     /** Back to the start of the track after the first seconds, to the one before right at its start, like a CD. */
     fun prev(ctx: Context) = player(ctx).seekToPrevious()

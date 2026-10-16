@@ -71,6 +71,9 @@ import kotlin.math.roundToInt
 import kg.forester.sg.data.HomeLayout
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.input.pointer.pointerInput
@@ -109,6 +112,20 @@ class BoardEdit(
         val i = l.indexOfFirst { it.id == id }
         if (i >= 0) l.add(l.removeAt(i))
         save(l)
+    }
+
+    /**
+     * Another shown card is drawn over part of [id] in the free layout: only then does "to front" change anything
+     * (a card moved or sized comes to the front by itself; the home 3D card is always at the bottom).
+     */
+    fun covered(id: String): Boolean {
+        val l = list().filter { it.on && it.id != "car3d" }
+        val i = l.indexOfFirst { it.id == id }
+        val r = l.getOrNull(i)?.free ?: return false
+        return l.drop(i + 1).any { o ->
+            val q = o.free ?: return@any false
+            minOf(r.x + r.w, q.x + q.w) - maxOf(r.x, q.x) > 0.001f && minOf(r.y + r.h, q.y + q.h) - maxOf(r.y, q.y) > 0.001f
+        }
     }
 
     /** Draws [id] on top of the others in the free layout (the home 3D card always stays at the bottom). */
@@ -342,7 +359,8 @@ fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", 
         val car = cfg.id == "car3d" // the 3D card: car size instead of a gauge design
         val map = cfg.id == "minimap" // the map card: map design
         val slot = Regex("s[1-6]").matches(cfg.id) // «Датчик k»: which value it shows
-        val count = (if (gauge || map || slot) 1 else 0) + (if (car) 2 else 0) + if (free) 2 else 5
+        val front = free && edit.covered(cfg.id)
+        val count = (if (gauge || map || slot) 1 else 0) + (if (car) 2 else 0) + if (free) (if (front) 2 else 1) else 5
         val narrow = maxWidth < 260.dp || maxHeight < 44.dp
         val gap = if (narrow) 3.dp else 5.dp
         val btn = minOf(32.dp, (maxWidth - 8.dp - gap * (count - 1)) / count, maxHeight - 6.dp)
@@ -352,7 +370,8 @@ fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (free) {
-                EditButton(Lucide.Layers, btn) { edit.toFront(cfg.id) }
+                // only when another card covers part of this one: bring it over
+                if (front) EditButton(Lucide.Layers, btn) { edit.toFront(cfg.id) }
             } else {
                 EditButton(Lucide.ChevronLeft, btn) { edit.move(cfg.id, -1) }
                 EditButton(Lucide.Minus, btn, cfg.span > 1) { edit.resize(cfg.id, -1) }
@@ -428,20 +447,34 @@ fun BoardScreen(edit: BoardEdit, names: CardNames, rowWeight: (TileCfg) -> Float
 }
 
 /**
- * The free layout's area always measured at the full size, with or without the edit bar over it: the bar (or a tip)
+ * The free layout's area always measured at its usual size, with or without the edit bar over it: the bar (or a tip)
  * only shrinks the picture of it, keeping its proportions, so cards stay exactly where they were set while editing.
  * (Laid out below the bar instead, the area was shorter while editing, and the cards moved when the bar went away.)
+ * While [editing], the bottom bar steps aside and its room makes up for the edit bar's: the grid keeps its scale and
+ * the whole width, instead of shrinking with empty strips at its sides.
  */
 @Composable
-fun FreeFrame(header: (@Composable () -> Unit)?, modifier: Modifier, content: @Composable (Modifier) -> Unit) {
+fun FreeFrame(header: (@Composable () -> Unit)?, modifier: Modifier, editing: Boolean = header != null, content: @Composable (Modifier) -> Unit) {
+    DisposableEffect(editing) {
+        Repo.freeEditing.value = editing
+        onDispose { Repo.freeEditing.value = false }
+    }
     BoxWithConstraints(modifier) {
-        val full = constraints.maxHeight.toFloat()
+        val now = constraints.maxHeight
+        // the area's height without the edit bar (and with the bottom bar): the size its cards were set at
+        var usual by remember { mutableStateOf(0) }
+        if (!editing && now > 0 && usual != now) SideEffect { usual = now }
+        val base = (if (usual > 0) usual else now).toFloat()
         var barH by remember { mutableStateOf(0) }
         val gap = with(LocalDensity.current) { 12.dp.toPx() }
-        val k = if (header != null && barH > 0 && full > 0f) ((full - barH - gap) / full).coerceIn(0.3f, 1f) else 1f
-        content(Modifier.fillMaxSize().graphicsLayer {
+        val top = if (header != null && barH > 0) barH + gap else 0f
+        val k = if (base > 0f) ((now - top) / base).coerceIn(0.3f, 1f) else 1f
+        val baseDp = with(LocalDensity.current) { base.toDp() }
+        content(Modifier.fillMaxWidth().requiredHeight(baseDp).align(Alignment.TopCenter).graphicsLayer {
             scaleX = k; scaleY = k
-            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+            // requiredHeight centres an area taller than the room: put its top just under the bar
+            translationY = top - if (base > now) (now - base) / 2f else 0f
         })
         if (header != null) Box(Modifier.fillMaxWidth().onSizeChanged { barH = it.height }.zIndex(2f)) { header() }
     }
@@ -476,7 +509,14 @@ fun FreeArea(
             val h = (snapY(r.h)).coerceIn(1f / cells[1], 1f - r.y)
             return r.copy(w = w, h = h)
         }
-        fun moved(r: FreeRect): FreeRect = r.copy(x = snapX(r.x).coerceIn(0f, (1f - r.w).coerceAtLeast(0f)), y = snapY(r.y).coerceIn(0f, (1f - r.h).coerceAtLeast(0f)))
+        // whichever edge is nearer a grid line sticks to it: a card sized on another grid (not a whole number of cells)
+        // still reaches the right and bottom edges of the area
+        fun near(at: Float, size: Float, snap: (Float) -> Float): Float {
+            val byStart = snap(at)
+            val byEnd = snap(at + size) - size
+            return (if (kotlin.math.abs(byEnd - at) < kotlin.math.abs(byStart - at)) byEnd else byStart).coerceIn(0f, (1f - size).coerceAtLeast(0f))
+        }
+        fun moved(r: FreeRect): FreeRect = r.copy(x = near(r.x, r.w, ::snapX), y = near(r.y, r.h, ::snapY))
         if (editing && cells != null) androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
             val line = C.Border.copy(alpha = 0.7f)
             for (k in 1 until cells[0]) drawLine(line, androidx.compose.ui.geometry.Offset(size.width * k / cells[0], 0f),

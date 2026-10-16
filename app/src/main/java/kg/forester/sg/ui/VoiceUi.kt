@@ -1,6 +1,8 @@
 package kg.forester.sg.ui
 
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
@@ -77,7 +79,7 @@ fun VoiceSettings() {
     var on by remember { mutableStateOf(Voice.enabled(ctx)) }
     var wake by remember { mutableStateOf(Voice.wakeWord(ctx)) }
     Row(Modifier.fillMaxSize()) {
-        Panel(Modifier.width(470.dp).fillMaxHeight()) {
+        Panel(Modifier.width(470.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
             PanelTitle(Lucide.Mic, "Голосовое управление")
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,6 +124,25 @@ fun VoiceSettings() {
             Spacer(Modifier.height(10.dp))
             T("Статус: $status", 13.sp, if (status.startsWith("слушаю")) C.Green else C.Sub)
             T("Услышано: ${heard.ifBlank { "—" }}", 13.sp, C.Sub)
+            Spacer(Modifier.height(12.dp))
+            // a command typed instead of said: to try the assistant where one can't speak up
+            var typed by remember { mutableStateOf("") }
+            T("Проверить команду без голоса", 14.sp)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = typed, onValueChange = { typed = it }, singleLine = true,
+                    placeholder = { T("какая температура масла", 13.sp, C.Sub) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = C.Text, unfocusedTextColor = C.Text,
+                        focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.width(120.dp)) { ActionButton("Сказать", typed.isNotBlank()) { Voice.rehearse(ctx, typed.trim()) } }
+            }
+            T("Как будто сказали «${Voice.wakeWord(ctx)}, …»: шар покажет фразу, ассистент ответит и выполнит", 11.sp, C.Sub)
             Spacer(Modifier.height(12.dp))
             MediaAccessRow()
         }

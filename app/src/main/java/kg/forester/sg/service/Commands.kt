@@ -46,7 +46,7 @@ enum class VoiceIntent {
     // our own app
     SCREEN,         // target: a VoiceTarget name (HOME, DRIVE, FUEL, GEARBOX, BATTERY, DTC, MEDIA)
     FULL_SCREEN,    // target: "nav" = the navigator full screen, null = ours
-    READ_VALUE,     // target: COOLANT, OUTSIDE, INTAKE, ATF, FUEL, RANGE, CONSUMPTION, BATTERY, SPEED, RPM, BOOST, DTC, TRIP, TIME, VOLUME
+    READ_VALUE,     // target: COOLANT, OIL, OILP, OUTSIDE, INTAKE, ATF, FUEL, RANGE, CONSUMPTION, BATTERY, SPEED, RPM, BOOST, DTC, TRIP, TIME, VOLUME
     APP_OPEN,       // query: app name as heard, resolved against shortcuts / installed apps
 
     // dialog
@@ -844,7 +844,9 @@ object Commands {
             temp && (w.has("улиц", "=бортом", "снаружи", "=холодно", "=жарко")) -> "OUTSIDE"
             temp && w.has("коробк", "акпп", "вариатор", "=атф", "трансмисс") -> "ATF"
             temp && w.has("впуск", "воздух") -> "INTAKE"
+            temp && w.has("масл") -> "OIL"
             temp -> "COOLANT"
+            w.has("давлен") && w.has("масл") -> "OILP"
             w.seq("запас хода", "на сколько хватит", "насколько хватит") || (w.has("хватит", "проед", "доед", "=км", "километр") && w.has(*FUEL_WORDS)) -> "RANGE"
             w.has("расход") -> "CONSUMPTION"
             w.has(*FUEL_WORDS) -> "FUEL"
@@ -856,7 +858,7 @@ object Commands {
             w.has("проехал", "пробег", "километраж") -> "TRIP"
             else -> return null
         }
-        val plain = target in setOf("COOLANT", "OUTSIDE", "INTAKE", "ATF", "SPEED", "RPM", "FUEL", "RANGE") ||
+        val plain = target in setOf("COOLANT", "OUTSIDE", "INTAKE", "ATF", "OIL", "OILP", "SPEED", "RPM", "FUEL", "RANGE") ||
             (target == "BATTERY" && w.has("напряжен", "вольт"))
         if (!ask && !(plain && w.size <= 3)) return null
         return cmd(VoiceIntent.READ_VALUE, target = target)
@@ -1045,6 +1047,8 @@ object Commands {
         Case("музыку с флешки", VoiceIntent.SOURCE_USB),
         // values, screens, dialog
         Case("какая температура двигателя", VoiceIntent.READ_VALUE, target = "COOLANT"),
+        Case("какая температура масла", VoiceIntent.READ_VALUE, target = "OIL"),
+        Case("какое давление масла", VoiceIntent.READ_VALUE, target = "OILP"),
         Case("сколько бензина", VoiceIntent.READ_VALUE, target = "FUEL"),
         Case("сколько осталось бензина", VoiceIntent.READ_VALUE, target = "FUEL"),
         Case("на сколько хватит бензина", VoiceIntent.READ_VALUE, target = "RANGE"),

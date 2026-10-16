@@ -70,6 +70,24 @@ object Voice {
     fun restart(ctx: Context) { stop(); start(ctx) }
 
     /** A command as if it was said (adb test hook, see MainActivity): no microphone or model needed. */
+    /**
+     * [text] as if it were said after the name: the orb shows it coming word by word, then it is carried out. For
+     * trying the assistant where one can't speak (the settings' text field, adb's orbDemo).
+     */
+    fun rehearse(ctx: Context, text: String) {
+        app = ctx.applicationContext
+        val words = text.split(' ').filter { it.isNotBlank() }
+        if (words.isEmpty()) return
+        val steps = 12 * words.size + 6
+        main.removeCallbacks(stopListening)
+        listening.value = true
+        for (k in 0 until steps) main.postDelayed({
+            level.value = (0.35 + 0.35 * kotlin.math.sin(k * 0.5) * kotlin.math.sin(k * 0.13)).toFloat().coerceIn(0f, 1f)
+            partial.value = words.take(1 + k / 12).joinToString(" ")
+        }, k * 100L)
+        main.postDelayed({ level.value = 0f; runText(ctx, text) }, steps * 100L)
+    }
+
     fun runText(ctx: Context, text: String) {
         app = ctx.applicationContext
         main.post {
@@ -331,9 +349,11 @@ object Voice {
                 say("Пауза")
             }
             VoiceIntent.PLAY -> {
-                if (otherAppPlaying() || !Fyt.present(app)) mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "") else if (!Fyt.music.value.playing) Fyt.playPause()
-                Fyt.mute(false)
-                say("Играю")
+                if (Fyt.present(app) && !otherAppPlaying()) {
+                    if (!Fyt.music.value.playing) Fyt.playPause()
+                    Fyt.mute(false)
+                    say("Играю")
+                } else playAnything()
             }
             VoiceIntent.RESTART -> {
                 MediaSessions.controller(app)?.transportControls?.seekTo(0) ?: mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, "")
@@ -540,6 +560,12 @@ object Voice {
             "COOLANT" -> "Двигатель ${n(e.coolantC, "градусов")}"
             "INTAKE", "OUTSIDE" -> "Воздух на впуске ${n(e.intakeC, "градусов")}"
             "ATF" -> "Коробка ${n(kg.forester.sg.data.Repo.tcu.value?.atfC, "градусов")}"
+            // most EJs have no oil sensor: the app's estimate, said as one
+            "OIL" -> kg.forester.sg.data.Repo.guard.value.let { g ->
+                g.oilC?.let { "Масло ${if (g.oilEstimated) "примерно " else ""}${Math.round(it)} градусов" } ?: "Нет данных о масле"
+            }
+            "OILP" -> kg.forester.sg.data.SensorBox.role("oilP")?.let { "Давление масла ${String.format(ru, "%.1f", it)} бар" }
+                ?: "Датчика давления масла нет"
             "BATTERY" -> "Напряжение ${e.batteryV?.let { String.format(ru, "%.1f", it) } ?: "нет данных"} вольт"
             "SPEED" -> "Скорость ${n(e.speedKmh, "километров в час")}"
             "RPM" -> "Обороты ${n(e.rpm, "")}"
@@ -601,6 +627,22 @@ object Voice {
     }
 
     /** Some other app holds the music stream (Fyt's player is silent). */
+    /**
+     * «Включи музыку» on a unit without the FYT player (or with another app's music on): what plays goes on; else
+     * the app's own player (where it stopped, or the folder played last), else another player paused in the
+     * background, else the media screen to pick something. A bare media key reached nobody when nothing had
+     * played since the start, and «Играю» was said over silence.
+     */
+    private fun playAnything() {
+        val am = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        Fyt.mute(false)
+        if (am.isMusicActive) { say("Уже играет"); return }
+        if (runCatching { LocalMusic.resume(app) }.getOrDefault(false)) { say("Играю"); return }
+        val other = MediaSessions.controller(app)?.takeIf { it.packageName != app.packageName }
+        if (other != null) { other.transportControls.play(); say("Играю"); return }
+        go(VoiceTarget.MEDIA, "Выберите, что включить")
+    }
+
     private fun otherAppPlaying() = (app.getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive && !Fyt.music.value.playing
 
     private fun mediaKey(code: Int, label: String) {

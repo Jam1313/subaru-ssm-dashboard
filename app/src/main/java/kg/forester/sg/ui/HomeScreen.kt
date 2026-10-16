@@ -136,7 +136,7 @@ fun HomeScreen() {
             tip -> ({ HomeTip { tip = false; Repo.settings.homeTipSeen = true } })
             else -> null
         }
-        FreeFrame(header, Modifier.fillMaxSize()) { m ->
+        FreeFrame(header, Modifier.fillMaxSize(), editing = edit) { m ->
             FreeArea(
                 // the 3D car is the backdrop: always under the other cards
                 HomeEdit, kg.forester.sg.data.HomeLayout.parse(layout).filter { it.on }.sortedBy { if (it.id == "car3d") 0 else 1 },

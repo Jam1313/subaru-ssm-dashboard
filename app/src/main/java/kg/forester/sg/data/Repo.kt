@@ -199,6 +199,16 @@ class Settings(ctx: Context) {
         get() = p.getString("customParams", "[]")!!
         set(v) = p.edit().putString("customParams", v).apply()
 
+    /** Values the driver reads off a CAN stream by id and bytes (see CanChannels), JSON. */
+    var canChannels: String
+        get() = p.getString("canChannels", "[]")!!
+        set(v) = p.edit().putString("canChannels", v).apply()
+
+    /** Speed of the bus a CANable listens to, kbit/s: what the sports ECU's dash CAN is set to in its software. */
+    var canKbit: Int
+        get() = p.getInt("canKbit", 500)
+        set(v) = p.edit().putInt("canKbit", v).apply()
+
     /** The fuel gauge wire's hand-made calibration, "volts,litres;…" (see FuelLine). */
     var fuelLinePoints: String
         get() = p.getString("fuelLinePoints", "")!!
@@ -588,6 +598,12 @@ object Repo {
 
     /** Demo mode on (see [Settings.demo]). */
     val demoOn = MutableStateFlow(false)
+
+    /** A free layout is being edited: the bottom bar steps aside for it (see FreeFrame). */
+    val freeEditing = MutableStateFlow(false)
+
+    /** «Демо Link» (adb only, till the app restarts): a made-up Link G4X on a CANable, see LinkDemo. */
+    val linkDemo = MutableStateFlow(false)
 
     fun init(ctx: Context) {
         if (!::db.isInitialized) {

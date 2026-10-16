@@ -99,22 +99,11 @@ class MainActivity : ComponentActivity() {
         Repo.init(this)
         // adb: am start -n kg.forester.sg/.MainActivity --ez demo true [--ez skipSetup true]
         if (intent?.hasExtra("demo") == true) Repo.settings.demo = intent.getBooleanExtra("demo", false)
+        // adb: … --ez linkdemo true: a made-up Link G4X on a CANable (what a sports-ECU car would see)
+        if (intent?.hasExtra("linkdemo") == true) Repo.linkDemo.value = intent.getBooleanExtra("linkdemo", false)
         if (intent?.getBooleanExtra("skipSetup", false) == true) Repo.settings.setupDone = true
         testAlert(intent)
-        // adb: am start -n kg.forester.sg/.MainActivity --es voiceText "найди видео на ютубе мистер бист" (a command as if said)
-        intent?.getStringExtra("voiceText")?.let { kg.forester.sg.service.Voice.runText(this, it) }
-        // adb: am start -n kg.forester.sg/.MainActivity --es orbDemo "включи музло" (the listening orb without a microphone)
-        intent?.getStringExtra("orbDemo")?.let { text ->
-            lifecycleScope.launch {
-                kg.forester.sg.service.Voice.listening.value = true
-                for (i in 0 until 90) {
-                    kg.forester.sg.service.Voice.level.value = (0.35 + 0.35 * kotlin.math.sin(i * 0.5) * kotlin.math.sin(i * 0.13)).toFloat().coerceIn(0f, 1f)
-                    kg.forester.sg.service.Voice.partial.value = text.split(' ').take(1 + i / 12).joinToString(" ")
-                    delay(100)
-                }
-                kg.forester.sg.service.Voice.listening.value = false
-            }
-        }
+        voiceTest(intent)
         kg.forester.sg.data.Shortcuts.load(this)
         // once a day: is there a newer release on GitHub?
         Thread { runCatching { kg.forester.sg.data.Updater.checkDaily(applicationContext) } }.start()
@@ -160,7 +149,20 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         if (intent.hasExtra("demo")) Repo.settings.demo = intent.getBooleanExtra("demo", false)
+        if (intent.hasExtra("linkdemo")) Repo.linkDemo.value = intent.getBooleanExtra("linkdemo", false)
         testAlert(intent)
+        voiceTest(intent)
+    }
+
+    /**
+     * The assistant without speaking (the app open or not):
+     * adb: am start -n kg.forester.sg/.MainActivity --es voiceText "найди видео на ютубе мистер бист" (a command as if said)
+     * adb: am start -n kg.forester.sg/.MainActivity --es orbDemo "включи музло" (the listening orb as the words come,
+     * then the command itself, as when it is said)
+     */
+    private fun voiceTest(i: android.content.Intent?) {
+        i?.getStringExtra("voiceText")?.let { kg.forester.sg.service.Voice.runText(this, it) }
+        i?.getStringExtra("orbDemo")?.let { kg.forester.sg.service.Voice.rehearse(this, it) }
     }
 
     private fun testAlert(i: android.content.Intent?) {
@@ -353,14 +355,15 @@ fun App() {
                 }
             }
         }
+        // editing a free layout: the bottom bar's room goes to the area, so the grid keeps its scale under the edit bar
+        val freeEditing by Repo.freeEditing.collectAsState()
         when (navPos) {
             "top", "bottom" -> Column(Modifier.fillMaxSize().padding(10.dp)) {
                 TopBar(screen, logo = true)
                 Spacer(Modifier.height(8.dp))
                 if (navPos == "top") { NavBar(screen) { screen = it }; Spacer(Modifier.height(8.dp)) }
                 content(Modifier.weight(1f))
-                Spacer(Modifier.height(8.dp))
-                BottomBar()
+                if (!freeEditing) { Spacer(Modifier.height(8.dp)); BottomBar() }
                 if (navPos == "bottom") { Spacer(Modifier.height(8.dp)); NavBar(screen) { screen = it } }
             }
             else -> Row(Modifier.fillMaxSize().padding(10.dp)) {
@@ -369,8 +372,7 @@ fun App() {
                     TopBar(screen, logo = navPos == "right")
                     Spacer(Modifier.height(10.dp))
                     content(Modifier.weight(1f))
-                    Spacer(Modifier.height(10.dp))
-                    BottomBar()
+                    if (!freeEditing) { Spacer(Modifier.height(10.dp)); BottomBar() }
                 }
                 if (navPos == "right") { Spacer(Modifier.width(10.dp)); NavRail(screen) { screen = it } }
             }
