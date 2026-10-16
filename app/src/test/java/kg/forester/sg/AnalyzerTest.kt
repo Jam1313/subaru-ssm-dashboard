@@ -46,6 +46,17 @@ class AnalyzerTest {
         assertEquals(emptySet<String>(), r.ids())
     }
 
+    @Test fun warmIsByTheCoolantAt80NotTheOilEstimate() {
+        // revving a 75° engine: still cold by the ECU's own warm-up enrichment
+        val cold = Run()
+        cold.feed(30) { RuleInput(cruise(it, c = 75).copy(rpm = 4000), oilC = 70f) }
+        assertTrue(cold.ids().contains("cold"))
+        // 82° coolant with the oil estimate still behind: warm, no warning
+        val warm = Run()
+        warm.feed(30) { RuleInput(cruise(it, c = 82).copy(rpm = 4000), oilC = 55f) }
+        assertFalse(warm.ids().contains("cold"))
+    }
+
     @Test fun lowIamAfterEcuResetIsNotADanger() {
         val r = Run(MemoryRuleStore().apply { lastIam = 1f })
         r.feed(10 * 60) { RuleInput(cruise(it), turbo = true, iam = 0.5f) }

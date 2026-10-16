@@ -25,6 +25,13 @@ interface SsmTransport {
     val name: String
     /** CAN units answer the init with 0xAA/0xEA instead of 0xBF/0xFF. */
     val isCan: Boolean
+    /**
+     * Another tester (a laptop on a second cable on the same K-line) is talking to the ECU: we must not, or the
+     * requests collide. Meanwhile [sniffed] gives what the ECU answered it.
+     */
+    val passive: Boolean get() = false
+    /** The latest values the ECU sent the other tester for any of [addrs], at most [maxAgeMs] old: (addresses, bytes). */
+    fun sniffed(addrs: IntArray, maxAgeMs: Long): Pair<IntArray, ByteArray>? = null
     /** Addresses per read request (an ELM327 fits only one into its single frame). */
     val maxReadAddrs: Int get() = 64
     /**
@@ -37,7 +44,13 @@ interface SsmTransport {
     fun close()
 }
 
-/** K-line SSM2 framing: 80 <dest> F0 <len> <body> <checksum>, the answer comes back as 80 F0 <dest> … */
+/**
+ * K-line SSM2 framing: 80 <dest> F0 <len> <body> <checksum>, the answer comes back as 80 F0 <dest> …
+ *
+ * Every byte on the line is also read as a stream of frames, so a second tester on the same K-line (a laptop with its
+ * own cable, for diagnostics) shows up: its requests are not ours. Then we fall silent ([passive]) and keep the
+ * values the ECU sends it ([sniffed]); when it has been quiet for a few seconds we ask again ourselves.
+ */
 abstract class KLineTransport : SsmTransport {
     private val inbox = java.io.ByteArrayOutputStream()
     private val lock = Object()
@@ -46,13 +59,99 @@ abstract class KLineTransport : SsmTransport {
 
     protected abstract fun writeRaw(packet: ByteArray)
 
+    // ---- the line as a whole
+    private val stream = java.io.ByteArrayOutputStream()
+    /** Our request on its way: its echo is ours, any other request is someone else's. */
+    @Volatile private var sending: ByteArray? = null
+    @Volatile private var lastForeignMs = 0L
+    /** What the other tester asked last, per unit: the addresses whose values come back in that order. */
+    private val pending = HashMap<Int, IntArray>()
+    /** ECU memory as the other tester's answers showed it: address → (value, when). */
+    private val seen = java.util.concurrent.ConcurrentHashMap<Int, Pair<Byte, Long>>()
+    /** The ECU's init answer to the other tester (its ROM ID), if it asked. */
+    @Volatile var sniffedInit: ByteArray? = null
+        private set
+
+    override val passive: Boolean get() = System.currentTimeMillis() - lastForeignMs < QUIET_MS
+
+    override fun sniffed(addrs: IntArray, maxAgeMs: Long): Pair<IntArray, ByteArray>? {
+        val now = System.currentTimeMillis()
+        val got = addrs.filter { a -> seen[a]?.let { now - it.second <= maxAgeMs } == true }
+        if (got.isEmpty()) return null
+        return got.toIntArray() to ByteArray(got.size) { seen.getValue(got[it]).first }
+    }
+
     /** Bytes received from the line (with or without the echo of our own request). */
     protected fun onBytes(data: ByteArray) {
-        synchronized(lock) { inbox.write(data) }
+        synchronized(lock) {
+            inbox.write(data)
+            stream.write(data)
+            scan()
+        }
     }
+
+    /** Whole frames out of [stream]: a request of another tester marks the line busy, the ECU's answer to it is kept. */
+    private fun scan() {
+        val b = stream.toByteArray()
+        var i = 0
+        while (true) {
+            while (i < b.size && b[i] != 0x80.toByte()) i++
+            if (b.size - i < 4) break
+            val total = 5 + (b[i + 3].toInt() and 0xFF)
+            if (b.size - i < total) break
+            if (checksum(b.copyOfRange(i, i + total), total - 1) != b[i + total - 1]) { i++; continue }
+            frame(b.copyOfRange(i, i + total))
+            i += total
+        }
+        stream.reset()
+        // keep at most one frame's worth of an unfinished tail
+        if (i < b.size) stream.write(b, i, minOf(b.size - i, 300))
+    }
+
+    private fun frame(f: ByteArray) {
+        val dst = f[1].toInt() and 0xFF
+        val src = f[2].toInt() and 0xFF
+        val body = f.copyOfRange(4, f.size - 1)
+        if (body.isEmpty()) return
+        val now = System.currentTimeMillis()
+        if (src == 0xF0 && (dst == SsmClient.ECU || dst == SsmClient.TCU)) {
+            val mine = sending
+            if (mine != null && mine.contentEquals(f)) { sending = null; return } // our own echo
+            lastForeignMs = now
+            when (body[0].toInt() and 0xFF) {
+                // A8 00 aaa aaa …: single addresses
+                0xA8 -> pending[dst] = IntArray((body.size - 2) / 3) { k ->
+                    ((body[2 + k * 3].toInt() and 0xFF) shl 16) or ((body[3 + k * 3].toInt() and 0xFF) shl 8) or (body[4 + k * 3].toInt() and 0xFF)
+                }
+                // A0 00 aaa nn: a block of nn + 1 bytes
+                0xA0 -> if (body.size >= 6) {
+                    val a = ((body[2].toInt() and 0xFF) shl 16) or ((body[3].toInt() and 0xFF) shl 8) or (body[4].toInt() and 0xFF)
+                    pending[dst] = IntArray((body[5].toInt() and 0xFF) + 1) { a + it }
+                }
+                else -> pending.remove(dst)
+            }
+            if (lastForeignMs - lastLoggedMs > 30_000) { lastLoggedMs = lastForeignMs; SsmTrace.log("another tester on the K-line: listening", f) }
+            return
+        }
+        if (dst == 0xF0 && src == SsmClient.ECU) {
+            when (body[0].toInt() and 0xFF) {
+                0xFF -> if (now - lastForeignMs < QUIET_MS) sniffedInit = body
+                0xE8, 0xE0 -> {
+                    // an answer to the other tester, not to us
+                    if (now - lastForeignMs >= QUIET_MS) return
+                    val asked = pending.remove(SsmClient.ECU) ?: return
+                    for (k in asked.indices) if (1 + k < body.size) seen[asked[k]] = body[1 + k] to now
+                }
+            }
+        }
+    }
+
+    private var lastLoggedMs = 0L
 
     @Synchronized
     override fun exchange(dest: Int, body: ByteArray): ByteArray? {
+        // someone else has the line: asking now would garble both
+        if (passive) return null
         val packet = ByteArray(body.size + 5)
         packet[0] = 0x80.toByte()
         packet[1] = dest.toByte()
@@ -64,6 +163,7 @@ abstract class KLineTransport : SsmTransport {
         ioError?.let { throw IOException(it) }
         synchronized(lock) { inbox.reset() }
         SsmTrace.log("TX", packet)
+        sending = packet
         writeRaw(packet)
 
         // 2 s like RomRaider and FreeSSM: older (16-bit) ECUs can be slow with the first answer
@@ -107,6 +207,9 @@ abstract class KLineTransport : SsmTransport {
     }
 
     companion object {
+        /** The other tester quiet this long: the line is ours again. */
+        const val QUIET_MS = 3000L
+
         fun checksum(b: ByteArray, len: Int): Byte {
             var s = 0
             for (i in 0 until len) s += b[i].toInt() and 0xFF

@@ -184,7 +184,20 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector
 @Composable
 fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier: Modifier = Modifier, info: String = label) {
     // the "i" sits in the corner, so the value and its unit keep the whole width of a narrow tile
-    Box(modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
+        if (maxHeight > 96.dp) {
+            // a tall tile: the name on top, the number as big as the tile allows
+            Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 22.dp, top = 8.dp, bottom = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, null, tint = C.Sub, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    T(label, 12.sp, C.Sub, maxLines = 1)
+                }
+                FitValue(value, unit, 20f, Modifier.fillMaxWidth().weight(1f))
+            }
+            InfoButton(label, info, Modifier.align(Alignment.TopEnd))
+            return@BoxWithConstraints
+        }
         Row(
             Modifier.fillMaxSize().padding(start = 10.dp, end = 22.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,

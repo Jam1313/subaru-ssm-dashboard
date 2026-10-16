@@ -325,13 +325,14 @@ class Analyzer(
     // ---------------------------------------------------------------- cold engine (O01, B07)
 
     private fun cold(x: RuleInput, rpm: Int, load: Float?, gauge: Float?) {
-        val oil = x.oilC ?: return
-        if (oil >= 60f) return
+        // warm at 80° coolant: that is where every EJ ends its warm-up enrichment (the oil is only an estimate)
+        val c = x.e.coolantC ?: return
+        if (c >= 80) return
         if (x.turbo && (gauge ?: 0f) > 30f) {
             say("coldBoost", "Мотор холодный, а вы уже под наддувом. Холодное масло хуже защищает вкладыши и турбину, подождите прогрева",
                 Alerts.Level.WARN, 5 * 60_000L)
         } else if (rpm > 3600 || (load ?: 0f) > 1.0f) {
-            say("cold", "Мотор не прогрет: масло около ${oil.toInt()}°. Не выше 3000 оборотов и без полного газа", Alerts.Level.WARN, 2 * 60_000L)
+            say("cold", "Мотор не прогрет: антифриз $c°, прогрет он с 80. Пока не выше 3000 оборотов и без полного газа", Alerts.Level.WARN, 2 * 60_000L)
         }
     }
 

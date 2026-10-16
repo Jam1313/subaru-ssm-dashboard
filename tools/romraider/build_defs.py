@@ -35,10 +35,18 @@ def num(s, default=-1):
 IMPERIAL = ('psi', 'mmhg', 'mph', 'f', 'inhg')
 
 
+# Upstream slips fixed here, by the exact expression: E98's kPa copies the bar offset (0.2) where its own bar, psi
+# and mmHg conversions all say 150 mmHg = 19.998 kPa, so MAP read ~20 kPa high.
+EXPR_FIX = {'(x*.002542923463176)-.1999836': '(x*.002542923463176)-19.99836'}
+
+
 def conversions(el):
     """All conversions, a metric one first: some ecuparams list psi or mmHg before kPa."""
     cs = [[c.get('units', ''), c.get('expr', 'x'), c.get('format', '0'), c.get('storagetype') or '']
           for c in el.iter('conversion')]
+    for c in cs:
+        if c[0].lower().startswith('kpa'):
+            c[1] = EXPR_FIX.get(c[1], c[1])
     return sorted(cs, key=lambda c: c[0].lower().split(' ')[0] in IMPERIAL)
 
 
@@ -98,6 +106,20 @@ def main():
                         continue
                     base['r'][rom] = a
                     extra_roms.add(rom)
+
+    # addresses found by people who drive these cars (tools/romraider/community/*.json): added under ids of their own
+    community = os.path.join(HERE, 'community')
+    for name in sorted(os.listdir(community)) if os.path.isdir(community) else []:
+        c = json.load(open(os.path.join(community, name), encoding='utf-8'))
+        for prm in c['params']:
+            roms = {}
+            for group, addr in prm['r'].items():
+                for rom in c['roms'][group]:
+                    roms[rom.upper()] = [num(addr.lower()), 4, -1]
+            ecuparams.append({
+                'id': prm['id'], 't': 1, 'n': prm['n'], 'ru': prm['ru'], 'd': c['source'],
+                'c': [[prm['units'], 'x', '0.0', 'float']], 'r': roms,
+            })
 
     out = {
         'source': 'RomRaider logger definitions v%s (logger_METRIC_EN), GPL, https://www.romraider.com' % root.get('version'),

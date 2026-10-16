@@ -215,6 +215,20 @@ fun CarAdapterSettings() {
                 else "KKL-кабель работает только по K-Line.",
                 12.sp, C.Sub,
             )
+            if (adapter == "op2" || adapter == "auto") {
+                Spacer(Modifier.height(10.dp))
+                var listen by remember { mutableStateOf(s.canListen) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        T("Слушать CAN (OpenPort 2.0, экспериментально)", 15.sp)
+                        T("Блоки сами рассылают по CAN обороты, скорость, температуры, передачу и круиз. Приложение берёт их без " +
+                            "запросов: работает, даже когда диагностику занял ноутбук. Расшифровка по открытой базе comma.ai для " +
+                            "машин примерно 2010–2018 года; на K-линии (SG и раньше) CAN нет. На некоторых машинах кадры " +
+                            "с OBD-разъёма не видны: их отсекает блок кузова", 11.sp, C.Sub)
+                    }
+                    Switch(listen, { listen = it; s.canListen = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
+                }
+            }
             Spacer(Modifier.height(14.dp))
             InfoLine("Связь", msg)
             if (found.isNotEmpty()) InfoLine("Адаптер", found)

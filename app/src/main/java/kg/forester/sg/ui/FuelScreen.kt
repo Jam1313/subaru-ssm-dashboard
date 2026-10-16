@@ -626,9 +626,10 @@ object RefillLogic {
             }
             s.hadFullRefill = true
             s.usedSinceFullL = 0.0
-            if (s.tankL > 0) s.fuelAtRefillL = s.tankL
+            if (s.tankL > 0) { s.fuelAtRefillL = s.tankL; s.fuelLevelKnown = true }
         } else {
             // Unknown previous level counts as empty; the estimate gets exact after a full tank.
+            if (s.fuelAtRefillL < 0) s.fuelLevelKnown = false
             val left = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL).coerceAtLeast(0.0) else 0.0
             val after = left + liters
             s.fuelAtRefillL = if (s.tankL > 0) after.coerceAtMost(s.tankL) else after

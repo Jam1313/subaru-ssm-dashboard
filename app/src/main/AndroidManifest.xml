@@ -146,6 +146,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- the app was just updated (from inside itself too): start again and take the cable back -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
                 <!-- ACC on after sleep on FYT-based head units (Teyes and others), depending on the firmware -->

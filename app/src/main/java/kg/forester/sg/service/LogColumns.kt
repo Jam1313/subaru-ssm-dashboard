@@ -66,6 +66,48 @@ object LogColumns {
         LogColumn("fuel_sensor_ohm", "Датчик топлива, Ом", "Уровень топлива") { f(it.s.fuelSensorOhm) },
     )
 
+    /** Standard SSM addresses (RomRaider "P" parameters) that a regular column already logs, by column key. */
+    private val ecuAddr = mapOf(
+        0x08 to "coolant_c", 0x09 to "af_corr_pct", 0x0A to "af_learn_pct", 0x0D to "map_kpa", 0x0E to "rpm", 0x10 to "speed_kmh",
+        0x11 to "timing_deg", 0x12 to "intake_c", 0x13 to "maf_gs", 0x15 to "throttle_pct", 0x1C to "battery_v", 0x20 to "inj_pw_ms",
+        0x22 to "knock_deg", 0x23 to "atm_kpa", 0x24 to "boost_kpa", 0x29 to "pedal_pct", 0x2E to "fuel_sensor_v", 0x30 to "wgdc_pct",
+        0x3A to "alt_duty_pct", 0x3C to "avcs_deg", 0x46 to "afr", 0x4A to "gear",
+    )
+    private val tcuAddr = mapOf(
+        0x48 to "front_wheel_kmh", 0x49 to "atf_c", 0x4A to "gear", 0x4C to "lockup_pct", 0x4D to "transfer_pct", 0x4F to "turbine_rpm",
+        0x51 to "rear_wheel_kmh", 0x56 to "atf_c",
+    )
+    /** The engine guard's own parameters (see EngineGuard.roleIds) and the column each one is logged in. */
+    private val roleColumn = mapOf(
+        "iam" to "iam", "fbkc" to "fbkc_deg", "flkc" to "flkc_deg", "target" to "target_boost_kpa",
+        "mapAbs" to "map_kpa", "mapRel" to "map_kpa", "mapRelSea" to "map_kpa",
+    )
+
+    /**
+     * The parameters read besides the regular ones that are worth a column of their own: not one a regular column
+     * already has (the engine speed ticked on «Датчики», the IAM the guard reads for itself), so a log has no twins.
+     */
+    fun extras(polled: List<kg.forester.sg.ssm.RrParam>, roleIds: Map<String, String>): List<kg.forester.sg.ssm.RrParam> {
+        val on = enabled().map { it.key }.toSet()
+        val covered = roleIds.filter { (role, _) -> roleColumn[role] in on }.values.toSet()
+        return polled.filter { p ->
+            p.id !in covered && !(p.kind == kg.forester.sg.ssm.RrParam.Kind.STD && p.bit < 0 &&
+                (if (p.target == 2) tcuAddr[p.addr] else ecuAddr[p.addr]) in on)
+        }.distinctBy { it.id }
+    }
+
+    /** The engine guard's usual ids for its roles (EngineGuard.pick), for logs written before the twins were left out. */
+    private val roleIdsKnown = mapOf(
+        "iam" to listOf("P90", "E31", "E96", "E111", "E1"), "fbkc_deg" to listOf("E39", "E94", "E102", "E10"),
+        "flkc_deg" to listOf("P91", "E41", "E95", "E101", "E12"), "target_boost_kpa" to listOf("E36", "E90", "E120", "E6"),
+        "map_kpa" to listOf("E51", "E129", "E20", "E88", "E98", "E113", "E72", "E21", "E89"),
+    )
+
+    /** The regular column [p] repeats, if any: the log viewer hides such a twin in older logs. */
+    fun twinOf(p: kg.forester.sg.ssm.RrParam): String? =
+        (if (p.kind == kg.forester.sg.ssm.RrParam.Kind.STD && p.bit < 0) (if (p.target == 2) tcuAddr[p.addr] else ecuAddr[p.addr]) else null)
+            ?: roleIdsKnown.entries.firstOrNull { p.id in it.value }?.key
+
     fun enabled(): List<LogColumn> {
         val off = Repo.settings.logOff
         return all.filter { it.key !in off }

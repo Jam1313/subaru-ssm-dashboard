@@ -46,6 +46,8 @@ object Voice {
 
     private var service: Thread? = null
     @Volatile private var running = false
+    /** Bumped by every start and stop: a capture thread that outlived its stop (blocked in a read) quits on its own. */
+    @Volatile private var gen = 0
     private var model: Model? = null
     private var armedUntil = 0L
     private val starting = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -87,15 +89,16 @@ object Voice {
     fun start(ctx: Context) {
         app = ctx.applicationContext
         android.util.Log.i("Voice", "start: enabled=${enabled(app)} running=${service != null} model=${modelReady(app)}")
-        if (!enabled(app) || service != null || !starting.compareAndSet(false, true)) return
+        if (!enabled(app) || service?.isAlive == true || !starting.compareAndSet(false, true)) return
         scope.launch {
             runCatching {
                 if (!modelReady(app)) download(app)
                 LibVosk.setLogLevel(LogLevel.WARNINGS)
                 val m = model ?: Model(File(app.filesDir, MODEL_DIR).absolutePath).also { model = it }
                 val rec = Recognizer(m, 16000f)
+                val myGen = ++gen
                 running = true
-                service = Thread({ listenLoop(rec) }, "voice").also { it.start() }
+                service = Thread({ listenLoop(rec, myGen) }, "voice").also { it.start() }
                 status.value = "слушаю «${wakeWord(app)}»"
                 starting.set(false)
             }.onFailure {
@@ -109,9 +112,24 @@ object Voice {
 
     fun stop() {
         running = false
-        runCatching { service?.join(1500) }
+        gen++
+        val t = service
         service = null
+        runCatching { t?.join(3000) }
         status.value = "выключено"
+    }
+
+    /**
+     * Called every half minute by the service: switched on but not listening (the capture thread died, a start
+     * failed, the system killed the microphone) means start again.
+     */
+    fun ensure(ctx: Context) {
+        app = ctx.applicationContext
+        if (enabled(app) && service?.isAlive != true && !starting.get()) {
+            android.util.Log.i("Voice", "watchdog: not listening, starting again")
+            service = null
+            start(app)
+        }
     }
 
     private fun download(ctx: Context) {
@@ -136,21 +154,59 @@ object Voice {
         tmp.delete()
     }
 
-    /** Own capture loop so we can boost quiet head-unit microphones and use the platform AGC / noise suppressor. */
+    /**
+     * Listens until stopped. The microphone can be lost underneath: another assistant (Alice) takes it, the head
+     * unit's audio service restarts. Then the read fails or, on Android 10+, gives pure zeros while the other app
+     * records. Either way the capture is opened again a moment later, for as long as the voice is on.
+     */
+    private fun listenLoop(rec: Recognizer, myGen: Int) {
+        try {
+            while (running && gen == myGen) {
+                val started = capture(rec, myGen)
+                if (!running || gen != myGen) break
+                // pure zeros: another app took the microphone (Android 10+ does that), or the input gives no sound at all
+                // (an emulator with no host microphone, a muted mic); either way try again in a moment
+                status.value = if (started) "микрофон молчит: его занял другой ассистент или он выключен, жду…" else "микрофон недоступен, пробую снова…"
+                level.value = 0f
+                Thread.sleep(2000)
+            }
+        } catch (_: InterruptedException) {
+        } finally {
+            rec.close()
+        }
+    }
+
+    /** One capture, our own so we can boost quiet head-unit microphones and use the platform AGC / noise suppressor; false when it would not start. */
     @android.annotation.SuppressLint("MissingPermission")
-    private fun listenLoop(rec: Recognizer) {
+    private fun capture(rec: Recognizer, myGen: Int): Boolean {
         val rate = 16000
         val min = android.media.AudioRecord.getMinBufferSize(rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT)
         val source = if (sensitive(app)) android.media.MediaRecorder.AudioSource.MIC else android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION
-        val ar = android.media.AudioRecord(source, rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 8192))
+        val ar = runCatching {
+            android.media.AudioRecord(source, rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 8192))
+        }.getOrNull() ?: return false
+        if (ar.state != android.media.AudioRecord.STATE_INITIALIZED) { ar.release(); return false }
         val agc = runCatching { if (android.media.audiofx.AutomaticGainControl.isAvailable()) android.media.audiofx.AutomaticGainControl.create(ar.audioSessionId)?.also { it.enabled = true } else null }.getOrNull()
         val ns = runCatching { if (android.media.audiofx.NoiseSuppressor.isAvailable()) android.media.audiofx.NoiseSuppressor.create(ar.audioSessionId)?.also { it.enabled = true } else null }.getOrNull()
         val buf = ShortArray(2048)
         try {
             ar.startRecording()
-            while (running) {
+            if (ar.recordingState != android.media.AudioRecord.RECORDSTATE_RECORDING) return false
+            status.value = "слушаю «${wakeWord(app)}»"
+            var zerosSince = 0L
+            while (running && gen == myGen) {
                 val n = ar.read(buf, 0, buf.size)
-                if (n <= 0) continue
+                if (n < 0) return true // the record died under us
+                if (n == 0) continue
+                // pure digital silence: the system gave the microphone to another app; a real one always hisses a little
+                var sound = false
+                for (i in 0 until n) if (buf[i].toInt() != 0) { sound = true; break }
+                if (!sound) {
+                    val now = SystemClock.elapsedRealtime()
+                    if (zerosSince == 0L) zerosSince = now else if (now - zerosSince > 4000) return true
+                    continue
+                }
+                zerosSince = 0L
                 val g = gain(app)
                 if (g != 1f) for (i in 0 until n) {
                     buf[i] = (buf[i] * g).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
@@ -163,10 +219,12 @@ object Voice {
                 if (rec.acceptWaveForm(buf, n)) handle(rec.result)
                 else onPartial(rec.partialResult)
             }
+            return true
         } catch (e: Exception) {
             status.value = "ошибка микрофона: ${e.message}"
+            return true
         } finally {
-            runCatching { ar.stop() }; ar.release(); agc?.release(); ns?.release(); rec.close()
+            runCatching { ar.stop() }; ar.release(); agc?.release(); ns?.release()
         }
     }
 

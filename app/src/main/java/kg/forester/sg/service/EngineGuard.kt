@@ -16,12 +16,17 @@ data class GuardState(
     /** Feedback knock correction (now) and fine learning knock correction, degrees (negative = pulled). */
     val fbkc: Float? = null,
     val flkc: Float? = null,
+    /**
+     * Learned ignition timing, degrees: on the early 2000s ECUs (SG, GD, BE/BH) the standard SSM value that carries
+     * what IAM does on the later ones (IAM times the knock advance map). Shown when the ROM has no IAM address.
+     */
+    val learnedDeg: Float? = null,
     /** Target boost relative to the atmosphere, kPa (from the ROM's extended parameters). */
     val targetBoostKpa: Float? = null,
     /** Oil temperature: read from the ECU, or estimated from the coolant and running time. */
     val oilC: Float? = null,
     val oilEstimated: Boolean = true,
-    /** Engine still cold (oil under ~60 °C): keep the revs down. */
+    /** Engine still cold (coolant under 80 °C, where the EJ ends its warm-up enrichment): keep the revs down. */
     val cold: Boolean = false,
     val turbo: Boolean = false,
     /** A turbo car by what the ECU says (ROM, wastegate, boost seen), whether or not the turbo timer is on. */
@@ -88,6 +93,7 @@ class EngineGuard {
     private var features = -1
     private var custom = -1
     private var pendingHours = 0.0
+    private var camSkewMs = 0L
 
     /** The RomRaider parameters the guard reads, chosen from what this ROM has (first match wins). */
     private fun chooseRoles(list: List<RrParam>) {
@@ -100,15 +106,105 @@ class EngineGuard {
             pick("iam", "P90", "E31", "E96", "E111", "E1")?.takeIf { knock }?.let { "iam" to it },
             pick("fbkc", "E39", "E94", "E102", "E10")?.takeIf { knock }?.let { "fbkc" to it },
             pick("flkc", "P91", "E41", "E95", "E101", "E12")?.takeIf { knock }?.let { "flkc" to it },
+            pick("learned", "P29", "P153")?.takeIf { knock }?.let { "learned" to it },
             pick("target", "E36", "E90", "E120", "E6")?.let { "target" to it },
             pick("oil", "P122")?.let { "oil" to it },
             pick("latG", "P172")?.let { "latG" to it },
+            // the ROM's own manifold pressure, wider than the standard single byte (0–255 kPa absolute = 1.53 bar of boost)
+            pick("mapAbs", "E51", "E129", "E20", "E88", "E98")?.let { "mapAbs" to it },
+            pick("mapRel", "E113", "E72")?.let { "mapRel" to it },
+            pick("mapRelSea", "E21", "E89")?.let { "mapRelSea" to it },
             pick("yaw", "P171")?.let { "yaw" to it },
+            // the real camshaft angles (EJ20X, addresses from Zombie47): the standard AVCS parameter stops at 0°
+            pick("camInL", "Z1")?.let { "camInL" to it },
+            pick("camInR", "Z2")?.let { "camInR" to it },
+            pick("camExL", "Z3")?.let { "camExL" to it },
+            pick("camExR", "Z4")?.let { "camExR" to it },
         ).toMap()
         Repo.internalWatch.value = roles.values.map { it.id }.toSet()
     }
 
     fun role(name: String): RrParam? = roles[name]
+
+    /**
+     * Left and right camshafts of the same kind sit at the same angle on a warm idle. One of them 12° or more off
+     * for 15 s (a few degrees apart is normal; Zombie47's case: exhausts 63.5° and 81.9°): the timing belt has jumped a tooth on that side (about 15–20° on EJ20X), or its AVCS valve is stuck. A
+     * value outside −60…120° is a wrong address, not a cam.
+     */
+    private fun camCheck(inL: Float?, inR: Float?, exL: Float?, exR: Float?, e: EcuSnapshot, dt: Float) {
+        fun ok(x: Float?) = x != null && !x.isNaN() && x in -60f..120f
+        val idle = (e.rpm ?: 0) in 550..1200 && (e.speedKmh ?: 0) == 0 && (e.coolantC ?: 0) >= 75
+        val skewIn = if (ok(inL) && ok(inR)) kotlin.math.abs(inL!! - inR!!) else 0f
+        val skewEx = if (ok(exL) && ok(exR)) kotlin.math.abs(exL!! - exR!!) else 0f
+        camSkewMs = if (idle && maxOf(skewIn, skewEx) >= 12f) camSkewMs + (dt * 1000).toLong() else 0L
+        if (camSkewMs < 15_000L) return
+        val (kind, l, r) = if (skewEx >= skewIn) Triple("выпускные", exL!!, exR!!) else Triple("впускные", inL!!, inR!!)
+        Alerts.raise("camSkew", "Левый и правый $kind распредвалы стоят по-разному: %.0f° и %.0f°. Так бывает, когда ремень ГРМ перескочил на зуб или не работает клапан AVCS одной стороны. Проверьте метки ГРМ"
+            .format(l, r), Alerts.Level.WARN, 6 * 3600_000L)
+    }
+
+    /**
+     * [e] with the manifold pressure from the ROM's direct parameter when it has one (4-byte float or 2-byte): the
+     * standard address is one byte, 0–255 kPa absolute, so above ~1.53 bar of boost it sticks at 255.
+     */
+    fun withDirectMap(e: EcuSnapshot): EcuSnapshot {
+        val rr = Repo.rrValues.value
+        fun v(role: String) = roles[role]?.let { rr[it.id] }?.toFloat()
+        val abs = v("mapAbs")?.takeIf { it in 10f..450f }
+            ?: v("mapRel")?.let { r -> e.atmKpa?.let { it + r } }?.takeIf { it in 10f..450f }
+            ?: v("mapRelSea")?.let { it + 101.325f }?.takeIf { it in 10f..450f }
+        return if (abs != null && abs != e.mapKpa) e.copy(mapKpa = abs) else e
+    }
+
+    /** Role → the parameter id read for it (IAM, FBKC…), for the log: those already have a column of their own. */
+    fun roleIds(): Map<String, String> = roles.mapValues { it.value.id }
+
+    /** The rail's height over the manifold at idle, learnt each drive; what it should stay at under boost. */
+    private var fuelDpIdle: Float? = null
+    private var fuelDpLowSince = 0L
+
+    /**
+     * Fuel pressure from the box against the manifold: a return-type regulator keeps their difference the same at
+     * idle and under boost. Under boost 0.5 bar or more below what it was at idle, for 2 s: the pump or the
+     * regulator is not keeping up, and the mixture goes lean exactly when it matters.
+     */
+    private fun fuelPressure(now: Long, rpm: Int) {
+        val slot = kg.forester.sg.data.SensorBox.slots.value.firstOrNull { it.role == "fuelP" } ?: return
+        val p = kg.forester.sg.data.SensorBox.readings.value[slot.input]?.value ?: return
+        val gauge = Repo.live.value.gaugeKpa ?: return
+        val dp = kg.forester.sg.ui.Metrics.fuelBar(p, slot.unit) - gauge / 100f
+        if (rpm in 600..1100 && gauge < -30f) fuelDpIdle = fuelDpIdle?.let { it + (dp - it) * 0.05f } ?: dp
+        val base = fuelDpIdle ?: return
+        val low = gauge > 40f && dp < base - 0.5f
+        fuelDpLowSince = if (low) fuelDpLowSince.takeIf { it > 0 } ?: now else 0L
+        if (fuelDpLowSince > 0 && now - fuelDpLowSince > 2000)
+            Alerts.raise("fuelDp", "Давление топлива не успевает за наддувом: перепад %.1f бар, на холостых был %.1f. Проверьте бензонасос, фильтр и регулятор, смесь под наддувом беднеет"
+                .format(dp, base), Alerts.Level.WARN, 10 * 60_000L)
+    }
+
+    private var oilPLowSince = 0L
+    private var oilPZeroSince = 0L
+
+    /** Oil pressure and exhaust gas from the SensorBox, when they are wired: the warnings the EJ itself can't give. */
+    private fun boxAlarms(now: Long, running: Boolean, rpm: Int, oil: Float?) {
+        val p = kg.forester.sg.data.SensorBox.role("oilP")
+        if (p != null && running && engineOnSince > 0 && now - engineOnSince > 5000) {
+            oilPZeroSince = if (p < 0.4f) oilPZeroSince.takeIf { it > 0 } ?: now else 0L
+            // the factory minimum on oil at 80°: 98 kPa at 800 rpm, 294 kPa at 5000 (FSM), on a line between
+            val min = 0.98f + (rpm - 800).coerceIn(0, 4200) / 4200f * (2.94f - 0.98f)
+            val low = (oil ?: 0f) >= 70f && p < min * 0.85f
+            oilPLowSince = if (low) oilPLowSince.takeIf { it > 0 } ?: now else 0L
+            if (oilPZeroSince > 0 && now - oilPZeroSince > 1500)
+                Alerts.raise("oilPress", "Давления масла почти нет: остановитесь и заглушите мотор", Alerts.Level.DANGER, 60_000L)
+            else if (oilPLowSince > 0 && now - oilPLowSince > 5000)
+                Alerts.raise("oilPress", "Давление масла %.1f бар, ниже нормы для %d оборотов: проверьте уровень масла".format(p, rpm),
+                    Alerts.Level.WARN, 10 * 60_000L)
+        } else { oilPLowSince = 0L; oilPZeroSince = 0L }
+        fuelPressure(now, rpm)
+        val egt = kg.forester.sg.data.SensorBox.role("egt")
+        val egtMax = kg.forester.sg.data.SensorBox.slots.value.firstOrNull { it.role == "egt" }?.warnAbove ?: 900f
+        if (egt != null && egt > egtMax) Alerts.raise("egt", "Выхлоп ${egt.toInt()} градусов: сбавьте нагрузку", Alerts.Level.WARN, 2 * 60_000L)
+    }
 
     /**
      * Forget everything learned from the samples so far: called when the demo is switched on or off, so its made-up
@@ -157,6 +253,8 @@ class EngineGuard {
             if (iamStart == null) iamStart = iam
             if (!iamLogged) { iamLogged = true; if (!s.demo) logIam(now, iam) }
         }
+        camCheck(v("camInL"), v("camInR"), v("camExL"), v("camExR"), e, dt)
+
         val fbkc = v("fbkc")?.takeIf { it in -16f..2f }
         val flkc = v("flkc")?.takeIf { it in -16f..2f }
         val target = targetBoost(e)
@@ -199,19 +297,24 @@ class EngineGuard {
 
         // --- oil temperature and cold engine
         val c = e.coolantC
-        val oilEcu = v("oil")
+        // a real sensor: the ECU's own (FA/FB) or one on the SensorBox
+        val oilEcu = v("oil") ?: kg.forester.sg.data.SensorBox.role("oil")
         e.mafGs?.let { m -> mafAvg += (m - mafAvg) * (dt / 180f).coerceAtMost(1f) }
         val oil = oilEcu ?: if (running && c != null) {
             // Most EJs have no oil temperature sensor: estimated. The oil lags the coolant by several minutes after a
             // cold start, and once warm it runs hotter than the coolant, the more so the harder the engine works
             // (a stock STI cruising at 105 km/h: oil ~106° at 90–95° coolant; the turbo is cooled by the oil too).
-            val warmth = ((c - 60) / 20f).coerceIn(0f, 1f) // no gap while the thermostat is still shut
-            val gap = (if (turboCar) 4f + 0.33f * mafAvg else 2f + 0.25f * mafAvg).coerceAtMost(30f) * warmth
+            // owners with a real gauge see the oil at least ~10° over the coolant once warm (drive2 feedback, 2026-10):
+            // the gap starts there and grows with the load
+            val warmth = ((c - 55) / 20f).coerceIn(0f, 1f) // no gap while the thermostat is still shut
+            val gap = (if (turboCar) 10f + 0.3f * mafAvg else 8f + 0.25f * mafAvg).coerceAtMost(35f) * warmth
             val target = c + gap
             val o = oilEst ?: (c - 5f)
-            (o + (target - o) * (dt / 420f).coerceAtMost(1f)).also { oilEst = it }
+            (o + (target - o) * (dt / 300f).coerceAtMost(1f)).also { oilEst = it }
         } else null
-        val cold = running && oil != null && oil < 60f
+        // warm by the coolant, as the ECU sees it: every EJ ends its warm-up enrichment at 80° (the oil is only an estimate)
+        val cold = running && c != null && c < 80
+        boxAlarms(now, running, rpm, oil)
 
         // --- thermostat: warm-up time from a cold start
         if (running && c != null) {
@@ -236,10 +339,12 @@ class EngineGuard {
             while (coolant.isNotEmpty() && now - coolant.first().first > 90_000L) coolant.removeFirst()
             // right after reaching 80° the thermostat may still be opening and the coolant overshoots: no spike check then
             if (c < 80) warmSince = 0L else if (warmSince == 0L) warmSince = now
+            // 80→88 under hard throttle is the thermostat opening late, normal; gases in the coolant show as a jump of a
+            // warm engine already at 90, to 95–100 within a minute
             val old = coolant.firstOrNull { now - it.first in 50_000L..90_000L }?.second
-            if (old != null && old in 80..98 && c - old >= 8 && now - warmSince > 5 * 60_000L) {
-                Alerts.raise("spike", "ОЖ выросла с $old° до $c° за минуту. Чаще всего это воздух в системе охлаждения, особенно после замены антифриза. " +
-                    "Если повторяется после прокачки, проверьте прокладку ГБЦ", Alerts.Level.WARN, 20 * 60_000L)
+            if (old != null && old in 90..97 && c >= 95 && c - old >= 5 && now - warmSince > 5 * 60_000L) {
+                Alerts.raise("spike", "ОЖ выросла с $old° до $c° за минуту на прогретом моторе. Так бывает при воздухе в системе охлаждения " +
+                    "и при прорыве газов через прокладку ГБЦ. Проверьте уровень антифриза и нет ли пузырей в расширительном бачке", Alerts.Level.WARN, 20 * 60_000L)
             }
         } else if (!running) warmSince = 0L
         val atf = t?.atfC
@@ -263,6 +368,7 @@ class EngineGuard {
         val g = Repo.guard.value
         Repo.guard.value = GuardState(
             iam = iam, iamStart = iamStart, fbkc = fbkc, flkc = flkc, targetBoostKpa = target,
+            learnedDeg = v("learned")?.takeIf { it in -20f..30f },
             oilC = oil, oilEstimated = oilEcu == null, cold = cold, turbo = turbo, turboCar = turboCar, heat = heat, cooldownSec = cooldown,
             warmupMin = warmupMin ?: g.warmupMin,
             thermostat = when {

@@ -28,6 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.composables.icons.lucide.*
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -74,6 +78,7 @@ import kotlin.math.sin
 
 enum class Screen(val title: String, val icon: ImageVector) {
     Home("Главная", Lucide.House),
+    Mine("Мой экран", Lucide.LayoutDashboard),
     Drive("Динамика", Lucide.Gauge),
     Media("Медиа", Lucide.Music),
     Fuel("Расход", Lucide.ChartColumn),
@@ -329,9 +334,10 @@ fun App() {
         }
         val navPos by Repo.navPosition.collectAsState()
         val content: @Composable (Modifier) -> Unit = { m ->
-            Box(m) {
+            Box(m.carouselSwipe(screen) { screen = it }) {
                 when (screen) {
                     Screen.Home -> HomeScreen()
+                    Screen.Mine -> kg.forester.sg.ui.MyScreen()
                     Screen.Drive -> kg.forester.sg.ui.DriveScreen()
                     Screen.Media -> kg.forester.sg.ui.MediaScreen()
                     Screen.Fuel -> FuelScreen()
@@ -373,6 +379,52 @@ fun App() {
         kg.forester.sg.ui.VoiceOrb()
         DriverOverlays(floating = false)
     }
+}
+
+/**
+ * «Карусель»: a sideways swipe on the screen goes to the next (left) or previous (right) of the screens picked in the
+ * settings, round and round. Only a swipe nothing on the screen took for itself (sliders, 3D models, a scrolled
+ * row, cards being dragged) counts; dots at the bottom show where in the round the driver is.
+ */
+@Composable
+private fun Modifier.carouselSwipe(screen: Screen, go: (Screen) -> Unit): Modifier {
+    val names by Repo.carousel.collectAsState()
+    val round = names.mapNotNull { n -> Screen.entries.firstOrNull { it.name == n } }
+    if (round.size < 2 || screen !in round) return this
+    val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 110.dp.toPx() }
+    val i = round.indexOf(screen)
+    return this
+        .pointerInput(round, screen) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Final)
+                var dx = 0f
+                var dy = 0f
+                var taken = false
+                while (true) {
+                    val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
+                    if (ev.changes.size > 1) taken = true // two fingers: a pinch, not a swipe
+                    val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                    if (c.isConsumed) taken = true
+                    dx += c.position.x - c.previousPosition.x
+                    dy += c.position.y - c.previousPosition.y
+                    if (!c.pressed) break
+                }
+                if (!taken && kotlin.math.abs(dx) > threshold && kotlin.math.abs(dx) > 2 * kotlin.math.abs(dy)) {
+                    go(round[(i + if (dx < 0) 1 else round.size - 1) % round.size])
+                }
+            }
+        }
+        .drawWithContent {
+            drawContent()
+            // where in the round we are: small dots at the bottom middle
+            val r = 3.5.dp.toPx()
+            val gap = 14.dp.toPx()
+            val x0 = size.width / 2 - gap * (round.size - 1) / 2
+            round.indices.forEach { k ->
+                drawCircle(if (k == i) Color.White.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.25f), r,
+                    androidx.compose.ui.geometry.Offset(x0 + k * gap, size.height - r - 2.dp.toPx()))
+            }
+        }
 }
 
 /** A manual gearbox has no transmission unit, so no АКПП screen. */

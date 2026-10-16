@@ -128,6 +128,11 @@ class Settings(ctx: Context) {
         get() = p.getBoolean("hadFull", false)
         set(v) = p.edit().putBoolean("hadFull", v).apply()
 
+    /** The litres in the tank are known (a full tank since, partial refills on top of it), not guessed from an unknown level. */
+    var fuelLevelKnown: Boolean
+        get() = p.getBoolean("fuelKnown", false)
+        set(v) = p.edit().putBoolean("fuelKnown", v).apply()
+
     var logEnabled: Boolean
         get() = p.getBoolean("log", true)
         set(v) = p.edit().putBoolean("log", v).apply()
@@ -141,6 +146,16 @@ class Settings(ctx: Context) {
     var navPosition: String
         get() = p.getString("navPos", "left")!!
         set(v) { p.edit().putString("navPos", v).apply(); Repo.navPosition.value = v }
+
+    /** Screens a sideways swipe goes through, in order (Screen names); empty: no carousel. */
+    var carousel: List<String>
+        get() = p.getString("carousel", "")!!.split(',').filter { it.isNotBlank() }
+        set(v) { p.edit().putString("carousel", v.joinToString(",")).apply(); Repo.carousel.value = v }
+
+    /** Cells the free layout snaps cards to: "10x6", "8x5", "12x8" or "" (half-percent steps). */
+    var freeGrid: String
+        get() = p.getString("freeGrid", "10x6")!!
+        set(v) { p.edit().putString("freeGrid", v).apply(); Repo.freeGrid.value = v }
 
     /** Value shown by the «Датчик k» card ("" = the k-th parameter ticked on «Датчики»). */
     fun slot(k: Int): String = p.getString("slot$k", "")!!
@@ -183,6 +198,31 @@ class Settings(ctx: Context) {
     var customParams: String
         get() = p.getString("customParams", "[]")!!
         set(v) = p.edit().putString("customParams", v).apply()
+
+    /** The fuel gauge wire's hand-made calibration, "volts,litres;…" (see FuelLine). */
+    var fuelLinePoints: String
+        get() = p.getString("fuelLinePoints", "")!!
+        set(v) = p.edit().putString("fuelLinePoints", v).apply()
+
+    /** The colour screen on its own USB (JSON, see UsbScreen). */
+    var usbScreen: String
+        get() = p.getString("usbScreen", "{}")!!
+        set(v) = p.edit().putString("usbScreen", v).apply()
+
+    /** The SensorBox displays (JSON, see Displays). */
+    var displays: String
+        get() = p.getString("displays", "[]")!!
+        set(v) = p.edit().putString("displays", v).apply()
+
+    /** The SensorBox outputs (relays) and their rules (JSON, see Relays). */
+    var relays: String
+        get() = p.getString("relays", "[]")!!
+        set(v) = p.edit().putString("relays", v).apply()
+
+    /** The SensorBox: on or off, the board, what is wired to which input (JSON, see SensorBox). */
+    var sensorBox: String
+        get() = p.getString("sensorBox", "{}")!!
+        set(v) = p.edit().putString("sensorBox", v).apply()
 
     var watchIds: Set<String>
         get() = p.getString("watch", "")!!.split(',').filter { it.isNotBlank() }.toSet()
@@ -335,6 +375,11 @@ class Settings(ctx: Context) {
     var bus: String
         get() = p.getString("bus", "auto")!!
         set(v) = p.edit().putString("bus", v).apply()
+
+    /** OpenPort 2.0: also listen to what the units send on CAN by themselves (ssm/CanBroadcast). */
+    var canListen: Boolean
+        get() = p.getBoolean("canListen", false)
+        set(v) = p.edit().putBoolean("canListen", v).apply()
 
     /** The header text when the ECU has not said which car it is (or the driver's own name). */
     var carTitle: String
@@ -490,6 +535,8 @@ object Repo {
     val battery = MutableStateFlow(BatteryState())
     val knock = MutableStateFlow(KnockStats())
     val navPosition = MutableStateFlow("left")
+    val carousel = MutableStateFlow<List<String>>(emptyList())
+    val freeGrid = MutableStateFlow("10x6")
     val bottomBar = MutableStateFlow("")
     val topBar = MutableStateFlow("")
     val slotVersion = MutableStateFlow(0)
@@ -501,9 +548,11 @@ object Repo {
     val carPaint = MutableStateFlow("chameleon")
     val homeTiles = MutableStateFlow("")
     val driveTiles = MutableStateFlow("")
+    val myTiles = MutableStateFlow("")
     val tcuTiles = MutableStateFlow("")
     fun boardFlow(key: String) = when (key) {
         "driveTiles" -> driveTiles
+        "myTiles" -> myTiles
         "tcuTiles" -> tcuTiles
         else -> homeTiles
     }
@@ -546,7 +595,15 @@ object Repo {
             settings = Settings(ctx.applicationContext)
             // older versions saved it: a leftover "on" must not start the demo by itself
             ctx.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove("demo").apply()
+            BoxPresets.load(ctx.applicationContext)
+            SensorBox.load()
+            Relays.load()
+            Displays.load()
+            UsbScreen.load()
+            FuelLine.load()
             navPosition.value = settings.navPosition
+            carousel.value = settings.carousel
+            freeGrid.value = settings.freeGrid
             bottomBar.value = settings.bottomBar
             topBar.value = settings.topBar
             uiScale.value = settings.uiScale
@@ -554,6 +611,7 @@ object Repo {
             carPaint.value = settings.carPaint
             homeTiles.value = settings.homeTiles
             driveTiles.value = settings.board("driveTiles")
+            myTiles.value = settings.board("myTiles")
             tcuTiles.value = settings.board("tcuTiles")
             dialStyles.value = settings.tachStyle to settings.speedoStyle
             clusterSize.value = settings.clusterSize

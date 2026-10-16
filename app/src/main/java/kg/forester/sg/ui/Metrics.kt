@@ -22,6 +22,8 @@ class MetricCtx(
     val gps: GpsFix?,
     val guard: GuardState,
     val rr: Map<String, Double>,
+    /** SensorBox values by input ("A0", "TC0"). */
+    val box: Map<String, kg.forester.sg.data.BoxReading> = emptyMap(),
 )
 
 /**
@@ -96,6 +98,12 @@ object Metrics {
         Indicator("map", "Абс. давление", "Абс. давл.", Lucide.Gauge, "кПа", "%.0f", 20f, 220f, "Наддув", maxNow = { 100f + Scales.boostKpa }) { it.e.mapKpa },
         Indicator("atm", "Атм. давление", "Атм.", Lucide.Cloudy, "кПа", "%.0f", 70f, 105f, "Наддув") { it.e.atmKpa },
         Indicator("wgdc", "Wastegate", "Wastegate", Lucide.Tornado, "%", "%.0f", 0f, 100f, "Наддув") { it.e.wastegatePct },
+        // the fuel pressure regulator holds the rail this much above the manifold: it should not change with boost
+        Indicator("fuelDp", "Перепад давления топлива", "Перепад топл.", Lucide.Fuel, "бар", "%.2f", 0f, 5f, "Доп датчики") { c ->
+            kg.forester.sg.data.SensorBox.slots.value.firstOrNull { it.role == "fuelP" }?.let { s ->
+                c.box[s.input]?.value?.let { p -> fuelBar(p, s.unit) - (c.e.gaugeKpa ?: return@let null) / 100f }
+            }
+        },
         // transmission
         Indicator("atf", "Темп. ATF", "ATF", Lucide.ThermometerSun, "°C", "%.0f", 0f, 130f, "АКПП", warnAbove = 110f) { it.t?.atfC?.toFloat() },
         Indicator("gear", "Передача", "Передача", Lucide.Cog, "", "%.0f", 0f, 4f, "АКПП") { it.t?.gear?.toFloat() },
@@ -111,6 +119,14 @@ object Metrics {
 
     private val byId = builtIn.associateBy { it.id }
 
+    /** A box pressure in bar, whatever unit its sensor was set up in. */
+    fun fuelBar(v: Float, unit: String) = when (unit.lowercase().trim()) {
+        "кпа", "kpa" -> v / 100f
+        "psi" -> v * 0.0689476f
+        "мпа", "mpa" -> v * 10f
+        else -> v
+    }
+
     /** A ticked «Датчики» parameter (or the user's own address) as a metric; its scale comes from what it has shown. */
     fun ofParam(p: RrParam): Indicator {
         val dec = p.format.substringAfter('.', "").length.coerceAtMost(3)
@@ -120,12 +136,27 @@ object Metrics {
         ) { it.rr[p.id]?.toFloat() }
     }
 
-    /** [id] as a metric: built in, or "rr:<id>" for a parameter of this car's units (null while not connected). */
-    fun of(id: String, avail: List<RrParam>): Indicator? =
-        byId[id] ?: if (id.startsWith("rr:")) avail.firstOrNull { it.id == id.removePrefix("rr:") }?.let(::ofParam) else null
+    /** An input of the SensorBox as a metric ("box_A0": no colon, the layouts keep their fields apart with colons), named and scaled the way the driver set it up. */
+    fun ofBox(s: kg.forester.sg.data.BoxSlot): Indicator {
+        val p = s.p
+        val icon = when (s.role) {
+            "oil" -> Lucide.Droplet; "oilP" -> Lucide.Gauge; "afr" -> Lucide.Flame; "egt" -> Lucide.ThermometerSun
+            else -> Lucide.Cpu
+        }
+        return Indicator(
+            "box_${s.input}", s.name, s.name.take(14), icon, s.unit, "%.${p.decimals}f", p.min, p.max, "Доп датчики",
+            warnAbove = s.warnAbove, warnBelow = s.warnBelow,
+        ) { it.box[s.input]?.value }
+    }
 
-    /** Built-in ones plus the parameters ticked on «Датчики». */
-    fun all(avail: List<RrParam>, watch: Set<String>): List<Indicator> = builtIn + avail.filter { it.id in watch }.map(::ofParam)
+    /** [id] as a metric: built in, "rr:<id>" for a parameter of this car's units (null while not connected), "box_<input>" ("box:" in beta18 tests). */
+    fun of(id: String, avail: List<RrParam>): Indicator? =
+        byId[id] ?: if (id.startsWith("rr:")) avail.firstOrNull { it.id == id.removePrefix("rr:") }?.let(::ofParam)
+        else if (id.startsWith("box_") || id.startsWith("box:")) kg.forester.sg.data.SensorBox.slot(id.drop(4))?.let(::ofBox) else null
+
+    /** Built-in ones plus the parameters ticked on «Датчики» and the SensorBox inputs. */
+    fun all(avail: List<RrParam>, watch: Set<String>): List<Indicator> =
+        builtIn + avail.filter { it.id in watch }.map(::ofParam) + kg.forester.sg.data.SensorBox.slots.value.map(::ofBox)
 }
 
 /** This frame's values, for composables. */
@@ -137,7 +168,8 @@ fun rememberMetricCtx(): MetricCtx {
     val gps by Repo.gps.collectAsState()
     val guard by Repo.guard.collectAsState()
     val rr by Repo.rrValues.collectAsState()
-    return MetricCtx(e, t, trip, gps, guard, rr)
+    val box by kg.forester.sg.data.SensorBox.readings.collectAsState()
+    return MetricCtx(e, t, trip, gps, guard, rr, box)
 }
 
 /** Tops of the scales that grow with the car (see [Scales]): boost in bar, MAF in g/s, load in g/rev. */

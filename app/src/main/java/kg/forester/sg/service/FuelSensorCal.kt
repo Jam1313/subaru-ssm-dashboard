@@ -9,8 +9,13 @@ import android.content.Context
  * while the car stands, the sender reading is paired with the litres known from the refills.
  * Once the pairs cover a good part of the tank, the level comes from the sender instead.
  */
-class FuelSensorCal(ctx: Context) {
-    private val p = ctx.getSharedPreferences("fuelcal", Context.MODE_PRIVATE)
+/**
+ * A fuel sender's reading learnt against the litres known from the refills, while the car stands (the fuel is
+ * level then): 50 bins over the sender's range, a value read as litres once enough of the tank is covered.
+ * [name] keeps the ECU's sender and the SensorBox's line apart; [vRange] is the top of a voltage reading.
+ */
+class FuelSensorCal(ctx: Context, name: String = "fuelcal", private val vRange: Double = 5.0) {
+    private val p = ctx.getSharedPreferences(name, Context.MODE_PRIVATE)
     private val bins = 50
     private val sum = DoubleArray(bins)
     private val cnt = IntArray(bins)
@@ -32,9 +37,16 @@ class FuelSensorCal(ctx: Context) {
 
     /** Volts span 0…5, ohms 0…400 (both senders in series). */
     private fun bin(x: Double, u: String) =
-        ((x / (if (u == "Ohm") 400.0 else 5.0)) * bins).toInt().coerceIn(0, bins - 1)
+        ((x / (if (u == "Ohm") 400.0 else vRange)) * bins).toInt().coerceIn(0, bins - 1)
 
-    private fun center(i: Int, u: String) = (i + 0.5) / bins * (if (u == "Ohm") 400.0 else 5.0)
+    private fun center(i: Int, u: String) = (i + 0.5) / bins * (if (u == "Ohm") 400.0 else vRange)
+
+    /** How far the learning has got, for the settings: points ready and the share of the tank they span. */
+    fun progress(tankL: Double): Pair<Int, Double> {
+        val pts = (0 until bins).filter { cnt[it] >= 6 }.map { sum[it] / cnt[it] }
+        val span = if (pts.isEmpty()) 0.0 else pts.max() - pts.min()
+        return pts.size to if (tankL > 0) (span / tankL).coerceIn(0.0, 1.0) else 0.0
+    }
 
     /**
      * One sample: [v]/[ohm] from the ECU, [knownLitres] from the refills (null when unknown).

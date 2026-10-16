@@ -1,0 +1,22 @@
+{
+ "ino_sha256": "0e3aa6e6d5fa54e179454518735e1a396f855a47755b5c33b0ca00faa57ec350",
+ "core": "arduino:avr@1.8.6",
+ "files": {
+  "nano": {
+   "sha256": "d1330d07515979471db6704388859c22ac8fd233cfe028a79153605558cba4ce",
+   "bytes": 19084
+  },
+  "uno": {
+   "sha256": "054ac79015c489a0f69b19e2b7180bf1fbb1f49beec47a44a99aea6df78753a7",
+   "bytes": 19082
+  },
+  "32u4": {
+   "sha256": "5743c89abba5c42b0095d65e886ab68315beef84bb2d4b5e2101cd6c8dffdfa1",
+   "bytes": 21574
+  },
+  "mega": {
+   "sha256": "08cc65fac92fe1a853a8726fc01ded3aa83c131a8498c63919af270d836da9c5",
+   "bytes": 20878
+  }
+ }
+}

@@ -33,7 +33,7 @@ data class CardValue(
 )
 
 /** Round scale bounds and a major step giving 5–8 numbered ticks. */
-private fun niceScale(min: Float, max: Float): Triple<Float, Float, Float> {
+internal fun niceScale(min: Float, max: Float): Triple<Float, Float, Float> {
     val raw = (max - min) / 6f
     val mag = 10f.pow(floor(log10(raw)))
     val step = listOf(1f, 2f, 2.5f, 5f, 10f).map { it * mag }.first { it >= raw }

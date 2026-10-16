@@ -38,7 +38,10 @@ import androidx.compose.ui.unit.sp
 import kg.forester.sg.data.Repo
 
 /** Names and icons of the home cards, for the settings list. */
-val HomeTileInfo: Map<String, Pair<String, androidx.compose.ui.graphics.vector.ImageVector>> = linkedMapOf(
+/** The home cards' names, with the SensorBox outputs' widgets set up now. */
+val HomeTileInfo: Map<String, Pair<String, androidx.compose.ui.graphics.vector.ImageVector>> get() = HomeTileBase + outWidgetNames()
+
+private val HomeTileBase: Map<String, Pair<String, androidx.compose.ui.graphics.vector.ImageVector>> = linkedMapOf(
     "coolant" to ("Темп. ОЖ" to Lucide.Thermometer),
     "intake" to ("Темп. впуска" to Lucide.ThermometerSnowflake),
     "battery" to ("Напряжение" to Lucide.BatteryCharging),
@@ -125,20 +128,26 @@ fun HomeScreen() {
     }
 
     var tip by remember { mutableStateOf(!Repo.settings.homeTipSeen) }
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (edit) HomeEditBar { edit = false }
-        else if (tip) HomeTip { tip = false; Repo.settings.homeTipSeen = true }
-        if (kg.forester.sg.data.HomeLayout.board.isFree(layout)) {
-            // free layout: the 3D car, the tachometer and the speedometer are cards like the others, anything can
-            // go anywhere and over anything
+    if (kg.forester.sg.data.HomeLayout.board.isFree(layout)) {
+        // free layout: the 3D car, the tachometer and the speedometer are cards like the others, anything can
+        // go anywhere and over anything; the area keeps its size with the edit bar or the tip over it
+        val header: (@Composable () -> Unit)? = when {
+            edit -> ({ HomeEditBar { edit = false } })
+            tip -> ({ HomeTip { tip = false; Repo.settings.homeTipSeen = true } })
+            else -> null
+        }
+        FreeFrame(header, Modifier.fillMaxSize()) { m ->
             FreeArea(
                 // the 3D car is the backdrop: always under the other cards
                 HomeEdit, kg.forester.sg.data.HomeLayout.parse(layout).filter { it.on }.sortedBy { if (it.id == "car3d") 0 else 1 },
-                edit, HomeTileInfo, longPress,
-                Modifier.weight(1f).fillMaxWidth(),
-            ) { t, m -> HomeTile(t.id, t.style, e, ts, gps, tcu, m) }
-            return@Column
+                edit, HomeTileInfo, longPress, m,
+            ) { t, mm -> HomeTile(t.id, t.style, e, ts, gps, tcu, mm) }
         }
+        return
+    }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (edit) HomeEditBar { edit = false }
+        else if (tip) HomeTip { tip = false; Repo.settings.homeTipSeen = true }
         if (clusterW > 0f) cluster(Modifier.weight(clusterW).fillMaxWidth())
         rows.forEach { row ->
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -168,6 +177,7 @@ private fun HomeTile(
     id: String, st: String, e: kg.forester.sg.ssm.EcuSnapshot, ts: kg.forester.sg.data.TripState,
     gps: kg.forester.sg.data.GpsFix?, tcu: kg.forester.sg.ssm.TcuSnapshot?, m: Modifier,
 ) {
+    if (id.startsWith("outw_")) { OutputWidget(id, m); return }
     val (title, icon) = HomeTileInfo[id] ?: return
     if (id in ExtraCards) { ExtraCard(id, "home.$id", m); return }
     when (id) {

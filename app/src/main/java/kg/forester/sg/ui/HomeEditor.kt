@@ -30,6 +30,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import com.composables.icons.lucide.Rows3
+import com.composables.icons.lucide.Grid3x3
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ListChecks
 import com.composables.icons.lucide.Sparkles
@@ -211,20 +217,46 @@ fun BoardEditBar(edit: BoardEdit, names: CardNames, onDone: () -> Unit, leading:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        BoxWithConstraints(Modifier.weight(1f)) {
+        val scroll = rememberScrollState()
+        BoxWithConstraints(Modifier.weight(1f).drawWithContent {
+            drawContent()
+            // more to the left or right: the edge fades, so a control half under «Готово» reads as «scroll me»
+            val fade = 28.dp.toPx()
+            if (scroll.value < scroll.maxValue) drawRect(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(C.Card.copy(alpha = 0f), C.Card), size.width - fade, size.width),
+                androidx.compose.ui.geometry.Offset(size.width - fade, 0f), androidx.compose.ui.geometry.Size(fade, size.height))
+            if (scroll.value > 0) drawRect(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(C.Card, C.Card.copy(alpha = 0f)), 0f, fade),
+                androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(fade, size.height))
+        }) {
             val room = maxWidth
             Row(
                 // at least the bar's width, so the spacer still pushes the grid controls right on a wide screen
-                Modifier.horizontalScroll(rememberScrollState()).widthIn(min = room),
+                Modifier.horizontalScroll(scroll).widthIn(min = room),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 leading()
                 Spacer(Modifier.weight(1f))
-                Chip("Сетка", !free, { edit.setFree(false) }, Lucide.LayoutGrid)
-                Chip("Свободно", free, { edit.setFree(true) }, Lucide.Move)
+                Chip("Рядами", !free, { edit.setFree(false) }, Lucide.Rows3)
+                Chip("По клеткам", free, { edit.setFree(true) }, Lucide.LayoutGrid)
+                if (free) {
+                    val grid by Repo.freeGrid.collectAsState()
+                    var open by remember { mutableStateOf(false) }
+                    Box {
+                        Chip(grid.ifEmpty { "без привязки" }.replace("x", "×"), false, { open = true }, Lucide.Grid3x3)
+                        androidx.compose.material3.DropdownMenu(open, { open = false }) {
+                            listOf("8x5", "10x6", "12x8", "").forEach { g ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { androidx.compose.material3.Text(if (g.isEmpty()) "Без привязки" else g.replace("x", " × ")) },
+                                    onClick = { open = false; Repo.settings.freeGrid = g },
+                                )
+                            }
+                        }
+                    }
+                }
                 Box {
-                    Chip("Добавить виджет", false, { adding = true }, Lucide.Plus)
+                    Chip("Добавить", false, { adding = true }, Lucide.Plus)
                     if (adding) AddMenu(edit, names) { adding = false }
                 }
                 Chip("Сбросить", false, { edit.reset() })
@@ -236,26 +268,60 @@ fun BoardEditBar(edit: BoardEdit, names: CardNames, onDone: () -> Unit, leading:
 
 @Composable
 private fun AddMenu(edit: BoardEdit, names: CardNames, onClose: () -> Unit) {
-    val hidden = edit.list().filter { !it.on }
+    val hidden = edit.list().filter { !it.on && names[it.id] != null }
+    val avail = Repo.rrAvailable.collectAsState().value
+    // in sections, as in the rest of the app: a long flat list hid the sensor cards among the gauges
+    val groups = hidden.groupBy { cardGroup(it.id) }.entries.sortedBy { CARD_GROUPS.indexOf(it.key).let { i -> if (i < 0) 99 else i } }
     Popup(alignment = Alignment.TopEnd, offset = androidx.compose.ui.unit.IntOffset(0, 120), onDismissRequest = onClose) {
         Column(
-            Modifier.width(260.dp).heightIn(max = 420.dp).clip(RoundedCornerShape(14.dp)).background(C.Card)
+            Modifier.width(300.dp).heightIn(max = 520.dp).clip(RoundedCornerShape(14.dp)).background(C.Card)
                 .border(1.dp, C.Border, RoundedCornerShape(14.dp)).padding(vertical = 6.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
             if (hidden.isEmpty()) T("Все виджеты уже на экране", 14.sp, C.Sub, modifier = Modifier.padding(16.dp))
-            hidden.forEach { t ->
-                val (title, icon) = names[t.id] ?: return@forEach
-                Row(
-                    Modifier.fillMaxWidth().clickable { edit.add(t.id); onClose() }.padding(horizontal = 16.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(icon, null, tint = C.Violet, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    T(title, 15.sp)
+            groups.forEach { (group, list) ->
+                T(group, 12.sp, C.Sub, FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp))
+                list.forEach { t ->
+                    val (title, icon) = names[t.id]!!
+                    // a «Датчик N» card says what it is set to show
+                    val shows = t.id.removePrefix("s").toIntOrNull()?.takeIf { t.id.startsWith("s") }?.let { k ->
+                        Repo.settings.slot(k).takeIf { it.isNotEmpty() }?.let { Metrics.of(it, avail)?.title }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clickable { edit.add(t.id); onClose() }.padding(horizontal = 16.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(icon, null, tint = C.Violet, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            T(title, 15.sp, maxLines = 1)
+                            if (shows != null) T(shows, 11.sp, C.Sub, maxLines = 1)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+private val CARD_GROUPS = listOf(
+    "Двигатель", "Топливо", "Зажигание", "Наддув", "АКПП", "Приборы и карта", "Динамика и замеры", "Защита мотора",
+    "Шины и ТО", "Доп датчики", "Выходы: кнопки и регуляторы", "Свои датчики (Датчик 1–6)", "Прочее",
+)
+
+/** The section a card is offered under in «Добавить виджет». */
+private fun cardGroup(id: String): String = when {
+    id in setOf("tach", "speedo", "car3d", "minimap", "gps", "altitude") -> "Приборы и карта"
+    id in setOf("gmeter", "incline", "peaks", "run") -> "Динамика и замеры"
+    id in setOf("iam", "btarget", "turbo") -> "Защита мотора"
+    id in setOf("tyres", "service") -> "Шины и ТО"
+    id.startsWith("outw_") -> "Выходы: кнопки и регуляторы"
+    Regex("^s\\d$").matches(id) -> "Свои датчики (Датчик 1–6)"
+    else -> when (val g = Metrics.of(id, emptyList())?.group) {
+        null -> "Прочее"
+        "Зажигание" -> "Зажигание"
+        "GPS" -> "Приборы и карта"
+        else -> if (g in CARD_GROUPS) g else "Прочее"
     }
 }
 
@@ -307,12 +373,19 @@ fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", 
     }
     if (picking && cfg.id == "minimap") MapStylePicker(cfg.style, { edit.setStyle(cfg.id, it) }, { picking = false })
     else if (picking && Regex("s[1-6]").matches(cfg.id)) SlotPicker(cfg.id.drop(1).toInt()) { picking = false }
-    else if (picking) StylePicker(
-        "Вид: $title", cfg.style, "Обычный", Modifier, target = "${edit.board.key}/${cfg.id}",
-        preview = { st, m -> Dial(62f, 100f, 20f, 1f, "", null, 80f, m, st) },
-        onPick = { edit.setStyle(cfg.id, it) },
-        onClose = { picking = false },
-    )
+    else if (picking) {
+        // the number in the dial's middle can be left out; it rides along with whatever design is picked
+        val hidden = cfg.style.endsWith(NO_NUMBER)
+        val base = cfg.style.removeSuffix(NO_NUMBER)
+        StylePicker(
+            "Вид: $title", base, "Обычный", Modifier, target = "${edit.board.key}/${cfg.id}",
+            preview = { st, m -> Dial(62f, 100f, 20f, 1f, "", null, 80f, m, st.copy(hideValue = hidden)) },
+            onPick = { edit.setStyle(cfg.id, if (it.isNotEmpty() && hidden) it + NO_NUMBER else it) },
+            onClose = { picking = false },
+            numberShown = if (base.isNotEmpty()) !hidden else null,
+            onNumber = { show -> edit.setStyle(cfg.id, base + if (show) "" else NO_NUMBER) },
+        )
+    }
 }
 
 /**
@@ -326,12 +399,14 @@ fun BoardScreen(edit: BoardEdit, names: CardNames, rowWeight: (TileCfg) -> Float
     val rows = remember(layout) { edit.board.rows(list) }
     var editing by remember { mutableStateOf(false) }
     val longPress = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { editing = true }) }
+    if (edit.board.isFree(layout)) {
+        FreeFrame(if (editing) ({ BoardEditBar(edit, names, { editing = false }) }) else null, Modifier.fillMaxSize()) { m ->
+            FreeArea(edit, list.filter { it.on }, editing, names, longPress, m, card = card)
+        }
+        return
+    }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (editing) BoardEditBar(edit, names, { editing = false })
-        if (edit.board.isFree(layout)) {
-            FreeArea(edit, list.filter { it.on }, editing, names, longPress, Modifier.weight(1f).fillMaxWidth(), card = card)
-            return@Column
-        }
         rows.forEach { row ->
             Row(Modifier.weight(row.maxOf { rowWeight(it) }).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { t ->
@@ -353,8 +428,29 @@ fun BoardScreen(edit: BoardEdit, names: CardNames, rowWeight: (TileCfg) -> Float
 }
 
 /**
+ * The free layout's area always measured at the full size, with or without the edit bar over it: the bar (or a tip)
+ * only shrinks the picture of it, keeping its proportions, so cards stay exactly where they were set while editing.
+ * (Laid out below the bar instead, the area was shorter while editing, and the cards moved when the bar went away.)
+ */
+@Composable
+fun FreeFrame(header: (@Composable () -> Unit)?, modifier: Modifier, content: @Composable (Modifier) -> Unit) {
+    BoxWithConstraints(modifier) {
+        val full = constraints.maxHeight.toFloat()
+        var barH by remember { mutableStateOf(0) }
+        val gap = with(LocalDensity.current) { 12.dp.toPx() }
+        val k = if (header != null && barH > 0 && full > 0f) ((full - barH - gap) / full).coerceIn(0.3f, 1f) else 1f
+        content(Modifier.fillMaxSize().graphicsLayer {
+            scaleX = k; scaleY = k
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+        })
+        if (header != null) Box(Modifier.fillMaxWidth().onSizeChanged { barH = it.height }.zIndex(2f)) { header() }
+    }
+}
+
+/**
  * Cards placed anywhere, each at its [TileCfg.free] rect (later cards on top). While [editing], drag a card to
- * move it and the corner handle to resize it; both snap to 0.5 % steps and stay inside the area.
+ * move it and the corner handle to resize it in both directions; both snap to the cells of the grid picked in the
+ * edit bar (10 × 6 by default, drawn while editing, as icons on a phone's home screen), or to 0.5 % steps without one.
  */
 @Composable
 fun FreeArea(
@@ -369,49 +465,93 @@ fun FreeArea(
         val density = LocalDensity.current
         val minW = with(density) { 56.dp.toPx() } / w
         val minH = with(density) { 40.dp.toPx() } / h
-        fun snap(x: Float) = kotlin.math.round(x * 200f) / 200f
+        val grid by Repo.freeGrid.collectAsState()
+        val cells = grid.split('x').mapNotNull { it.toIntOrNull() }.takeIf { it.size == 2 && it[0] > 0 && it[1] > 0 }
+        fun snapX(x: Float) = if (cells != null) kotlin.math.round(x * cells[0]) / cells[0] else kotlin.math.round(x * 200f) / 200f
+        fun snapY(y: Float) = if (cells != null) kotlin.math.round(y * cells[1]) / cells[1] else kotlin.math.round(y * 200f) / 200f
+        // at least one cell, and inside the area
+        fun sized(r: FreeRect): FreeRect {
+            if (cells == null) return r.copy(w = kotlin.math.round(r.w * 200f) / 200f, h = kotlin.math.round(r.h * 200f) / 200f)
+            val w = (snapX(r.w)).coerceIn(1f / cells[0], 1f - r.x)
+            val h = (snapY(r.h)).coerceIn(1f / cells[1], 1f - r.y)
+            return r.copy(w = w, h = h)
+        }
+        fun moved(r: FreeRect): FreeRect = r.copy(x = snapX(r.x).coerceIn(0f, (1f - r.w).coerceAtLeast(0f)), y = snapY(r.y).coerceIn(0f, (1f - r.h).coerceAtLeast(0f)))
+        if (editing && cells != null) androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+            val line = C.Border.copy(alpha = 0.7f)
+            for (k in 1 until cells[0]) drawLine(line, androidx.compose.ui.geometry.Offset(size.width * k / cells[0], 0f),
+                androidx.compose.ui.geometry.Offset(size.width * k / cells[0], size.height), 1.5f)
+            for (k in 1 until cells[1]) drawLine(line, androidx.compose.ui.geometry.Offset(0f, size.height * k / cells[1]),
+                androidx.compose.ui.geometry.Offset(size.width, size.height * k / cells[1]), 1.5f)
+        }
         tiles.forEach { t ->
             key(t.id) {
-                var r by remember(t.free) { mutableStateOf(t.free ?: FreeRect(0.35f, 0.3f, 0.3f, 0.4f)) }
-                var dragging by remember { mutableStateOf(false) }
+                val placed = t.free ?: FreeRect(0.35f, 0.3f, 0.3f, 0.4f)
+                // the gestures live as long as the card; they must see where it is now, not where it was when they began
+                val at by rememberUpdatedState(placed)
+                // while a finger moves or sizes the card, only its outline follows (the card itself stays put, so a
+                // heavy gauge or the map is not redrawn on every move); the card jumps there once, on release
+                var ghost by remember(t.id) { mutableStateOf<FreeRect?>(null) }
+                var sizing by remember(t.id) { mutableStateOf(false) }
                 Box(
                     Modifier
-                        .zIndex(if (dragging) 1f else 0f)
-                        .offset { IntOffset((r.x * w).roundToInt(), (r.y * h).roundToInt()) }
-                        .size(with(density) { (r.w * w).toDp() }, with(density) { (r.h * h).toDp() })
+                        .offset { IntOffset((placed.x * w).roundToInt(), (placed.y * h).roundToInt()) }
+                        .size(with(density) { (placed.w * w).toDp() }, with(density) { (placed.h * h).toDp() })
                         .then(
                             if (!editing) longPress
                             else Modifier.pointerInput(t.id) {
                                 detectDragGestures(
-                                    onDragStart = { dragging = true },
-                                    onDragEnd = { dragging = false; edit.place(t.id, r.copy(x = snap(r.x), y = snap(r.y))) },
-                                    onDragCancel = { dragging = false },
+                                    onDragStart = { ghost = at; sizing = false },
+                                    onDragEnd = { ghost?.let { edit.place(t.id, moved(it)) }; ghost = null },
+                                    onDragCancel = { ghost = null },
                                 ) { change, d ->
                                     change.consume()
-                                    r = r.copy(x = (r.x + d.x / w).coerceIn(0f, 1f - r.w), y = (r.y + d.y / h).coerceIn(0f, 1f - r.h))
+                                    val g = ghost ?: return@detectDragGestures
+                                    ghost = g.copy(x = (g.x + d.x / w).coerceIn(0f, 1f - g.w), y = (g.y + d.y / h).coerceIn(0f, 1f - g.h))
                                 }
                             },
-                        ),
+                        )
+                        .graphicsLayer { alpha = if (ghost != null) 0.35f else 1f },
                 ) {
-                    card(t, Modifier.fillMaxSize())
+                    // on a grid, cards touch edge to edge: a hair of space keeps them apart
+                    card(t, Modifier.fillMaxSize().padding(if (cells != null) 3.dp else 0.dp))
                     if (editing) {
                         TileEditOverlay(edit, t, names[t.id]?.first ?: "", free = true)
                         Box(
-                            Modifier.align(Alignment.BottomEnd).size(30.dp)
+                            Modifier.align(Alignment.BottomEnd).size(34.dp)
                                 .pointerInput(t.id) {
                                     detectDragGestures(
-                                        onDragStart = { dragging = true },
-                                        onDragEnd = { dragging = false; edit.place(t.id, r.copy(w = snap(r.w), h = snap(r.h))) },
-                                        onDragCancel = { dragging = false },
+                                        onDragStart = { ghost = at; sizing = true },
+                                        onDragEnd = { ghost?.let { edit.place(t.id, sized(it)) }; ghost = null },
+                                        onDragCancel = { ghost = null },
                                     ) { change, d ->
                                         change.consume()
-                                        r = r.copy(w = (r.w + d.x / w).coerceIn(minW, 1f - r.x), h = (r.h + d.y / h).coerceIn(minH, 1f - r.y))
+                                        val g = ghost ?: return@detectDragGestures
+                                        ghost = g.copy(w = (g.w + d.x / w).coerceIn(minW, 1f - g.x), h = (g.h + d.y / h).coerceIn(minH, 1f - g.y))
                                     }
                                 }
                                 .clip(RoundedCornerShape(topStart = 10.dp, bottomEnd = 14.dp)).background(C.Purple),
                             contentAlignment = Alignment.Center,
                         ) { Icon(Lucide.Scaling, "Размер", tint = Color.White, modifier = Modifier.size(16.dp)) }
                     }
+                }
+                ghost?.let { g ->
+                    // where it lands: the cells it will take, filled; the finger's own rectangle, a thin line
+                    val land = if (sizing) sized(g) else moved(g)
+                    Box(
+                        Modifier.zIndex(5f)
+                            .offset { IntOffset((land.x * w).roundToInt(), (land.y * h).roundToInt()) }
+                            .size(with(density) { (land.w * w).toDp() }, with(density) { (land.h * h).toDp() })
+                            .clip(RoundedCornerShape(12.dp)).background(C.Violet.copy(alpha = 0.18f))
+                            .border(2.dp, C.Violet, RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { T(names[t.id]?.first ?: "", 13.sp, C.Text, FontWeight.SemiBold, maxLines = 2) }
+                    Box(
+                        Modifier.zIndex(6f)
+                            .offset { IntOffset((g.x * w).roundToInt(), (g.y * h).roundToInt()) }
+                            .size(with(density) { (g.w * w).toDp() }, with(density) { (g.h * h).toDp() })
+                            .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
+                    )
                 }
             }
         }

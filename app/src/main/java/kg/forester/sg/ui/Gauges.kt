@@ -85,6 +85,8 @@ data class DialStyle(
     val bandText: Color = Color.Black,
     val outer: Pair<Color, Color>? = null, // two-tone ring outside the scale, left half / right half (Most Wanted)
     val readout: Readout? = null,
+    /** The number in the middle left out (the driver reads the needle only); the style id ends in [NO_NUMBER]. */
+    val hideValue: Boolean = false,
     val pattern: FacePattern = if (carbon) FacePattern.CARBON else FacePattern.NONE,
     val patternColor: Color = Color(0x22FFFFFF),
     val hub: Color? = null,            // needle cap; null = rim colour
@@ -279,7 +281,11 @@ private val PhotoStyle = DialStyle(
 )
 
 /** Style by id; "photo:<file>" is the user-picture look with that picture. */
+/** Appended to a card's style id: its dial without the number in the middle. */
+const val NO_NUMBER = "|n"
+
 fun dialStyle(id: String): DialStyle = when {
+    id.endsWith(NO_NUMBER) -> dialStyle(id.removeSuffix(NO_NUMBER)).copy(hideValue = true)
     id.startsWith("photo:") -> PhotoStyle.copy(id = id, image = id.removePrefix("photo:"))
     id.startsWith("custom:") -> kg.forester.sg.data.CustomGauges.byStyleId(id)?.toStyle() ?: DialStyles.first()
     else -> (DialStyles.firstOrNull { it.id == id } ?: DialStyles.first()).let { st ->
@@ -321,7 +327,7 @@ fun Dial(
                     Modifier.align(Alignment.Center).padding(top = d * 0.42f),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    ReadoutBox(text, ro, d * 0.44f, style.value)
+                    if (!style.hideValue) ReadoutBox(text, ro, d * 0.44f, style.value)
                     T(unit, (d.value * 0.075f).coerceIn(8f, 13f).sp, style.unit, maxLines = 1)
                 }
             }
@@ -330,7 +336,7 @@ fun Dial(
                 BoxWithConstraints(Modifier.fillMaxWidth(if (style.minimal) 0.62f else 0.5f)) {
                     val d = LocalDensity.current
                     val sp = with(d) { (maxWidth / 3.1f).toSp() }
-                    T(text, sp, style.value, FontWeight.Bold, maxLines = 1, modifier = Modifier.align(Alignment.Center))
+                    if (!style.hideValue) T(text, sp, style.value, FontWeight.Bold, maxLines = 1, modifier = Modifier.align(Alignment.Center))
                 }
                 T(unit, 12.sp, style.unit, maxLines = 1)
                 if (scaleNote != null) T(scaleNote, 10.sp, style.unit.copy(alpha = 0.6f), maxLines = 1)
@@ -416,7 +422,7 @@ private fun DrawScope.drawPeakMarks(range: Pair<Float, Float>, min: Float, max: 
     mark(ang(hi), MaxMarkColor)
 }
 
-private fun DrawScope.drawDial(
+internal fun DrawScope.drawDial(
     v: Float, min: Float, max: Float, step: Float, labelDiv: Float, redFrom: Float?, st: DialStyle,
     photo: androidx.compose.ui.graphics.ImageBitmap? = null,
     ringFill: List<Float?> = emptyList(),
@@ -774,6 +780,8 @@ val LocalPickGaugeImage = androidx.compose.runtime.staticCompositionLocalOf<(tar
 fun StylePicker(
     title: String, current: String, plain: String?, modifier: Modifier, target: String,
     preview: @Composable (DialStyle, Modifier) -> Unit, onPick: (String) -> Unit, onClose: () -> Unit,
+    /** Shown with a switch when given: whether the dial keeps the number in its middle. */
+    numberShown: Boolean? = null, onNumber: (Boolean) -> Unit = {},
 ) {
     val pickPicture = LocalPickGaugeImage.current
     var designing by remember { mutableStateOf<kg.forester.sg.data.CustomGauge?>(null) }
@@ -793,7 +801,16 @@ fun StylePicker(
                 .verticalScroll(androidx.compose.foundation.rememberScrollState())
                 .padding(14.dp),
         ) {
-            T(title, 16.sp, weight = FontWeight.SemiBold)
+            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                T(title, 16.sp, weight = FontWeight.SemiBold)
+                if (numberShown != null) {
+                    androidx.compose.foundation.layout.Spacer(Modifier.padding(horizontal = 16.dp))
+                    T("Цифра в центре", 13.sp, C.Sub)
+                    androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
+                    androidx.compose.material3.Switch(numberShown, onNumber,
+                        colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = C.Purple))
+                }
+            }
             androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
             // "" = the card's plain look, then the designs, the user's own ones, a picture already in use,
             // CREATE = new own design, PICK = choose a picture

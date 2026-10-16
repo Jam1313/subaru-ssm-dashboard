@@ -134,10 +134,16 @@ class EcuService : Service() {
         Voice.start(this)
         Fyt.bind(this)
         pollJob = scope.launch { pollLoop() }
+        (getSystemService(Context.USB_SERVICE) as UsbManager).let { usb ->
+            RelayEngine.start(scope)
+            SensorBoxLink.start(scope, usb, { SensorBoxLink.drivers(usb).let { it + unknownSerial(usb, it) } },
+                { isOp2(it) || isOp13(it) }) { requestUsbPermission(usb, it) }
+            ScreenLink.start(scope, this, usb) { requestUsbPermission(usb, it) }
+        }
         wakeWatch.start(scope)
         scope.launch { headUnitWatch() }
         scope.launch(Dispatchers.Main) {
-            while (isActive) { delay(30_000); runCatching { gpsWatchdog() } }
+            while (isActive) { delay(30_000); runCatching { gpsWatchdog() }; runCatching { Voice.ensure(this@EcuService) } }
         }
         scope.launch {
             while (isActive) {
@@ -186,8 +192,10 @@ class EcuService : Service() {
                 "elm_bt" -> { bluetoothSession(s.btAddress, s.btName); delay(3000); continue }
                 "elm_wifi" -> { wifiSession(explicit = true); delay(3000); continue }
             }
-            val drivers = adapterProber.findAllDrivers(usb) + unknownSerial(usb, adapterProber.findAllDrivers(usb))
-            logUsbDevices(usb, drivers)
+            val all = adapterProber.findAllDrivers(usb) + unknownSerial(usb, adapterProber.findAllDrivers(usb))
+            logUsbDevices(usb, all)
+            // the SensorBox (an Arduino next to the cable) and devices still being asked whether they are it
+            val drivers = SensorBoxLink.forEcu(all)
             val driver = pickDriver(kind, drivers)
             if (driver == null) {
                 if (!triedHostFix && System.currentTimeMillis() - noCableSince > 8000) {
@@ -222,9 +230,11 @@ class EcuService : Service() {
                 delay(3000)
                 continue
             }
+            if (!SensorBoxLink.claimForEcu(driver)) { delay(500); continue }
             Repo.link.value = LinkState.CONNECTING
             val conn = usb.openDevice(driver.device)
             if (conn == null) {
+                SensorBoxLink.releaseEcu()
                 delay(2000); continue
             }
             val port = driver.ports[0]
@@ -282,6 +292,7 @@ class EcuService : Service() {
                 EcuLink.client = null
                 streams?.close()
                 if (op2 != null) op2.close() else runCatching { port.close() }
+                SensorBoxLink.releaseEcu()
                 logger?.close(); logger = null
             }
             delay(1000)
@@ -553,7 +564,7 @@ class EcuService : Service() {
     }
 
     private fun openOp2(op2: OpenPort2, kline: Boolean): SsmTransport =
-        if (kline) Op2KLineTransport(op2).also { it.open() } else Op2CanTransport(op2).also { it.open() }
+        if (kline) Op2KLineTransport(op2).also { it.open() } else Op2CanTransport(op2).also { it.open(Repo.settings.canListen) }
 
     /**
      * One adapter session: find the bus the ECU answers on, init it, then poll until the cable or ECU goes away.
@@ -587,7 +598,15 @@ class EcuService : Service() {
             }
             val client = SsmClient(transport)
             EcuLink.client = client
+            // a laptop already on the line: listen to it before we even say hello
+            if (transport.passive) { passiveRound(transport, EcuParams.pollAddresses, emptySet()); continue }
             val init = EcuLink.mutex.withLock { client.init() }
+            if (init == null && transport.passive) continue
+            // no answer to the diagnostics, but the bus talks by itself: show what it says
+            if (init == null && !kline && Repo.settings.canListen && kg.forester.sg.ssm.CanBroadcast.fresh()) {
+                canOnlyRound()
+                continue
+            }
             if (init == null) {
                 Repo.link.value = LinkState.NO_ECU
                 // other makes (Nissan Consult, Toyota…) never answer SSM: say so instead of letting them wait
@@ -651,8 +670,18 @@ class EcuService : Service() {
             tcuNextTryMs = 0
             SsmTrace.polling = true
             while (scope.isActive && failures < 5 && !Repo.settings.demo) {
+                if (transport.passive) {
+                    passiveRound(transport, addrs, skip, afSensor)
+                    continue
+                }
+                if (wasPassive) {
+                    wasPassive = false
+                    SsmTrace.log("the other tester went quiet: polling again")
+                    Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+                }
                 val raw = EcuLink.mutex.withLock { client.read(addrs) }
                 val now = System.currentTimeMillis()
+                if (raw == null && transport.passive) continue
                 if (raw == null) {
                     failures++
                     tracker.tick(now)
@@ -683,8 +712,43 @@ class EcuService : Service() {
         }
     }
 
+    private var wasPassive = false
+
+    /** Only listening to CAN: no unit answers the diagnostics, the values come from what is broadcast. */
+    private suspend fun canOnlyRound() {
+        Repo.link.value = LinkState.CONNECTED
+        Repo.linkMessage.value = "Слушаю CAN без диагностики: видно кадров ${kg.forester.sg.ssm.CanBroadcast.idsSeen}"
+        val now = System.currentTimeMillis()
+        onSnapshot(kg.forester.sg.ssm.CanBroadcast.snapshot(now), now)
+        delay(250)
+    }
+
+    /**
+     * «Тихий режим»: another tester (a laptop on a second cable) polls the ECU, so we keep quiet and take the values
+     * it gets. Only what it asks for comes through; the rest stays empty until the line is ours again.
+     */
+    private suspend fun passiveRound(transport: kg.forester.sg.ssm.SsmTransport, addrs: IntArray, skip: Set<Int>, afSensor: Boolean = true) {
+        if (!wasPassive) {
+            wasPassive = true
+            Repo.link.value = LinkState.CONNECTED
+            Repo.linkMessage.value = "Тихий режим: на K-линии второй диагност (ноутбук). Не мешаю ему, читаю то, что он спрашивает"
+            SsmTrace.log("passive: another tester polls the ECU")
+        }
+        val got = transport.sniffed(addrs, 1500)
+        val now = System.currentTimeMillis()
+        if (got != null) {
+            var snap = EcuParams.decode(got.first, got.second, now, skip)
+            if (!afSensor) snap = snap.copy(lambda = null)
+            onSnapshot(snap, now)
+        } else tracker.tick(now)
+        delay(250)
+    }
+
     /** Everything a fresh sample feeds: live values, charts, battery, trip and fuel, knock, CSV log. */
-    private fun onSnapshot(read: EcuSnapshot, now: Long) {
+    private fun onSnapshot(raw0: EcuSnapshot, now: Long) {
+        // what the CAN bus broadcasts fills what the diagnostics did not give
+        val raw = if (Repo.settings.canListen) kg.forester.sg.ssm.CanBroadcast.fill(raw0, now) else raw0
+        val read = guard.withDirectMap(raw)
         val snap = read.saneMaf()
         if (snap !== read && !mafDropLogged) {
             mafDropLogged = true
@@ -701,7 +765,7 @@ class EcuService : Service() {
         extras(snap, now)
         if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0) {
             // the ticked parameters are extra columns: a new file when the choice changes
-            val extras = Repo.rrPolled.value
+            val extras = LogColumns.extras(Repo.rrPolled.value, guard.roleIds())
             if (logger != null && (logger?.extras != extras || logger?.columns?.map { it.key } != LogColumns.enabled().map { it.key })) {
                 logger?.close(); logger = null
             }
@@ -1204,9 +1268,11 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Repo.init(context)
         val s = Repo.settings
-        if (s.autostartService || s.autostartApp) EcuService.start(context)
+        // after an update the service was running before: it comes back whatever the autostart says
+        val updated = intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
+        if (updated || s.autostartService || s.autostartApp) EcuService.start(context)
         // allowed from the background only with "display over other apps" (Android 10+)
-        WakeWatch.openApp(context)
+        if (!updated) WakeWatch.openApp(context)
     }
 }
 

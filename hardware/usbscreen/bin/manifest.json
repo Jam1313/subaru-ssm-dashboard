@@ -1,0 +1,46 @@
+{
+ "src_sha256": "3819559f3543c9b9d2776480e467f68c575d7fe06f99d38569759d4333696d80",
+ "core": "esp32:esp32@3.3.10",
+ "files": {
+  "lilygo_amoled_191": {
+   "sha256": "58079af5a364637a388f2830bac533198bc3f84d9ac622d961acf6351989e4e7",
+   "bytes": 479232
+  },
+  "lilygo_amoled_164": {
+   "sha256": "e13340a3b5644c93359a91e97ba9762ca5680b60b17768e1e2545e83e2be2f8b",
+   "bytes": 479232
+  },
+  "lilygo_tdisplay_s3": {
+   "sha256": "dd692d8deb2b06a4352462c8a43eed52182ff8ec07bdb036cce7d525f4785f0d",
+   "bytes": 466944
+  },
+  "lilygo_t4_s3": {
+   "sha256": "176832b43615776bddae31285c65874e0cabb985edde8d856c47fd5263699a9a",
+   "bytes": 479232
+  },
+  "ws_amoled_143": {
+   "sha256": "f1fefe01bc2a688cd7fe19e2ff99a439a5e582e5239a904fe3e436c8dcca4187",
+   "bytes": 479232
+  },
+  "ws_amoled_175": {
+   "sha256": "96e28754805848ce5606631d18c7274f590b4b6971a2bbd362dda57d5de89bab",
+   "bytes": 479232
+  },
+  "ws_amoled_164": {
+   "sha256": "e77a88531e74010819aa5f928f26f7842936afdd31428ae3799fec60218c98ab",
+   "bytes": 479232
+  },
+  "ws_amoled_18": {
+   "sha256": "5813f3ccd6480e1e921918c0a0a28e113525a42c608977dee45c3f17495bb210",
+   "bytes": 479232
+  },
+  "ws_amoled_241": {
+   "sha256": "848b5b5c02ea0590ac976945ef73c093df915cb5d4be5140a2c0e9b8828228cd",
+   "bytes": 479232
+  },
+  "ws_lcd_128": {
+   "sha256": "aeb853f8063c8a78cc4c1def3173eae108009a737d27b1e601b3c39b517edff0",
+   "bytes": 462848
+  }
+ }
+}

@@ -119,7 +119,8 @@ object HomeLayout {
             "inj", "wgdc", "fuel", "boost", "gps",
         ).map { TileCfg(it, true) } + listOf(
             "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range", "tach", "speedo", "car3d", "minimap",
-        ).map { TileCfg(it, false) } + EXTRA_CARDS.map { TileCfg(it, false) } + MORE_VALUES.map { TileCfg(it, false) },
+        ).map { TileCfg(it, false) } + EXTRA_CARDS.map { TileCfg(it, false) } + MORE_VALUES.map { TileCfg(it, false) } +
+            OUT_WIDGETS.map { TileCfg(it, false) },
         freeOnly = setOf("car3d"),
     )
 
@@ -180,11 +181,32 @@ val TcuBoard = Board(
     ),
 )
 
+/** The SensorBox outputs' widgets (button or slider) a screen can show. */
+val OUT_WIDGETS = (1..8).map { "outw_$it" }
+
+/** SensorBox inputs a «Мой экран» card can show (box:A0…), whichever board is fitted. */
+val BOX_VALUES = listOf("A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "TC0", "F0").map { "box_$it" }
+
+/**
+ * «Мой экран»: the driver's own screen next to the author's ones. Any value of the app, the extra cards and the
+ * SensorBox inputs; it starts with three dials and four numbers.
+ */
+val MyBoard: Board by lazy {
+    val on = listOf(
+        TileCfg("rpm", true, 4, "neon"), TileCfg("speed", true, 4, "neon"), TileCfg("coolant", true, 4, "neon"),
+        TileCfg("oil", true, 3), TileCfg("battery", true, 3), TileCfg("per100", true, 3), TileCfg("range", true, 3),
+    )
+    val rest = kg.forester.sg.ui.Metrics.builtIn.map { it.id }.filter { id -> on.none { it.id == id } }.map { TileCfg(it, false, 3) } +
+        EXTRA_CARDS.map { TileCfg(it, false, 4) } + BOX_VALUES.map { TileCfg(it, false, 3) } + OUT_WIDGETS.map { TileCfg(it, false, 3) }
+    Board("myTiles", 12, 12, stretch = true, defaults = on + rest)
+}
+
 /** Editable layouts by their settings key. */
 object Boards {
     fun byKey(key: String) = when (key) {
         DriveBoard.key -> DriveBoard
         TcuBoard.key -> TcuBoard
+        "myTiles" -> MyBoard
         else -> HomeLayout.board
     }
 }

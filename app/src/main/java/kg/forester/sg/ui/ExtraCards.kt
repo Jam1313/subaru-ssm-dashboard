@@ -194,11 +194,22 @@ fun IamCard(info: String, m: Modifier) {
     Card(m, Lucide.Flame, "IAM и детонация", info) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
             val iam = g.iam
-            val lvl = when { iam == null -> 0; iam >= 0.95f -> 0; iam >= 0.75f -> 1; else -> 2 }
-            FitValue(iam?.let { "%.2f".format(it) } ?: "—", "IAM", 30f, Modifier.fillMaxWidth(), sevColor(lvl))
-            T(listOfNotNull(
-                g.fbkc?.let { "FBKC %.1f°".format(it) }, g.flkc?.let { "FLKC %.1f°".format(it) },
-            ).joinToString(" · ").ifEmpty { if (iam == null) "нет в определениях этой прошивки" else "" }, 11.sp, C.Sub, maxLines = 2)
+            val learned = g.learnedDeg
+            if (iam == null && learned != null) {
+                // no IAM address for this ROM: the ECU's own learned timing tells the same story, in degrees
+                FitValue("%.1f".format(learned), "° обуч. УОЗ", 30f, Modifier.fillMaxWidth())
+                val kc = Repo.live.collectAsState().value.knockDeg
+                T("Обученный угол: падает, когда мотор ловит детонацию, после сброса ЭБУ обучается заново" +
+                    (kc?.let { " · коррекция сейчас %.1f°".format(it) } ?: ""), 11.sp, C.Sub, maxLines = 3)
+            } else {
+                val lvl = when { iam == null -> 0; iam >= 0.95f -> 0; iam >= 0.75f -> 1; else -> 2 }
+                FitValue(iam?.let { "%.2f".format(it) } ?: "—", "IAM", 30f, Modifier.fillMaxWidth(), sevColor(lvl))
+                T(listOfNotNull(
+                    g.fbkc?.let { "FBKC %.1f°".format(it) }, g.flkc?.let { "FLKC %.1f°".format(it) },
+                ).joinToString(" · ").ifEmpty {
+                    if (iam == null) "IAM нет в определениях этой прошивки: пришлите ROM ID из Настроек, поищем адрес" else ""
+                }, 11.sp, C.Sub, maxLines = 2)
+            }
         }
     }
 }

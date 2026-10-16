@@ -12,11 +12,16 @@ android {
         applicationId = "kg.forester.sg"
         minSdk = 26
         targetSdk = 34
-        versionCode = 25
-        versionName = "0.9-beta17"
+        versionCode = 26
+        versionName = "0.9-beta18"
         // head units and phones are ARM; the x86 copies of the native speech libraries only made the APK bigger
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
+
+    // the SensorBox sketch ships inside the app (assets/sensorbox/sensorbox.ino): saved from Настройки → «Доп датчики»
+    sourceSets["main"].assets.srcDir("../hardware")
+    // a local arduino-cli compile leaves build/ (elf, map: tens of MB) next to the sketches: never into the APK
+    androidResources.ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:<dir>build"
 
     // Release key lives outside the repo: SUBARU_RELEASE_STORE / _PASSWORD / _ALIAS in ~/.gradle/gradle.properties.
     // Without it (e.g. someone building from source) the debug key is used.
@@ -72,4 +77,6 @@ dependencies {
     // unpacking the downloaded voice (.tar.bz2)
     implementation("org.apache.commons:commons-compress:1.21")
     testImplementation("junit:junit:4.13.2")
+    // the real org.json in unit tests (Android's is a stub there): the SensorBox catalogue is parsed with it
+    testImplementation("org.json:json:20240303")
 }

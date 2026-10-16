@@ -193,7 +193,9 @@ fun FitValue(text: String, unit: String, maxSp: Float, modifier: Modifier, color
         // a bold digit is ~0.6 em wide, the line is ~1.2 em tall
         val byH = with(d) { (maxHeight / 1.2f).toSp().value }
         val byW = with(d) { ((maxWidth - unitW) / (digits * 0.62f)).toSp().value }
-        val size = minOf(maxSp, byH, byW).coerceAtLeast(10f)
+        // a card stretched over many cells: the number grows with it instead of staying at the size of a small card
+        val cap = if (byH > maxSp * 1.8f) maxOf(maxSp, byH * 0.7f) else maxSp
+        val size = minOf(cap, byH, byW).coerceAtLeast(10f)
         Row(verticalAlignment = Alignment.Bottom) {
             T(text, size.sp, color, FontWeight.Bold, maxLines = 1)
             if (unit.isNotEmpty()) {

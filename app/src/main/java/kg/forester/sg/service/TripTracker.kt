@@ -58,6 +58,9 @@ object FuelCalc {
     }
 }
 
+/** The SensorBox fuel line's learning: points ready, share of the tank covered (null: no such input). */
+val boxProgress = kotlinx.coroutines.flow.MutableStateFlow<Pair<Int, Double>?>(null)
+
 /** Integrates samples into the current trip, buckets, fuel level and learned corrections. */
 /** [onNewTrip] gets the start time of every new trip. */
 class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) -> Unit = {}) {
@@ -78,6 +81,12 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
     private val speedWindow = ArrayDeque<Pair<Long, Double>>()
     private var speedK = s.speedK
     private val sensorCal = FuelSensorCal(ctx)
+    /** The fuel gauge wire read by the SensorBox (SG and older: the ECU has no fuel level), its line volts 0–15. */
+    private val boxCal = FuelSensorCal(ctx, "fuelcal_box", 15.0)
+    private var standMs = 0L
+    private var standSum = 0f
+    private var standN = 0
+    private var standMarked = false
 
     init {
         // the trip in memory is gone after a restart; its saved row stays as it is and a new trip starts
@@ -169,6 +178,25 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
         } else if (e.fuelSensorV != null || e.fuelSensorOhm != null) {
             val known = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL - pendingFuel).coerceAtLeast(0.0) else null
             sensorLeftL = sensorCal.process(e.fuelSensorV, e.fuelSensorOhm, known, speed < 1, s.tankL, now)
+        } else {
+            // no level from the ECU: the gauge wire on the SensorBox, learnt the same way, if one is wired
+            val line = kg.forester.sg.data.SensorBox.role("fuelLevel")
+            sensorLeftL = if (line != null && line in 0.05f..15f) {
+                val known = if (s.fuelAtRefillL >= 0) (s.fuelAtRefillL - s.usedSinceRefillL - pendingFuel).coerceAtLeast(0.0) else null
+                val learnt = boxCal.process(line, null, known, speed < 1, s.tankL, now)
+                // standing 15 s (the fuel in the tank settles) with the litres known from a full tank: a point by itself
+                if (speed < 1 && engineOn) {
+                    standMs += (dt * 1000).toLong()
+                    if (standMs >= 5_000) { standSum += line; standN++ } // the first seconds the fuel still sloshes
+                    if (standMs >= 15_000 && !standMarked && s.fuelLevelKnown && known != null && standN > 0) {
+                        standMarked = true
+                        kg.forester.sg.data.FuelLine.learn(standSum / standN, known.toFloat())
+                    }
+                } else { standMs = 0; standSum = 0f; standN = 0; standMarked = false }
+                // marked by hand (tank filled step by step): those points win over what the refills taught
+                kg.forester.sg.data.FuelLine.covered(line, s.tankL.toFloat())?.toDouble()?.let { if (s.tankL > 0) it.coerceIn(0.0, s.tankL) else it } ?: learnt
+            } else null
+            boxProgress.value = if (line == null) null else boxCal.progress(s.tankL)
         }
 
         if (now - lastSaveMs > 30_000) save(now)

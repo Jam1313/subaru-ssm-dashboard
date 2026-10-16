@@ -168,11 +168,23 @@ class Op2CanTransport(private val op2: OpenPort2) : SsmTransport {
     override val isCan = true
     private val rx = LinkedBlockingQueue<ByteArray>()
 
-    fun open() {
-        op2.onFrame = { proto, _, data -> if (proto == OpenPort2.CAN && data.size >= 5) rx.offer(data) }
+    /** [listen]: everything on the bus comes in, the broadcast frames go to [CanBroadcast]. */
+    fun open(listen: Boolean = false) {
+        op2.onFrame = { proto, _, data ->
+            if (proto == OpenPort2.CAN && data.size >= 5) {
+                val id = ((data[0].toInt() and 0xFF) shl 24) or ((data[1].toInt() and 0xFF) shl 16) or
+                    ((data[2].toInt() and 0xFF) shl 8) or (data[3].toInt() and 0xFF)
+                if (id in 0x7E0..0x7EF) rx.offer(data) else if (listen) CanBroadcast.feed(id, data.copyOfRange(4, data.size))
+            }
+        }
         op2.command("ato${OpenPort2.CAN} 0 500000 0")
-        // mask 0x7F0 / pattern 0x7E0: only the diagnostic answers 7E0…7EF
-        op2.command("atf${OpenPort2.CAN} 1 4 4", byteArrayOf(0, 0, 0x07, 0xF0.toByte(), 0, 0, 0x07, 0xE0.toByte()))
+        if (listen) {
+            // mask 0: every frame on the bus
+            op2.command("atf${OpenPort2.CAN} 1 4 4", byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0))
+        } else {
+            // mask 0x7F0 / pattern 0x7E0: only the diagnostic answers 7E0…7EF
+            op2.command("atf${OpenPort2.CAN} 1 4 4", byteArrayOf(0, 0, 0x07, 0xF0.toByte(), 0, 0, 0x07, 0xE0.toByte()))
+        }
     }
 
     @Synchronized

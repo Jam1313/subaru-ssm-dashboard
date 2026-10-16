@@ -216,6 +216,8 @@ fun SettingsScreen() {
             Chip("Кнопки быстрого запуска", tab == 1, { tab = 1 }, Lucide.LayoutGrid)
             Chip("Голос", tab == 2, { tab = 2 }, Lucide.Mic)
             Chip("Функции", tab == 4, { tab = 4 }, Lucide.ToggleRight)
+            Chip("Доп датчики", tab == 5, { tab = 5 }, Lucide.Cpu)
+            Chip("Цветной экран", tab == 6, { tab = 6 }, Lucide.Monitor)
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f)) {
@@ -224,6 +226,8 @@ fun SettingsScreen() {
                 1 -> ShortcutSettings()
                 3 -> CarAdapterSettings()
                 4 -> FeatureSettings()
+                5 -> SensorBoxSettings()
+                6 -> UsbScreenSettings()
                 else -> VoiceSettings()
             }
         }
@@ -287,6 +291,8 @@ private fun GeneralSettings() {
                     Chip(l, navPos == k, { Repo.settings.navPosition = k })
                 }
             }
+            Spacer(Modifier.height(14.dp))
+            CarouselSettings()
             Spacer(Modifier.height(14.dp))
             val ctx = androidx.compose.ui.platform.LocalContext.current
             var home by remember { mutableStateOf(isDefaultHome(ctx)) }
@@ -741,4 +747,28 @@ private fun TcuRateSetting() {
             atf = it; s.tcuAtfOnly = it
         }
     }
+}
+
+/**
+ * «Карусель»: the screens a sideways swipe goes through, so a driver without buttons on the wheel can flick from
+ * the dashboard to the music and back instead of aiming at the menu. Up to four, in the order picked.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CarouselSettings() {
+    val list by Repo.carousel.collectAsState()
+    T("Карусель экранов", 15.sp)
+    T("Свайп влево или вправо по экрану листает выбранные экраны по кругу. Меню слева остаётся. " +
+        "Отметьте от двух до четырёх экранов в нужном порядке; ничего не отмечено, карусель выключена", 11.sp, C.Sub)
+    Spacer(Modifier.height(6.dp))
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Chip("Выключена", list.size < 2, { Repo.settings.carousel = emptyList() })
+        kg.forester.sg.Screen.entries.filter { it != kg.forester.sg.Screen.Settings }.forEach { sc ->
+            val i = list.indexOf(sc.name)
+            Chip(if (i >= 0) "${i + 1}. ${sc.title}" else sc.title, i >= 0, {
+                Repo.settings.carousel = if (i >= 0) list - sc.name else if (list.size < 4) list + sc.name else list
+            }, sc.icon)
+        }
+    }
+    if (list.size == 1) T("Отметьте ещё хотя бы один экран", 11.sp, C.Orange)
 }

@@ -77,7 +77,7 @@ private val UNITS = listOf(
 private val COLORS = listOf(C.Blue, C.Orange, C.Green, C.Violet)
 
 /** Reads a log the app wrote (or battery.csv): the first column is the time, the numeric ones become charts. */
-private fun readLog(f: File): LogData {
+private fun readLog(f: File, rr: Map<String, kg.forester.sg.ssm.RrParam> = emptyMap()): LogData {
     val lines = f.bufferedReader().use { r -> r.lineSequence().take(400_000).toList() }
     if (lines.size < 2) return LogData(DoubleArray(0), null, emptyList())
     val head = lines[0].split(',')
@@ -118,7 +118,11 @@ private fun readLog(f: File): LogData {
         return LogData(t, wall, list)
     }
     val known = LogColumns.all.associateBy { it.key }
+    val keys = head.map { it.trim() }.toSet()
     val series = (1 until head.size).mapNotNull { c ->
+        // a RomRaider parameter that repeats a regular column (older logs wrote both): shown once, under the regular name
+        val param = Regex("^([PE]\\d+) ").find(head[c].trim())?.groupValues?.get(1)?.let { rr[it] }
+        if (param != null && LogColumns.twinOf(param) in keys) return@mapNotNull null
         val v = FloatArray(rows.size) { rows[it].getOrNull(c)?.toFloatOrNull() ?: Float.NaN }
         if (v.all { it.isNaN() }) return@mapNotNull null
         val key = head[c].trim()
@@ -130,6 +134,7 @@ private fun readLog(f: File): LogData {
         when {
             col != null -> LogSeries(key, col.title.substringBefore(","), unit, col.group, v)
             // a RomRaider parameter ticked on «Датчики»: "P12 Name units"
+            param != null -> LogSeries(key, param.name, param.unitsRu, if (param.target == 2) "Датчики АКПП" else "Датчики ЭБУ", v)
             Regex("^[PE]\\d+ ").containsMatchIn(key) -> LogSeries(key, key.substringAfter(' '), "", "Датчики ЭБУ", v)
             else -> LogSeries(key, key, "", "Прочее", v)
         }
@@ -264,7 +269,7 @@ fun LogViewer(file: File, onClose: () -> Unit) {
     var data by remember(file) { mutableStateOf<LogData?>(null) }
     var error by remember(file) { mutableStateOf<String?>(null) }
     LaunchedEffect(file) {
-        runCatching { withContext(Dispatchers.IO) { readLog(file) } }
+        runCatching { withContext(Dispatchers.IO) { readLog(file, kg.forester.sg.ssm.RomRaider.load(ctx).associateBy { it.id }) } }
             .onSuccess { data = it }.onFailure { error = it.message ?: it.javaClass.simpleName }
     }
     var picked by remember(file) { mutableStateOf(listOf<String>()) }

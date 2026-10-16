@@ -22,7 +22,7 @@ data class CustomParam(
     val formula: String,
     val units: String,
     val decimals: Int,
-    /** "", "iam", "fbkc", "flkc" or "target". */
+    /** "", "iam", "fbkc", "flkc", "target" or "mapAbs". */
     val role: String,
 ) {
     fun toParam(): RrParam = RrParam(
@@ -35,7 +35,11 @@ data class CustomParam(
         .put("storage", storage).put("formula", formula).put("units", units).put("dec", decimals).put("role", role)
 
     companion object {
-        val ROLES = listOf("" to "нет", "iam" to "IAM", "fbkc" to "FBKC (откат)", "flkc" to "FLKC (обучение)", "target" to "Целевой наддув")
+        val ROLES = listOf(
+            "" to "нет", "iam" to "IAM", "fbkc" to "FBKC (откат)", "flkc" to "FLKC (обучение)", "target" to "Целевой наддув",
+            // a ROM the RomRaider base doesn't know: its own manifold pressure address lifts the 1.53 bar ceiling of the standard byte
+            "mapAbs" to "Давление во впуске, абс. кПа",
+        )
         val STORAGES = listOf("" to "без знака", "int8" to "со знаком 8", "int16" to "со знаком 16", "int32" to "со знаком 32", "float" to "float")
 
         fun fromJson(o: JSONObject) = CustomParam(
