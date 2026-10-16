@@ -1,7 +1,7 @@
 {
- "tag": "v0.9-beta19",
- "name": "0.9-beta19",
- "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta19/subaru-ssm-dashboard.apk",
+ "tag": "v0.9-beta20",
+ "name": "0.9-beta20",
+ "apk": "https://github.com/surtaeff/subaru-ssm-dashboard/releases/download/v0.9-beta20/subaru-ssm-dashboard.apk",
  "size": 126306173,
- "notes": "Спортивный ЭБУ Link G4X по CAN через CANable (экспериментально), монитор CAN и свои значения, Мой экран без пустых полос в правке, «включи музыку» и ответы про масло у ассистента, проверка команд без голоса."
+ "notes": "Машина на ЭБУ Link как отдельная машина (свой мотор, турбо, форсунки, без ложных выводов), стрелка поверх цифрового окошка, иконки на «Датчиках»."
 }
