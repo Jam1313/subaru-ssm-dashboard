@@ -114,11 +114,15 @@ object EcuParams {
         optional.filter { (_, c) -> init.supports(c.first + 8, c.second) }.keys.toIntArray()
 
     /** False only when the init clearly lists the capability byte and the bit is off (then the byte is junk). */
+        /** Адреса, которые ЭБУ ошибочно помечает как неподдерживаемые (JECS баг), но они реально работают */
+    private val forceSupported = setOf(MAF_H, MAF_L, INTAKE, THROTTLE, AF_LEARN, PEDAL, MAP)
+
+    /** False only when the init clearly lists the capability byte and the bit is off (then the byte is junk). */
     fun reported(init: EcuInit, addr: Int): Boolean {
+        if (addr in forceSupported) return true // <-- Принудительно разрешаем MAF и остальные
         val (i, bit) = capability[addr] ?: return true
         return i >= init.capabilities.size || init.supports(i + 8, bit)
     }
-
     /**
      * Addresses in [addrs] the init clearly marks as not supported: SSM answers them anyway with junk (an EJ253
      * showed "knock correction +63.5°"), so their values are dropped.
