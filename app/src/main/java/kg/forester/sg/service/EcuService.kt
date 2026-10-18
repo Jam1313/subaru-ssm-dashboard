@@ -55,7 +55,7 @@ import kg.forester.sg.ssm.TcuParams
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
 import kg.forester.sg.ssm.LockState
-import kg.forester.sg.ssm.KLineTransport // Добавлено для Fast Poll
+import kg.forester.sg.ssm.KLineTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,8 +66,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.channels.Channel // Добавлено для Fast Poll
-import kotlinx.coroutines.withTimeoutOrNull // Добавлено для Fast Poll
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -664,12 +664,12 @@ class EcuService : Service() {
                 var lastFastPollMs = System.currentTimeMillis()
                 var lastTcuPollMs = 0L
                 var isFastPolling = false
-                var currentWatchVersion = -1L
+                var currentWatchVersion: Int = -1 // ИСПРАВЛЕНО: Int вместо Long
 
                 data class FastData(val raw: ByteArray, val snap: EcuSnapshot, val customValues: Map<String, Double>)
                 val snapChannel = Channel<FastData>(Channel.CONFLATED)
 
-                var fastAddrs = addrs
+                var fastAddrs: IntArray = addrs // ИСПРАВЛЕНО: явное указание не-nullable типа
                 var fastCallback: ((ByteArray) -> Unit)? = null
 
                 try {
@@ -691,13 +691,13 @@ class EcuService : Service() {
                         }
 
                         // Проверяем, не изменился ли список кастомных переменных
-                        if (currentWatchVersion != Repo.watchVersion.value) {
+                        if (currentWatchVersion != Repo.watchVersion.value.toInt()) { // ИСПРАВЛЕНО: приведение к Int
                             if (isFastPolling) {
                                 kt.fastPollCallback = null
                                 client.stopFastPoll()
                                 isFastPolling = false
                             }
-                            currentWatchVersion = Repo.watchVersion.value
+                            currentWatchVersion = Repo.watchVersion.value.toInt() // ИСПРАВЛЕНО: приведение к Int
                             
                             // Собираем кастомные адреса
                             val watchAddrs = RomRaider.readList(ecuWatch.params, RomRaider.load(this@EcuService))
@@ -1165,7 +1165,6 @@ class EcuService : Service() {
         var addrs = tcuAddrs
         if (addrs == null) {
             if (now < tcuNextTryMs) return
-            // Для init() коробки используется таймаут 300 мс (зашито в SsmClient.init)
             val init = EcuLink.mutex.withLock { client.init(SsmClient.TCU) }
             if (init == null) {
                 Repo.tcuStatus.value = "Блок АКПП не отвечает по SSM. На Subaru 1999–2000 годов (Impreza GC/GF, Forester SF, " +
@@ -1189,7 +1188,6 @@ class EcuService : Service() {
             }
             tcuAddrs = addrs
         }
-        // При чтении коробки стандартный вызов read() использует таймаут 2000 мс, но коробка отвечает быстро (если отвечает)
         val raw = EcuLink.mutex.withLock { client.read(addrs, SsmClient.TCU) } ?: return
         tcuWatch.poll(client)
         val t = lockUp(TcuParams.decode(addrs, raw, now), Repo.live.value.rpm, now)
