@@ -284,7 +284,7 @@ object RomRaider {
         "P7"
     )
     
-    private fun capOk(p: RrParam, init: EcuInit): Boolean = p.id in forceAvaiLable || p.capByte < 0 || init.supports(p.capByte, p.capBit)
+    private fun capOk(p: RrParam, init: EcuInit): Boolean = p.id in forceAvailable || p.capByte < 0 || init.supports(p.capByte, p.capBit)
 
     /**
      * Values of [params] from one read of [addrs] ([raw] in the same order); calculated parameters use the
