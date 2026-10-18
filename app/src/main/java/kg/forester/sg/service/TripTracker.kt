@@ -9,85 +9,66 @@ import kg.forester.sg.ssm.EcuSnapshot
 import kotlin.math.abs
 
 object VirtualAfr {
-    /**
-     * Вычисляет реальный AFR на основе MAF и скважности форсунок.
-     * Если MAF сломан или данные некорректны, возвращает null.
-     */
-    fun calculate(s: EcuSnapshot, injectorCc: Double): Float? {
+    fun calculate(s: EcuSnapshot): Float? {
         val maf = s.mafGs ?: return null
         val rpm = s.rpm ?: return null
         val pw = s.injPwMs ?: return null
-        
-        if (rpm < 300 || injectorCc <= 0.0 || pw < 0.3f) return null
+        if (rpm < 300 || pw < 0.3f) return null
 
-        // 1. Считаем массу топлива по форсункам
+        val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
+        val injectorCc = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
+            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 380.0 else 260.0
+
         val openMs = (pw - 0.6f).coerceAtLeast(0f)
         val fuelLh = rpm * openMs * injectorCc * 2e-6
         val fuelGs = fuelLh * 745.0 / 3600.0
         
-        if (fuelGs < 0.01) return null // Двигатель не льёт топливо (ПХХ)
+        if (fuelGs < 0.01) return null 
 
-        // 2. Считаем виртуальный AFR
         val afr = maf / fuelGs
-        
-        // 3. Защита от мусора (AFR вне разумных пределов — это ошибка)
         return if (afr in 9.0f..18.0f) afr else null
     }
 }
+
 object FuelCalc {
     private const val GASOLINE_G_PER_L = 745.0
 
-    //**
-     * Fuel flow in L/h from MAF. The ECU meters fuel as MAF / target AFR and then applies the
-     * A/F correction + learning trims, so the trims are included (they matter on this car: an air
-     * leak shows up as large positive trims). Outside closed loop the measured AFR is used as is.
-     * [k] is learned from real refills.
-    fun litersPerHour (s: EcuSnapshot, k: Double): Double {
-    val rpm = s.rpm ?: return 0.0
-    if (rpm < 300) return 0.0
-    val pw = s.injPwMs
-    if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 // deceleration fuel cut
+    fun litersPerHour(s: EcuSnapshot, k: Double): Double {
+        val rpm = s.rpm ?: return 0.0
+        if (rpm < 300) return 0.0
+        val pw = s.injPwMs
+        if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 
 
-    val maf = s.mafGs ?: return byInjectors(pw, rpm, k)
-    source = "maf"
-    
-    // Берем AFR из датчика, а если он молчит — вычисляем виртуально
-    val measured = s.afr?.toDouble() ?: VirtualAfr.calculate(s)?.toDouble()
-    val closedLoop = measured == null || measured in 13.5..16.0
-    
-    val fuelGs = if (closedLoop) {
-        val trims = ((s.afCorrPct ?: 0f) + (s.afLearnPct ?: 0f)) / 100.0
-        maf / 14.7 * (1 + trims.coerceIn(-0.35, 0.35))
-    } else {
-        maf / measured!!.coerceIn(10.0, 18.5)
-    } * k
-    
-    return fuelGs * 3600.0 / GASOLINE_G_PER_L
-}
+        val maf = s.mafGs ?: return byInjectors(pw, rpm, k)
+        source = "maf"
+        
+        // 1. Пытаемся узнать реальный AFR (из лямбды или через форсунки)
+        val measured = s.afr?.toDouble() ?: VirtualAfr.calculate(s)?.toDouble()
+        val closedLoop = measured == null || measured in 13.5..16.0
+        
+        val fuelGs = if (closedLoop) {
+            val trims = ((s.afCorrPct ?: 0f) + (s.afLearnPct ?: 0f)) / 100.0
+            maf / 14.7 * (1 + trims.coerceIn(-0.35, 0.35))
+        } else {
+            maf / measured!!.coerceIn(10.0, 18.5)
+        } * k
+        
+        return fuelGs * 3600.0 / GASOLINE_G_PER_L
+    }
 
-    /** How the last [litersPerHour] got its number: "maf", "inj" (no MAF, by the injectors) or "" (neither). */
     @Volatile var source = ""
         private set
 
-    /**
-     * For an ECU without a usable MAF (some early 2000s ones answer 0xFFFF there): four injectors, each firing
-     * once per two turns, open for the pulse width less the time they take to open, at a typical flow for the
-     * engine. The refills calibrate [k] as they do for the MAF way.
-     */
     private fun byInjectors(pw: Float?, rpm: Int, k: Double): Double {
         if (pw == null || pw !in 0.3f..40f) { source = ""; return 0.0 }
         source = "inj"
-        val turbo = runCatching {
-            kg.forester.sg.data.Repo.guard.value.turboCar
-        }.getOrDefault(false)
-        // the driver's injectors when set (a Link car's are rarely stock), else typical for the engine
-        val ccPerMin = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0).takeIf { it in 100..3000 }?.toDouble()
-            ?: if (turbo) 490.0 else 260.0
-        val openMs = (pw - 0.6).coerceAtLeast(0.0)
+        val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
+        val ccPerMin = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
+            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 490.0 else 260.0
+        val openMs = (pw - 0.6f).coerceAtLeast(0.0)
         return rpm * openMs * ccPerMin * 2e-6 * k
     }
 }
-
 /** The SensorBox fuel line's learning: points ready, share of the tank covered (null: no such input). */
 val boxProgress = kotlinx.coroutines.flow.MutableStateFlow<Pair<Int, Double>?>(null)
 
