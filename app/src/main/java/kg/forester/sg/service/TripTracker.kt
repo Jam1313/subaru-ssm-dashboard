@@ -19,7 +19,7 @@ object VirtualAfr {
 
         val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
         val injectorCc = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
-            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 380.0 else 260.0
+            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 490.0 else 260.0
 
         val openMs = (pw - 0.6).coerceAtLeast(0.0)
         val fuelLh = rpm.toDouble() * openMs * injectorCc * 2e-6
@@ -68,7 +68,7 @@ object FuelCalc {
         source = "inj"
         val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
         val ccPerMin = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
-            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 380.0 else 260.0
+            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 490.0 else 260.0
         val openMs = (pw - 0.6f).coerceAtLeast(0f).toDouble()
         return rpm.toDouble() * openMs * ccPerMin * 2e-6 * k
     }
