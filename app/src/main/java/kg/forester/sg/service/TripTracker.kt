@@ -8,34 +8,62 @@ import kg.forester.sg.data.TripState
 import kg.forester.sg.ssm.EcuSnapshot
 import kotlin.math.abs
 
+object VirtualAfr {
+    /**
+     * Вычисляет реальный AFR на основе MAF и скважности форсунок.
+     * Если MAF сломан или данные некорректны, возвращает null.
+     */
+    fun calculate(s: EcuSnapshot, injectorCc: Double): Float? {
+        val maf = s.mafGs ?: return null
+        val rpm = s.rpm ?: return null
+        val pw = s.injPwMs ?: return null
+        
+        if (rpm < 300 || injectorCc <= 0.0 || pw < 0.3f) return null
+
+        // 1. Считаем массу топлива по форсункам
+        val openMs = (pw - 0.6f).coerceAtLeast(0f)
+        val fuelLh = rpm * openMs * injectorCc * 2e-6
+        val fuelGs = fuelLh * 745.0 / 3600.0
+        
+        if (fuelGs < 0.01) return null // Двигатель не льёт топливо (ПХХ)
+
+        // 2. Считаем виртуальный AFR
+        val afr = maf / fuelGs
+        
+        // 3. Защита от мусора (AFR вне разумных пределов — это ошибка)
+        return if (afr in 9.0f..18.0f) afr else null
+    }
+}
 object FuelCalc {
     private const val GASOLINE_G_PER_L = 745.0
 
-    /**
+    //**
      * Fuel flow in L/h from MAF. The ECU meters fuel as MAF / target AFR and then applies the
      * A/F correction + learning trims, so the trims are included (they matter on this car: an air
      * leak shows up as large positive trims). Outside closed loop the measured AFR is used as is.
      * [k] is learned from real refills.
-     */
-    fun litersPerHour(s: EcuSnapshot, k: Double): Double {
-        val rpm = s.rpm ?: return 0.0
-        if (rpm < 300) return 0.0
-        val pw = s.injPwMs
-        if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 // deceleration fuel cut
-        val maf = s.mafGs ?: return byInjectors(pw, rpm, k)
-        source = "maf"
-        val measured = s.afr?.toDouble()
-        val closedLoop = measured == null || measured in 13.5..16.0
-        val fuelGs = if (closedLoop) {
-            // stoichiometric target corrected by the short + long term trims (real ones stay within ±25 %)
-            val trims = ((s.afCorrPct ?: 0f) + (s.afLearnPct ?: 0f)) / 100.0
-            maf / 14.7 * (1 + trims.coerceIn(-0.35, 0.35))
-        } else {
-            // enrichment / lean: the wideband AFR is air over the fuel actually injected, trims included
-            maf / measured!!.coerceIn(10.0, 18.5)
-        } * k
-        return fuelGs * 3600.0 / GASOLINE_G_PER_L
-    }
+    fun litersPerHour (s: EcuSnapshot, k: Double): Double {
+    val rpm = s.rpm ?: return 0.0
+    if (rpm < 300) return 0.0
+    val pw = s.injPwMs
+    if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 // deceleration fuel cut
+
+    val maf = s.mafGs ?: return byInjectors(pw, rpm, k)
+    source = "maf"
+    
+    // Берем AFR из датчика, а если он молчит — вычисляем виртуально
+    val measured = s.afr?.toDouble() ?: VirtualAfr.calculate(s)?.toDouble()
+    val closedLoop = measured == null || measured in 13.5..16.0
+    
+    val fuelGs = if (closedLoop) {
+        val trims = ((s.afCorrPct ?: 0f) + (s.afLearnPct ?: 0f)) / 100.0
+        maf / 14.7 * (1 + trims.coerceIn(-0.35, 0.35))
+    } else {
+        maf / measured!!.coerceIn(10.0, 18.5)
+    } * k
+    
+    return fuelGs * 3600.0 / GASOLINE_G_PER_L
+}
 
     /** How the last [litersPerHour] got its number: "maf", "inj" (no MAF, by the injectors) or "" (neither). */
     @Volatile var source = ""
