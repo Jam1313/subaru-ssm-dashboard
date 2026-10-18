@@ -1068,7 +1068,7 @@ class EcuService : Service() {
         private var avail: List<RrParam> = emptyList()
         private var all: List<RrParam> = emptyList()
         private var addrs = IntArray(0)
-        private var version = -1
+        private var version = -1 // ИСПРАВЛЕНО: Int вместо Long
         private var fails = 0
 
         fun setup(init: EcuInit) {
@@ -1078,7 +1078,7 @@ class EcuService : Service() {
             custom = Repo.customVersion.value
             if (tcu) tcuAvail = avail else ecuAvail = avail
             SsmTrace.log("RomRaider: ${avail.size} parameters for ${if (tcu) "TCU" else "ECU"} ROM ${init.romId}")
-            version = -1L
+            version = -1 // ИСПРАВЛЕНО
             params = emptyList()
             publishWatch()
         }
@@ -1097,7 +1097,7 @@ class EcuService : Service() {
             if (custom != Repo.customVersion.value) {
                 custom = Repo.customVersion.value
                 init?.let { avail = RomRaider.available(this@EcuService, it, tcu); if (tcu) tcuAvail = avail else ecuAvail = avail }
-                version = -1L
+                version = -1 // ИСПРАВЛЕНО
             }
             if (version != Repo.watchVersion.value || internal != Repo.internalWatch.value) {
                 version = Repo.watchVersion.value
