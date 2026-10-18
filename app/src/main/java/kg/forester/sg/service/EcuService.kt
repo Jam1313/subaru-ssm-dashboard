@@ -55,7 +55,7 @@ import kg.forester.sg.ssm.TcuParams
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
 import kg.forester.sg.ssm.LockState
-import kg.forester.sg.ssm.KLineTransport // <-- Добавлен импорт для Fast Poll
+import kg.forester.sg.ssm.KLineTransport // <-- Импорт для Fast Poll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,8 +66,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.channels.Channel // <-- Добавлен импорт для Fast Poll
-import kotlinx.coroutines.withTimeoutOrNull // <-- Добавлен импорт для Fast Poll
+import kotlinx.coroutines.channels.Channel // <-- Импорт для Fast Poll
+import kotlinx.coroutines.withTimeoutOrNull // <-- Импорт для Fast Poll
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -552,9 +552,6 @@ class EcuService : Service() {
     private fun openOp2(op2: OpenPort2, kline: Boolean): SsmTransport =
         if (kline) Op2KLineTransport(op2).also { it.open() } else Op2CanTransport(op2).also { it.open(Repo.settings.canListen) }
 
-    // =========================================================================
-    // ОБНОВЛЕННАЯ ФУНКЦИЯ SESSION С ПОДДЕРЖКОЙ FAST POLL
-    // =========================================================================
     private suspend fun session(
         klineOnly: Boolean = false,
         obd: (() -> ObdLink?)? = null,
@@ -663,7 +660,9 @@ class EcuService : Service() {
                 SsmTrace.log("Fast Poll start")
                 var lastFastPollMs = System.currentTimeMillis()
                 var lastAuxPollMs = 0L
+                var lastTcuPollMs = 0L // <--- Таймер для АКПП
                 var isFastPolling = false
+                
                 data class FastData(val raw: ByteArray, val snap: EcuSnapshot)
                 val snapChannel = Channel<FastData>(Channel.CONFLATED)
 
@@ -726,20 +725,35 @@ class EcuService : Service() {
                             }
                         }
 
+                        // Пауза для опроса доп. модулей
                         if (now - lastAuxPollMs > 1000) {
-                            lastAuxPollMs = now
                             if (isFastPolling) {
                                 kt.fastPollCallback = null
                                 client.stopFastPoll()
                                 isFastPolling = false
                                 delay(100)
                             }
+                            
+                            // Очистка линии от мусора перед обычными запросами
+                            kt.resetLineState() 
+
+                            // RomRaider опрашиваем каждую секунду
                             ecuWatch.poll(client)
-                            if (Repo.settings.gearbox != "mt") pollTcu(client, now)
+
+                            // АКПП опрашиваем РАЗ В 5 СЕКУНД
+                            if (Repo.settings.gearbox != "mt" && now - lastTcuPollMs > 5000) {
+                                lastTcuPollMs = now
+                                pollTcu(client, now)
+                            }
+
+                            // Очистка линии перед запуском потока
+                            kt.resetLineState()
+                            
                             if (!transport.passive) {
                                 kt.fastPollCallback = fastCallback
                                 client.startFastPoll(addrs)
                                 isFastPolling = true
+                                lastAuxPollMs = System.currentTimeMillis() // <--- Обновляем таймер только после успешного запуска
                             }
                         }
                     }
