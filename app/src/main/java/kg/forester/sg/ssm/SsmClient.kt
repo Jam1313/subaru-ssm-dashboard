@@ -16,6 +16,7 @@ data class EcuInit(
     }
 }
 
+// Оставляем интерфейс как было (без timeoutMs), чтобы не ломать Elm327 и OpenPort2!
 interface SsmTransport {
     val name: String
     val isCan: Boolean
@@ -24,8 +25,7 @@ interface SsmTransport {
     val maxReadAddrs: Int get() = 64
     val lineModes: Int get() = 1
     fun setLineMode(i: Int) {}
-    // Добавлен параметр timeoutMs (по умолчанию 2000 мс)
-    fun exchange(dest: Int, body: ByteArray, timeoutMs: Long = 2000): ByteArray?
+    fun exchange(dest: Int, body: ByteArray): ByteArray?
     fun close()
 }
 
@@ -135,8 +135,14 @@ abstract class KLineTransport : SsmTransport {
         }
     }
 
+    // Стандартный вызов (2000 мс по умолчанию)
+    override fun exchange(dest: Int, body: ByteArray): ByteArray? {
+        return exchange(dest, body, 2000L)
+    }
+
+    // Новая перегрузка с таймаутом (используется только внутри SsmClient)
     @Synchronized
-    override fun exchange(dest: Int, body: ByteArray, timeoutMs: Long): ByteArray? {
+    fun exchange(dest: Int, body: ByteArray, timeoutMs: Long): ByteArray? {
         if (passive) return null
         val packet = ByteArray(body.size + 5)
         packet[0] = 0x80.toByte()
@@ -152,7 +158,6 @@ abstract class KLineTransport : SsmTransport {
         sending = packet
         writeRaw(packet)
 
-        // ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ ТАЙМАУТ
         val deadline = System.currentTimeMillis() + timeoutMs
         var all = ByteArray(0)
         while (System.currentTimeMillis() < deadline) {
@@ -243,12 +248,16 @@ class SsmClient(val transport: SsmTransport) {
 
     fun init(dest: Int = ECU): EcuInit? {
         val (cmd, ok) = if (transport.isCan) 0xAA to 0xEA else 0xBF to 0xFF
-        // Для АКПП ставим таймаут 300 мс, чтобы не вешать поток при отсутствии ответа
-        val timeout = if (dest == TCU) 300L else 2000L 
+        val timeout = if (dest == TCU) 300L else 2000L
         
-        val data = transport.exchange(dest, byteArrayOf(cmd.toByte()), timeout)
-            ?: (if (transport.isCan || dest != ECU) null else transport.exchange(dest, byteArrayOf(cmd.toByte()), timeout))
-            ?: return null
+        // Умный вызов: если это K-Line, передаем таймаут. Иначе — обычный вызов.
+        val data = if (transport is KLineTransport) {
+            transport.exchange(dest, byteArrayOf(cmd.toByte()), timeout)
+        } else {
+            transport.exchange(dest, byteArrayOf(cmd.toByte()))
+        } ?: (if (transport.isCan || dest != ECU) null else transport.exchange(dest, byteArrayOf(cmd.toByte()))) 
+          ?: return null
+
         if (data.size < 9 || data[0] != ok.toByte()) return null
         return EcuInit(
             ssmId = data.copyOfRange(1, 4).toHex(),
