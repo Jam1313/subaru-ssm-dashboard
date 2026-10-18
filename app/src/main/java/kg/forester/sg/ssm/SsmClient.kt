@@ -16,10 +16,6 @@ data class EcuInit(
     }
 }
 
-/**
- * Carries one SSM command to a control unit and returns its answer (starting with the response code,
- * e.g. E8 for A8). The SSM commands are the same on K-line and CAN, only the framing differs.
- */
 interface SsmTransport {
     val name: String
     val isCan: Boolean
@@ -28,13 +24,11 @@ interface SsmTransport {
     val maxReadAddrs: Int get() = 64
     val lineModes: Int get() = 1
     fun setLineMode(i: Int) {}
-    fun exchange(dest: Int, body: ByteArray): ByteArray?
+    // Добавлен параметр timeoutMs (по умолчанию 2000 мс)
+    fun exchange(dest: Int, body: ByteArray, timeoutMs: Long = 2000): ByteArray?
     fun close()
 }
 
-/**
- * K-line SSM2 framing: 80 <dest> F0 <len> <body> <checksum>, the answer comes back as 80 F0 <dest> …
- */
 abstract class KLineTransport : SsmTransport {
     private val inbox = java.io.ByteArrayOutputStream()
     private val lock = Object()
@@ -43,10 +37,19 @@ abstract class KLineTransport : SsmTransport {
 
     abstract fun writeRaw(packet: ByteArray)
 
-    // --- НОВОЕ: метод для отправки с отслеживанием эха ---
     fun writeRawAndTrack(packet: ByteArray) {
         sending = packet
         writeRaw(packet)
+    }
+
+    // Очистка буфера и сброс "Тихого режима" перед стартом потока
+    fun resetLineState() {
+        synchronized(lock) {
+            inbox.reset()
+            stream.reset()
+            sending = null
+            lastForeignMs = 0L
+        }
     }
 
     @Volatile var fastPollCallback: ((ByteArray) -> Unit)? = null
@@ -101,12 +104,12 @@ abstract class KLineTransport : SsmTransport {
 
         if (dst == 0xF0 && src == SsmClient.ECU && body[0] == 0xE8.toByte() && fastPollCallback != null) {
             fastPollCallback?.invoke(body)
-            return 
+            return
         }
 
         if (src == 0xF0 && (dst == SsmClient.ECU || dst == SsmClient.TCU)) {
             val mine = sending
-            if (mine != null && mine.contentEquals(f)) { sending = null; return } // Наше эхо
+            if (mine != null && mine.contentEquals(f)) { sending = null; return }
             lastForeignMs = now
             when (body[0].toInt() and 0xFF) {
                 0xA8 -> pending[dst] = IntArray((body.size - 2) / 3) { k ->
@@ -133,7 +136,7 @@ abstract class KLineTransport : SsmTransport {
     }
 
     @Synchronized
-    override fun exchange(dest: Int, body: ByteArray): ByteArray? {
+    override fun exchange(dest: Int, body: ByteArray, timeoutMs: Long): ByteArray? {
         if (passive) return null
         val packet = ByteArray(body.size + 5)
         packet[0] = 0x80.toByte()
@@ -149,7 +152,8 @@ abstract class KLineTransport : SsmTransport {
         sending = packet
         writeRaw(packet)
 
-        val deadline = System.currentTimeMillis() + 2000
+        // ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ ТАЙМАУТ
+        val deadline = System.currentTimeMillis() + timeoutMs
         var all = ByteArray(0)
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(15)
@@ -190,7 +194,6 @@ abstract class KLineTransport : SsmTransport {
 
     companion object {
         const val QUIET_MS = 3000L
-
         fun checksum(b: ByteArray, len: Int): Byte {
             var s = 0
             for (i in 0 until len) s += b[i].toInt() and 0xFF
@@ -202,7 +205,6 @@ abstract class KLineTransport : SsmTransport {
 object OpenPort13 {
     const val VID = 0x0403
     val PIDS = intArrayOf(0xCC48, 0xCC49, 0xCC4A)
-
     fun matches(vid: Int, pid: Int) = vid == VID && pid in PIDS
 }
 
@@ -229,25 +231,23 @@ class KklTransport(private val port: UsbSerialPort, private val openPort13: Bool
         setLineMode(0)
         io = SerialInputOutputManager(port, object : SerialInputOutputManager.Listener {
             override fun onNewData(data: ByteArray) = onBytes(data)
-            override fun onRunError(e: Exception) {
-                ioError = e
-            }
+            override fun onRunError(e: Exception) { ioError = e }
         }).also { it.readTimeout = 0; it.start() }
     }
 
     override fun writeRaw(packet: ByteArray) = port.write(packet, 1000)
-
-    override fun close() {
-        runCatching { io?.stop() }
-    }
+    override fun close() { runCatching { io?.stop() } }
 }
 
 class SsmClient(val transport: SsmTransport) {
 
     fun init(dest: Int = ECU): EcuInit? {
         val (cmd, ok) = if (transport.isCan) 0xAA to 0xEA else 0xBF to 0xFF
-        val data = transport.exchange(dest, byteArrayOf(cmd.toByte()))
-            ?: (if (transport.isCan || dest != ECU) null else transport.exchange(dest, byteArrayOf(cmd.toByte())))
+        // Для АКПП ставим таймаут 300 мс, чтобы не вешать поток при отсутствии ответа
+        val timeout = if (dest == TCU) 300L else 2000L 
+        
+        val data = transport.exchange(dest, byteArrayOf(cmd.toByte()), timeout)
+            ?: (if (transport.isCan || dest != ECU) null else transport.exchange(dest, byteArrayOf(cmd.toByte()), timeout))
             ?: return null
         if (data.size < 9 || data[0] != ok.toByte()) return null
         return EcuInit(
@@ -295,13 +295,12 @@ class SsmClient(val transport: SsmTransport) {
     fun startFastPoll(addresses: IntArray, dest: Int = ECU): Boolean {
         val body = ByteArray(2 + addresses.size * 3)
         body[0] = 0xA8.toByte()
-        body[1] = 0x01.toByte() // Fast Poll mode
+        body[1] = 0x01.toByte()
         addresses.forEachIndexed { i, a ->
             body[2 + i * 3] = (a shr 16).toByte()
             body[3 + i * 3] = (a shr 8).toByte()
             body[4 + i * 3] = a.toByte()
         }
-        
         val packet = ByteArray(body.size + 5)
         packet[0] = 0x80.toByte()
         packet[1] = dest.toByte()
@@ -312,7 +311,7 @@ class SsmClient(val transport: SsmTransport) {
 
         val kt = transport as? KLineTransport ?: return false
         SsmTrace.log("TX Start FastPoll", packet)
-        kt.writeRawAndTrack(packet) // <--- ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
+        kt.writeRawAndTrack(packet)
         return true
     }
 
@@ -328,7 +327,7 @@ class SsmClient(val transport: SsmTransport) {
 
         val kt = transport as? KLineTransport
         SsmTrace.log("TX Stop FastPoll", packet)
-        kt?.writeRawAndTrack(packet) // <--- ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
+        kt?.writeRawAndTrack(packet)
     }
 
     fun close() = transport.close()
