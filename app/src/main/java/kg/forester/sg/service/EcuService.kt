@@ -591,7 +591,7 @@ class EcuService : Service() {
      * [open] makes a transport for the K-line (true) or CAN (false). [obd], when the adapter can do it, makes a
      * standard OBD-II link that is tried after a full round of silence on SSM.
      */
-    private suspend fun session(
+       private suspend fun session(
         klineOnly: Boolean = false,
         obd: (() -> ObdLink?)? = null,
         open: (Boolean) -> SsmTransport,
@@ -684,46 +684,158 @@ class EcuService : Service() {
             val afSensor = EcuParams.reported(init, EcuParams.AF_SENSOR)
             val skip = EcuParams.unsupported(init, addrs)
             if (skip.isNotEmpty()) SsmTrace.log("not supported by this ECU, ignored: ${skip.joinToString(" ") { "%02X".format(it) }}")
+            
             var failures = 0
             var cycle = 0
             tcuAddrs = null
             tcuNextTryMs = 0
             SsmTrace.polling = true
-            while (scope.isActive && failures < 5 && !Repo.settings.demo) {
-                if (transport.passive) {
-                    passiveRound(transport, addrs, skip, afSensor)
-                    continue
+
+            // Проверяем, поддерживает ли транспорт Fast Poll
+            val kt = transport as? KLineTransport
+
+            if (kt != null) {
+                // ==========================================
+                // РЕЖИМ FAST POLL (K-Line)
+                // ==========================================
+                SsmTrace.log("Fast Poll start")
+                var lastFastPollMs = System.currentTimeMillis()
+                var lastAuxPollMs = 0L
+                var isFastPolling = false
+
+                // Канал для безопасной передачи данных из USB-потока в поток корутин
+                data class FastData(val raw: ByteArray, val snap: EcuSnapshot)
+                val snapChannel = kotlinx.coroutines.channels.Channel<FastData>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+                val fastCallback: (ByteArray) -> Unit = { body ->
+                    val raw = body.copyOfRange(1, body.size)
+                    val now = System.currentTimeMillis()
+                    lastFastPollMs = now
+                    var snap = EcuParams.decode(addrs, raw, now, skip)
+                    if (!afSensor) snap = snap.copy(lambda = null)
+                    snapChannel.trySend(FastData(raw, snap))
                 }
-                if (wasPassive) {
-                    wasPassive = false
-                    SsmTrace.log("the other tester went quiet: polling again")
-                    Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+
+                try {
+                    kt.fastPollCallback = fastCallback
+                    client.startFastPoll(addrs)
+                    isFastPolling = true
+
+                    while (scope.isActive && failures < 5 && !Repo.settings.demo) {
+                        if (transport.passive) {
+                            if (isFastPolling) {
+                                kt.fastPollCallback = null
+                                client.stopFastPoll()
+                                isFastPolling = false
+                            }
+                            passiveRound(transport, addrs, skip, afSensor)
+                            continue
+                        }
+                        if (wasPassive) {
+                            wasPassive = false
+                            SsmTrace.log("the other tester went quiet: polling again")
+                            Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+                            kt.fastPollCallback = fastCallback
+                            client.startFastPoll(addrs)
+                            isFastPolling = true
+                        }
+
+                        val now = System.currentTimeMillis()
+
+                        // Ждем пакет из Fast Poll (таймаут 250 мс)
+                        val data = kotlinx.coroutines.withTimeoutOrNull(250L) { snapChannel.receive() }
+                        
+                        if (data != null) {
+                            if (cycle == 0) {
+                                val probe = intArrayOf(EcuParams.MAF_H, EcuParams.MAF_L, EcuParams.THROTTLE, EcuParams.INJ_PW)
+                                SsmTrace.log("first read (Fast), raw: " + probe.joinToString(" ") { a ->
+                                    val i = addrs.indexOf(a)
+                                    "%02X=%s".format(a, if (i in data.raw.indices) "%02X".format(data.raw[i].toInt() and 0xFF) else "--")
+                                })
+                            }
+                            cycle++
+                            onSnapshot(data.snap, data.snap.timeMs)
+                            failures = 0
+                        } else {
+                            // Таймаут: ЭБУ перестало слать данные
+                            if (now - lastFastPollMs > 2000) {
+                                failures++
+                                tracker.tick(now)
+                                SsmTrace.log("Fast Poll timeout, retry $failures")
+                                if (failures < 5) {
+                                    client.startFastPoll(addrs) // перезапуск
+                                    lastFastPollMs = now
+                                }
+                            }
+                        }
+
+                        // Вспомогательный опрос (АКПП и параметры RomRaider) раз в секунду
+                        if (now - lastAuxPollMs > 1000) {
+                            lastAuxPollMs = now
+                            
+                            // Ставим Fast Poll на паузу
+                            if (isFastPolling) {
+                                kt.fastPollCallback = null
+                                client.stopFastPoll()
+                                isFastPolling = false
+                                delay(100) // даем шине очиститься
+                            }
+
+                            ecuWatch.poll(client)
+                            if (Repo.settings.gearbox != "mt") pollTcu(client, now)
+
+                            // Возобновляем Fast Poll
+                            if (!transport.passive) {
+                                kt.fastPollCallback = fastCallback
+                                client.startFastPoll(addrs)
+                                isFastPolling = true
+                            }
+                        }
+                    }
+                } finally {
+                    kt.fastPollCallback = null
+                    if (isFastPolling) client.stopFastPoll()
                 }
-                val raw = EcuLink.mutex.withLock { client.read(addrs) }
-                val now = System.currentTimeMillis()
-                if (raw == null && transport.passive) continue
-                if (raw == null) {
-                    failures++
-                    tracker.tick(now)
-                    continue
+                SsmTrace.log("Fast Poll stop")
+
+            } else {
+                // ==========================================
+                // ОБЫЧНЫЙ РЕЖИМ (CAN, ELM и т.д.)
+                // ==========================================
+                while (scope.isActive && failures < 5 && !Repo.settings.demo) {
+                    if (transport.passive) {
+                        passiveRound(transport, addrs, skip, afSensor)
+                        continue
+                    }
+                    if (wasPassive) {
+                        wasPassive = false
+                        SsmTrace.log("the other tester went quiet: polling again")
+                        Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+                    }
+                    val raw = EcuLink.mutex.withLock { client.read(addrs) }
+                    val now = System.currentTimeMillis()
+                    if (raw == null && transport.passive) continue
+                    if (raw == null) {
+                        failures++
+                        tracker.tick(now)
+                        continue
+                    }
+                    failures = 0
+                    if (cycle == 0) {
+                        val probe = intArrayOf(EcuParams.MAF_H, EcuParams.MAF_L, EcuParams.THROTTLE, EcuParams.INJ_PW)
+                        SsmTrace.log("first read, raw: " + probe.joinToString(" ") { a ->
+                            val i = addrs.indexOf(a)
+                            "%02X=%s".format(a, if (i in raw.indices) "%02X".format(raw[i].toInt() and 0xFF) else "--")
+                        })
+                    }
+                    var snap = EcuParams.decode(addrs, raw, now, skip)
+                    if (!afSensor) snap = snap.copy(lambda = null)
+                    ecuWatch.poll(client)
+                    onSnapshot(snap, now)
+                    if (++cycle % Repo.settings.tcuEvery.coerceAtLeast(1) == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
                 }
-                failures = 0
-                if (cycle == 0) {
-                    // what the ECU really sends for the values some early ECUs lack (MAF, throttle, injection), skipped or not
-                    val probe = intArrayOf(EcuParams.MAF_H, EcuParams.MAF_L, EcuParams.THROTTLE, EcuParams.INJ_PW)
-                    SsmTrace.log("first read, raw: " + probe.joinToString(" ") { a ->
-                        val i = addrs.indexOf(a)
-                        "%02X=%s".format(a, if (i in raw.indices) "%02X".format(raw[i].toInt() and 0xFF) else "--")
-                    })
-                }
-                var snap = EcuParams.decode(addrs, raw, now, skip)
-                // SSM answers any address; an A/F byte from an ECU without the wideband sensor would fake
-                // "enrichment" in the fuel calculation
-                if (!afSensor) snap = snap.copy(lambda = null)
-                ecuWatch.poll(client)
-                onSnapshot(snap, now)
-                if (++cycle % Repo.settings.tcuEvery.coerceAtLeast(1) == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
             }
+
             SsmTrace.polling = false
             SsmTrace.log("ECU silent, polling stopped")
             Repo.link.value = LinkState.NO_ECU
@@ -731,7 +843,6 @@ class EcuService : Service() {
             logger?.close(); logger = null
         }
     }
-
     private var wasPassive = false
 
     /** Only listening to CAN: no unit answers the diagnostics, the values come from what is broadcast. */
