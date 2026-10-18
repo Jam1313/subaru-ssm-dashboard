@@ -9,24 +9,26 @@ import kg.forester.sg.ssm.EcuSnapshot
 import kotlin.math.abs
 
 object VirtualAfr {
-    fun calculate(s: EcuSnapshot): Float? {
-        val maf = s.mafGs ?: return null
+    // Возвращаем Double? вместо Float?
+    fun calculate(s: EcuSnapshot): Double? {
+        val maf = s.mafGs?.toDouble() ?: return null
         val rpm = s.rpm ?: return null
-        val pw = s.injPwMs ?: return null
-        if (rpm < 300 || pw < 0.3f) return null
+        val pw = s.injPwMs?.toDouble() ?: return null
+        
+        if (rpm < 300 || pw < 0.3) return null
 
         val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
         val injectorCc = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
             .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 380.0 else 260.0
 
-        val openMs = (pw - 0.6f).coerceAtLeast(0f)
-        val fuelLh = rpm * openMs * injectorCc * 2e-6
+        val openMs = (pw - 0.6).coerceAtLeast(0.0)
+        val fuelLh = rpm.toDouble() * openMs * injectorCc * 2e-6
         val fuelGs = fuelLh * 745.0 / 3600.0
         
         if (fuelGs < 0.01) return null 
 
         val afr = maf / fuelGs
-        return if (afr in 9.0f..18.0f) afr else null
+        return if (afr in 9.0..18.0) afr else null
     }
 }
 
@@ -39,16 +41,18 @@ object FuelCalc {
         val pw = s.injPwMs
         if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 
 
-        val maf = s.mafGs ?: return byInjectors(pw, rpm, k)
+        // Явно приводим MAF к Double
+        val maf = s.mafGs?.toDouble() ?: return byInjectors(pw, rpm, k)
         source = "maf"
         
-        // 1. Пытаемся узнать реальный AFR (из лямбды или через форсунки)
-        val measured = s.afr?.toDouble() ?: VirtualAfr.calculate(s)?.toDouble()
+        // Теперь measured имеет тип Double?
+        val measured = s.afr?.toDouble() ?: VirtualAfr.calculate(s)
         val closedLoop = measured == null || measured in 13.5..16.0
         
         val fuelGs = if (closedLoop) {
-            val trims = ((s.afCorrPct ?: 0f) + (s.afLearnPct ?: 0f)) / 100.0
-            maf / 14.7 * (1 + trims.coerceIn(-0.35, 0.35))
+            // Приводим тримы к Double
+            val trims = ((s.afCorrPct ?: 0f).toDouble() + (s.afLearnPct ?: 0f).toDouble()) / 100.0
+            maf / 14.7 * (1.0 + trims.coerceIn(-0.35, 0.35))
         } else {
             maf / measured!!.coerceIn(10.0, 18.5)
         } * k
@@ -64,9 +68,9 @@ object FuelCalc {
         source = "inj"
         val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
         val ccPerMin = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
-            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 490.0 else 260.0
-        val openMs = (pw - 0.6f).coerceAtLeast(0.0)
-        return rpm * openMs * ccPerMin * 2e-6 * k
+            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 380.0 else 260.0
+        val openMs = (pw - 0.6f).coerceAtLeast(0f).toDouble()
+        return rpm.toDouble() * openMs * ccPerMin * 2e-6 * k
     }
 }
 /** The SensorBox fuel line's learning: points ready, share of the tank covered (null: no such input). */
