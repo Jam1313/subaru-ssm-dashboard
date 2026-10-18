@@ -144,7 +144,7 @@ object EcuParams {
             speedKmh = g(SPEED),
             timingDeg = g(TIMING)?.let { (it - 128) / 2f },
             intakeC = g(INTAKE)?.let { it - 40 },
-            mafGs = pair(MAF_H, MAF_L)?.let { it / 100f },
+            mafGs = pair(MAF_H, MAF_L)?.let { it /65535f * 250f },
             throttlePct = g(THROTTLE)?.let { it * 100f / 255f },
             batteryV = g(BATTERY)?.let { it * 0.08f },
             injPwMs = g(INJ_PW)?.let { it * 0.256f },
