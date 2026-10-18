@@ -1068,7 +1068,7 @@ class EcuService : Service() {
         private var avail: List<RrParam> = emptyList()
         private var all: List<RrParam> = emptyList()
         private var addrs = IntArray(0)
-        private var version = -1L
+        private var version = -1
         private var fails = 0
 
         fun setup(init: EcuInit) {
