@@ -662,23 +662,58 @@ class EcuService : Service() {
                 // === РЕЖИМ FAST POLL (со сторонними переменными) ===
                 SsmTrace.log("Fast Poll start")
                 var lastFastPollMs = System.currentTimeMillis()
-                var lastTcuPollMs = 0L
+                var lastTcuPollMs = System.currentTimeMillis() // Защита от мгновенного срабатывания
                 var isFastPolling = false
-                var currentWatchVersion: Int = -1 // ИСПРАВЛЕНО: Int вместо Long
 
                 data class FastData(val raw: ByteArray, val snap: EcuSnapshot, val customValues: Map<String, Double>)
                 val snapChannel = Channel<FastData>(Channel.CONFLATED)
-
-                var fastAddrs: IntArray = addrs // ИСПРАВЛЕНО: явное указание не-nullable типа
+                
+                val allParams = RomRaider.load(this@EcuService)
+                ecuWatch.refresh()
+                
+                var fastAddrs: IntArray = addrs
+                var lastWatchAddrs: IntArray = IntArray(0)
                 var fastCallback: ((ByteArray) -> Unit)? = null
+
+                // Функция обновления списка адресов. Возвращает true, если список изменился
+                fun refreshFastAddresses(): Boolean {
+                    val watchAddrs = RomRaider.readList(ecuWatch.params, allParams)
+                    if (watchAddrs.contentEquals(lastWatchAddrs)) return false // Ничего не изменилось
+                    
+                    lastWatchAddrs = watchAddrs
+                    
+                    // ИСПРАВЛЕНИЕ: Сохраняем строгий порядок адресов!
+                    val combined = addrs.toMutableList()
+                    for (w in watchAddrs) {
+                        if (w !in combined) combined.add(w)
+                    }
+                    fastAddrs = combined.toIntArray()
+                    
+                    SsmTrace.log("Fast Poll addresses: ${fastAddrs.size} (base: ${addrs.size}, extra: ${watchAddrs.size})")
+                    
+                    fastCallback = { body ->
+                        val raw = body.copyOfRange(1, body.size)
+                        val now = System.currentTimeMillis()
+                        lastFastPollMs = now
+                        
+                        var snap = EcuParams.decode(addrs, raw, now, skip)
+                        if (!afSensor) snap = snap.copy(lambda = null)
+                        
+                        val customVals = RomRaider.decode(ecuWatch.params, fastAddrs, raw, allParams)
+                        snapChannel.trySend(FastData(raw, snap, customVals))
+                    }
+                    return true
+                }
+
+                refreshFastAddresses() // Первичная инициализация
 
                 try {
                     while (scope.isActive && failures < 5 && !Repo.settings.demo) {
                         if (transport.passive) {
                             if (isFastPolling) {
+                                isFastPolling = false
                                 kt.fastPollCallback = null
                                 client.stopFastPoll()
-                                isFastPolling = false
                             }
                             passiveRound(transport, addrs, skip, afSensor)
                             continue
@@ -687,37 +722,18 @@ class EcuService : Service() {
                             wasPassive = false
                             SsmTrace.log("the other tester went quiet: polling again")
                             Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
-                            isFastPolling = false // заставим перезапустить поток
+                            isFastPolling = false
                         }
 
-                        // Проверяем, не изменился ли список кастомных переменных
-                        if (currentWatchVersion != Repo.watchVersion.value.toInt()) { // ИСПРАВЛЕНО: приведение к Int
+                        // Проверяем, изменился ли список кастомных переменных в настройках
+                        ecuWatch.refresh()
+                        if (refreshFastAddresses()) {
+                            SsmTrace.log("Sensors list changed, restarting Fast Poll")
                             if (isFastPolling) {
+                                isFastPolling = false
                                 kt.fastPollCallback = null
                                 client.stopFastPoll()
-                                isFastPolling = false
-                            }
-                            currentWatchVersion = Repo.watchVersion.value.toInt() // ИСПРАВЛЕНО: приведение к Int
-                            
-                            // Собираем кастомные адреса
-                            val watchAddrs = RomRaider.readList(ecuWatch.params, RomRaider.load(this@EcuService))
-                            
-                            // Склеиваем стандартные и кастомные адреса
-                            fastAddrs = (addrs.toSet() + watchAddrs.toSet()).toIntArray()
-                            SsmTrace.log("Fast Poll combined addresses: ${fastAddrs.size}")
-
-                            // Обновляем коллбэк для декодирования всего сразу
-                            fastCallback = { body ->
-                                val raw = body.copyOfRange(1, body.size)
-                                val now = System.currentTimeMillis()
-                                lastFastPollMs = now
-                                
-                                var snap = EcuParams.decode(addrs, raw, now, skip)
-                                if (!afSensor) snap = snap.copy(lambda = null)
-                                
-                                val customVals = RomRaider.decode(ecuWatch.params, fastAddrs, raw, RomRaider.load(this@EcuService))
-                                
-                                snapChannel.trySend(FastData(raw, snap, customVals))
+                                delay(50)
                             }
                         }
 
@@ -743,6 +759,7 @@ class EcuService : Service() {
                             onSnapshot(data.snap, data.snap.timeMs)
                             
                             if (data.customValues.isNotEmpty()) {
+                                // Обновляем экран "Датчики"
                                 Repo.rrValues.value = Repo.rrValues.value + data.customValues
                             }
                             
@@ -763,9 +780,9 @@ class EcuService : Service() {
                             lastTcuPollMs = now
                             
                             if (isFastPolling) {
+                                isFastPolling = false
                                 kt.fastPollCallback = null
                                 client.stopFastPoll()
-                                isFastPolling = false
                                 delay(50)
                             }
                             
@@ -1051,7 +1068,7 @@ class EcuService : Service() {
         private var avail: List<RrParam> = emptyList()
         private var all: List<RrParam> = emptyList()
         private var addrs = IntArray(0)
-        private var version = -1
+        private var version = -1L
         private var fails = 0
 
         fun setup(init: EcuInit) {
@@ -1061,7 +1078,7 @@ class EcuService : Service() {
             custom = Repo.customVersion.value
             if (tcu) tcuAvail = avail else ecuAvail = avail
             SsmTrace.log("RomRaider: ${avail.size} parameters for ${if (tcu) "TCU" else "ECU"} ROM ${init.romId}")
-            version = -1
+            version = -1L
             params = emptyList()
             publishWatch()
         }
@@ -1076,11 +1093,11 @@ class EcuService : Service() {
         private var init: EcuInit? = null
         private var custom = 0
 
-        suspend fun poll(client: SsmClient) {
+        fun refresh() {
             if (custom != Repo.customVersion.value) {
                 custom = Repo.customVersion.value
                 init?.let { avail = RomRaider.available(this@EcuService, it, tcu); if (tcu) tcuAvail = avail else ecuAvail = avail }
-                version = -1
+                version = -1L
             }
             if (version != Repo.watchVersion.value || internal != Repo.internalWatch.value) {
                 version = Repo.watchVersion.value
@@ -1091,6 +1108,10 @@ class EcuService : Service() {
                 fails = 0
                 publishWatch()
             }
+        }
+
+        suspend fun poll(client: SsmClient) {
+            refresh()
             if (addrs.isEmpty()) return
             val raw = EcuLink.mutex.withLock { client.read(addrs, dest) }
             if (raw == null) {
