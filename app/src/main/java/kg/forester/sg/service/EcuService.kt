@@ -55,6 +55,7 @@ import kg.forester.sg.ssm.TcuParams
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
 import kg.forester.sg.ssm.LockState
+import kg.forester.sg.ssm.KLineTransport // <-- Добавлен импорт для Fast Poll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -65,6 +66,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.channels.Channel // <-- Добавлен импорт для Fast Poll
+import kotlinx.coroutines.withTimeoutOrNull // <-- Добавлен импорт для Fast Poll
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -75,7 +78,6 @@ import java.util.Locale
 private val adapterProber = UsbSerialProber(UsbSerialProber.getDefaultProbeTable().apply {
     OpenPort2.PIDS.forEach { addProduct(OpenPort2.VID, it, CdcAcmSerialDriver::class.java) }
     OpenPort13.PIDS.forEach { addProduct(OpenPort13.VID, it, FtdiSerialDriver::class.java) }
-    // CANable / CANtact with the slcan firmware: a sports ECU's dash CAN
     addProduct(0xAD50, 0x60C4, CdcAcmSerialDriver::class.java)
     addProduct(0x16D0, 0x117E, CdcAcmSerialDriver::class.java)
 })
@@ -151,7 +153,6 @@ class EcuService : Service() {
         scope.launch {
             while (isActive) {
                 Housekeeping.run(this@EcuService, Repo.logFile.value)
-                // a head unit keeps the screen alive for days: look for a new version from here too
                 runCatching { kg.forester.sg.data.Updater.checkDaily(this@EcuService) }
                 delay(3600_000)
             }
@@ -202,7 +203,6 @@ class EcuService : Service() {
             }
             val all = adapterProber.findAllDrivers(usb) + unknownSerial(usb, adapterProber.findAllDrivers(usb))
             logUsbDevices(usb, all)
-            // the SensorBox (an Arduino next to the cable) and devices still being asked whether they are it
             val drivers = SensorBoxLink.forEcu(all)
             val driver = pickDriver(kind, drivers)
             if (driver == null) {
@@ -211,7 +211,6 @@ class EcuService : Service() {
                     forceUsbHostMode()
                 }
                 if (kind == "auto") {
-                    // nothing on USB: a Wi-Fi ELM327 we are connected to, then a paired Bluetooth one
                     if (wifiSession(explicit = false) || autoBluetooth()) { delay(1000); continue }
                 }
                 Repo.link.value = LinkState.NO_CABLE
@@ -272,7 +271,6 @@ class EcuService : Service() {
                         session(klineOnly = true) { _ -> KklTransport(port, openPort13 = true).also { it.open() } }
                     }
                     else -> {
-                        // a bare KKL cable or an ELM327 behind the same USB chip: ask, and remember the answer
                         val baud = when (kind) {
                             "kkl" -> 0
                             "elm_usb" -> UsbStreams.probeElm(port) ?: 0
@@ -286,7 +284,6 @@ class EcuService : Service() {
                             Repo.adapterFound.value = "USB $id → ELM327 ($baud бод)"
                             port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                             streams = UsbStreams(port)
-                            // remembered as an ELM but silent now: another cable on the same chip, ask again next time
                             if (!elmSession(Elm327(streams.input, streams.output, streams), "USB") && kind == "auto") s.setUsbKind(id, 0)
                         } else if (kind == "elm_usb") {
                             Repo.link.value = LinkState.ERROR
@@ -314,11 +311,6 @@ class EcuService : Service() {
         }
     }
 
-    /**
-     * USB devices the driver table does not list but whose chip vendor we know (FTDI, WCH CH340, Prolific,
-     * Silicon Labs): KKL clones and rebadged cables (e.g. an OpenPort 1.3 with its own product id) come with ids
-     * nobody listed.
-     */
     private fun unknownSerial(usb: UsbManager, known: List<UsbSerialDriver>): List<UsbSerialDriver> {
         val names = known.map { it.device.deviceName }.toSet()
         return usb.deviceList.values.filter { it.deviceName !in names }.mapNotNull { d ->
@@ -328,7 +320,6 @@ class EcuService : Service() {
                     0x1A86 -> com.hoho.android.usbserial.driver.Ch34xSerialDriver(d)
                     0x067B -> com.hoho.android.usbserial.driver.ProlificSerialDriver(d)
                     0x10C4 -> com.hoho.android.usbserial.driver.Cp21xxSerialDriver(d)
-                    // not a generic CDC-ACM fallback: a head unit's internal 4G modem looks like one; a CANable by its name only
                     else -> if (kg.forester.sg.ssm.Slcan.matches(d.vendorId, d.productId, runCatching { d.productName }.getOrNull())) CdcAcmSerialDriver(d) else null
                 }
             }.getOrNull()?.takeIf { it.ports.isNotEmpty() }
@@ -336,19 +327,13 @@ class EcuService : Service() {
     }
 
     private fun isOp2(d: UsbSerialDriver) = OpenPort2.matches(d.device.vendorId, d.device.productId)
-    /**
-     * By its ids, or by its name: an FTDI chip whose product id got wiped to 0000 (seen on an OpenPort 1.3,
-     * typical of the FTDI driver "bricking" clone chips) still says "Tactrix OpenPort 1.3" and wants its RTS cleared.
-     */
     private fun isOp13(d: UsbSerialDriver) = OpenPort13.matches(d.device.vendorId, d.device.productId) ||
         (d.device.vendorId == OpenPort13.VID && runCatching { d.device.productName }.getOrNull()?.contains("OpenPort 1.3", true) == true)
 
-    /** A USB-CAN stick speaking slcan (CANable): the dash CAN of a sports ECU, not a diagnostic cable. */
     private fun isCanable(d: UsbSerialDriver) = kg.forester.sg.ssm.Slcan.matches(
         d.device.vendorId, d.device.productId, runCatching { d.device.productName }.getOrNull())
 
     private fun pickDriver(kind: String, drivers: List<UsbSerialDriver>): UsbSerialDriver? = when (kind) {
-        // "OpenPort" picked for an OpenPort 1.3: it is a K-line cable like a KKL, just use it as one
         "op2" -> drivers.firstOrNull { isOp2(it) } ?: drivers.firstOrNull { isOp13(it) }
         "canable" -> drivers.firstOrNull { isCanable(it) }
         "auto" -> drivers.firstOrNull { isOp2(it) } ?: drivers.firstOrNull { isOp13(it) } ?: drivers.firstOrNull { isCanable(it) } ?: drivers.firstOrNull()
@@ -357,7 +342,6 @@ class EcuService : Service() {
 
     private var lastUsbList = ""
 
-    /** Every USB device, recognised or not, once per change: shows in a sent log which cable someone has. */
     private fun logUsbDevices(usb: UsbManager, drivers: List<UsbSerialDriver>) {
         val known = drivers.map { it.device.deviceName }.toSet()
         val list = usb.deviceList.values.joinToString("; ") { d ->
@@ -372,14 +356,11 @@ class EcuService : Service() {
         }
     }
 
-    /** Demo data instead of a cable; trips, fuel and logs are left alone. */
     private suspend fun demoLoop() {
-        // nothing learned from the car carries into the demo, nothing from the demo into the car (see the end)
         guard.reset()
         Repo.link.value = LinkState.CONNECTED
         Repo.linkMessage.value = "Демо-данные (без машины)"
         knock.reset(System.currentTimeMillis(), record = false)
-        // a trip counted in memory only (never saved), so the fuel screen shows something in the demo
         val demoStart = System.currentTimeMillis()
         var demoTrip = kg.forester.sg.data.Trip(startMs = demoStart, endMs = demoStart, distanceKm = 0.0, fuelL = 0.0)
         var lastDemo = demoStart
@@ -425,7 +406,6 @@ class EcuService : Service() {
             )
             delay(250)
         }
-        // demo off: none of its made-up numbers may stay on the screen as if they were the car's
         Repo.live.value = EcuSnapshot()
         Repo.tcu.value = null
         history.clear(); Repo.history.value = emptyList()
@@ -434,11 +414,10 @@ class EcuService : Service() {
         Repo.trip.value = kg.forester.sg.data.TripState()
         Repo.guard.value = GuardState()
         guard.reset()
-        RulesHost.restore(this) // this car's own idle samples, not the demo's
+        RulesHost.restore(this)
         Repo.link.value = LinkState.NO_CABLE
     }
 
-    /** Bluetooth OBD adapter (ELM327 and clones) over the serial port profile. Returns false if it did not connect. */
     @SuppressLint("MissingPermission")
     private suspend fun bluetoothSession(addr: String, label: String, quiet: Boolean = false): Boolean {
         if (addr.isEmpty()) {
@@ -484,10 +463,6 @@ class EcuService : Service() {
     private fun btAllowed() = Build.VERSION.SDK_INT < 31 ||
         checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
-    /**
-     * "Auto" without anything on USB: the chosen Bluetooth adapter, or else any paired device named like an
-     * OBD adapter (the one that answers is remembered).
-     */
     @SuppressLint("MissingPermission")
     private suspend fun autoBluetooth(): Boolean {
         if (!btAllowed()) return false
@@ -506,11 +481,6 @@ class EcuService : Service() {
         return false
     }
 
-    /**
-     * Wi-Fi ELM327: the head unit joins the adapter's own network, the adapter listens on TCP (192.168.0.10:35000
-     * on nearly all of them). The socket is bound to that Wi-Fi, which has no internet and is otherwise skipped
-     * by Android. With [explicit] false ("Auto") it is only tried when we are on the adapter's subnet.
-     */
     private suspend fun wifiSession(explicit: Boolean): Boolean {
         val (host, port) = Repo.settings.wifiHost.split(':').let { it[0].trim() to (it.getOrNull(1)?.trim()?.toIntOrNull() ?: 35000) }
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
@@ -551,10 +521,6 @@ class EcuService : Service() {
         return true
     }
 
-    /**
-     * An ELM327 on any link: SSM on the K-line or CAN first, standard OBD-II when the car does not answer SSM.
-     * Returns false if the adapter did not answer as an ELM327 at all.
-     */
     private suspend fun elmSession(elm: Elm327, via: String): Boolean {
         try {
             try {
@@ -586,18 +552,16 @@ class EcuService : Service() {
     private fun openOp2(op2: OpenPort2, kline: Boolean): SsmTransport =
         if (kline) Op2KLineTransport(op2).also { it.open() } else Op2CanTransport(op2).also { it.open(Repo.settings.canListen) }
 
-    /**
-     * One adapter session: find the bus the ECU answers on, init it, then poll until the cable or ECU goes away.
-     * [open] makes a transport for the K-line (true) or CAN (false). [obd], when the adapter can do it, makes a
-     * standard OBD-II link that is tried after a full round of silence on SSM.
-     */
-       private suspend fun session(
+    // =========================================================================
+    // ОБНОВЛЕННАЯ ФУНКЦИЯ SESSION С ПОДДЕРЖКОЙ FAST POLL
+    // =========================================================================
+    private suspend fun session(
         klineOnly: Boolean = false,
         obd: (() -> ObdLink?)? = null,
         open: (Boolean) -> SsmTransport,
     ) {
         val buses = when {
-            klineOnly -> listOf(true) // a KKL cable has no CAN
+            klineOnly -> listOf(true)
             Repo.settings.bus == "kline" -> listOf(true)
             Repo.settings.bus == "can" -> listOf(false)
             else -> listOf(true, false)
@@ -607,7 +571,7 @@ class EcuService : Service() {
         var silentRounds = 0
         var transport: SsmTransport? = null
         var transportKline = true
-        // demo switched on: leave the car (the demo loop takes over)
+        
         while (scope.isActive && !Repo.settings.demo) {
             val kline = buses[busIdx % buses.size]
             if (transport == null || transportKline != kline) {
@@ -618,22 +582,22 @@ class EcuService : Service() {
             }
             val client = SsmClient(transport)
             EcuLink.client = client
-            // a laptop already on the line: listen to it before we even say hello
+            
             if (transport.passive) { passiveRound(transport, EcuParams.pollAddresses, emptySet()); continue }
+            
             val init = EcuLink.mutex.withLock { client.init() }
             if (init == null && transport.passive) continue
-            // no answer to the diagnostics, but the bus talks by itself: show what it says
+            
             if (init == null && !kline && Repo.settings.canListen && kg.forester.sg.ssm.CanBroadcast.fresh()) {
                 canOnlyRound()
                 continue
             }
+            
             if (init == null) {
                 Repo.link.value = LinkState.NO_ECU
-                // other makes (Nissan Consult, Toyota…) never answer SSM: say so instead of letting them wait
                 Repo.linkMessage.value = "ЭБУ не отвечает (${client.transport.name}). Зажигание включено? " +
                     "Приложение работает только с Subaru (протокол SSM)"
                 tracker.tick(System.currentTimeMillis())
-                // next: other DTR/RTS levels for a cable with a chip inside, else the other bus
                 val modes = transport.lineModes
                 val roundDone = if (modes > 1) {
                     transport.setLineMode(++lineMode)
@@ -644,7 +608,6 @@ class EcuService : Service() {
                 }
                 if (roundDone) silentRounds++
                 if (roundDone && obd != null && (silentRounds == 1 || silentRounds % 3 == 0)) {
-                    // the OBD link sets the adapter up its own way; SSM starts afresh after it
                     transport.close()
                     transport = null
                     EcuLink.client = null
@@ -656,6 +619,7 @@ class EcuService : Service() {
                 delay(if (roundDone) 3000 else 300)
                 continue
             }
+            
             silentRounds = 0
             Repo.obdMode.value = false
             Repo.ecuInit.value = init
@@ -666,6 +630,7 @@ class EcuService : Service() {
             RomRaider.load(this)
             RomRaider.siblingOf(init.romId)?.let { SsmTrace.log("no extended parameters for ROM ${init.romId}, using sibling $it") }
             SsmTrace.log("ECU init: SSM ${init.ssmId} ROM ${init.romId} caps ${init.capabilities.toHex(" ")}")
+            
             val addrs = choosePollAddresses(client, init)
             if (addrs == null) {
                 Repo.link.value = LinkState.ERROR
@@ -677,7 +642,7 @@ class EcuService : Service() {
             runCatching { connectChecks(client, init) }.onFailure { SsmTrace.log("connect checks: $it") }
             ecuWatch.setup(init)
             tcuWatch.clear()
-            // an engine without a turbo (no wastegate in the init) on the untouched factory screen: no empty boost cards
+            
             if (Repo.settings.homeTiles.isEmpty() && !EcuParams.reported(init, EcuParams.WGDC)) {
                 Repo.settings.homeTiles = kg.forester.sg.data.HomeLayout.atmoDefault()
             }
@@ -691,21 +656,16 @@ class EcuService : Service() {
             tcuNextTryMs = 0
             SsmTrace.polling = true
 
-            // Проверяем, поддерживает ли транспорт Fast Poll
             val kt = transport as? KLineTransport
 
             if (kt != null) {
-                // ==========================================
-                // РЕЖИМ FAST POLL (K-Line)
-                // ==========================================
+                // === РЕЖИМ FAST POLL ===
                 SsmTrace.log("Fast Poll start")
                 var lastFastPollMs = System.currentTimeMillis()
                 var lastAuxPollMs = 0L
                 var isFastPolling = false
-
-                // Канал для безопасной передачи данных из USB-потока в поток корутин
                 data class FastData(val raw: ByteArray, val snap: EcuSnapshot)
-                val snapChannel = kotlinx.coroutines.channels.Channel<FastData>(kotlinx.coroutines.channels.Channel.CONFLATED)
+                val snapChannel = Channel<FastData>(Channel.CONFLATED)
 
                 val fastCallback: (ByteArray) -> Unit = { body ->
                     val raw = body.copyOfRange(1, body.size)
@@ -741,9 +701,7 @@ class EcuService : Service() {
                         }
 
                         val now = System.currentTimeMillis()
-
-                        // Ждем пакет из Fast Poll (таймаут 250 мс)
-                        val data = kotlinx.coroutines.withTimeoutOrNull(250L) { snapChannel.receive() }
+                        val data = withTimeoutOrNull(250L) { snapChannel.receive() }
                         
                         if (data != null) {
                             if (cycle == 0) {
@@ -757,34 +715,27 @@ class EcuService : Service() {
                             onSnapshot(data.snap, data.snap.timeMs)
                             failures = 0
                         } else {
-                            // Таймаут: ЭБУ перестало слать данные
                             if (now - lastFastPollMs > 2000) {
                                 failures++
                                 tracker.tick(now)
                                 SsmTrace.log("Fast Poll timeout, retry $failures")
                                 if (failures < 5) {
-                                    client.startFastPoll(addrs) // перезапуск
+                                    client.startFastPoll(addrs)
                                     lastFastPollMs = now
                                 }
                             }
                         }
 
-                        // Вспомогательный опрос (АКПП и параметры RomRaider) раз в секунду
                         if (now - lastAuxPollMs > 1000) {
                             lastAuxPollMs = now
-                            
-                            // Ставим Fast Poll на паузу
                             if (isFastPolling) {
                                 kt.fastPollCallback = null
                                 client.stopFastPoll()
                                 isFastPolling = false
-                                delay(100) // даем шине очиститься
+                                delay(100)
                             }
-
                             ecuWatch.poll(client)
                             if (Repo.settings.gearbox != "mt") pollTcu(client, now)
-
-                            // Возобновляем Fast Poll
                             if (!transport.passive) {
                                 kt.fastPollCallback = fastCallback
                                 client.startFastPoll(addrs)
@@ -799,9 +750,7 @@ class EcuService : Service() {
                 SsmTrace.log("Fast Poll stop")
 
             } else {
-                // ==========================================
-                // ОБЫЧНЫЙ РЕЖИМ (CAN, ELM и т.д.)
-                // ==========================================
+                // === ОБЫЧНЫЙ РЕЖИМ ===
                 while (scope.isActive && failures < 5 && !Repo.settings.demo) {
                     if (transport.passive) {
                         passiveRound(transport, addrs, skip, afSensor)
@@ -843,9 +792,9 @@ class EcuService : Service() {
             logger?.close(); logger = null
         }
     }
+
     private var wasPassive = false
 
-    /** Only listening to CAN: no unit answers the diagnostics, the values come from what is broadcast. */
     private suspend fun canOnlyRound() {
         Repo.link.value = LinkState.CONNECTED
         Repo.linkMessage.value = "Слушаю CAN без диагностики: видно кадров ${kg.forester.sg.ssm.CanBroadcast.idsSeen}"
@@ -854,10 +803,6 @@ class EcuService : Service() {
         delay(250)
     }
 
-    /**
-     * «Тихий режим»: another tester (a laptop on a second cable) polls the ECU, so we keep quiet and take the values
-     * it gets. Only what it asks for comes through; the rest stays empty until the line is ours again.
-     */
     private suspend fun passiveRound(transport: kg.forester.sg.ssm.SsmTransport, addrs: IntArray, skip: Set<Int>, afSensor: Boolean = true) {
         if (!wasPassive) {
             wasPassive = true
@@ -875,9 +820,7 @@ class EcuService : Service() {
         delay(250)
     }
 
-    /** Everything a fresh sample feeds: live values, charts, battery, trip and fuel, knock, CSV log. */
     private fun onSnapshot(raw0: EcuSnapshot, now: Long) {
-        // what the CAN bus broadcasts fills what the diagnostics did not give
         val raw = if (Repo.settings.canListen) kg.forester.sg.ssm.CanBroadcast.fill(raw0, now) else raw0
         val read = guard.withDirectMap(raw)
         val snap = read.saneMaf()
@@ -890,13 +833,11 @@ class EcuService : Service() {
         while (history.size > 240) history.removeFirst()
         Repo.history.value = history.toList()
         battery.process(snap)
-        // the Link demo's made-up drive is no trip of this car (as the regular demo's isn't)
-        if (!Repo.linkDemo.value) tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
+        if (!Repo.linkDemo.value) tracker.process(snap, Repo.gps.value)
         kg.forester.sg.data.Scales.process(snap)
         knock.process(snap)
         extras(snap, now)
         if (Repo.settings.logEnabled && (snap.rpm ?: 0) > 0 && !Repo.linkDemo.value) {
-            // the ticked parameters are extra columns: a new file when the choice changes
             val extras = LogColumns.extras(Repo.rrPolled.value, guard.roleIds())
             if (logger != null && (logger?.extras != extras || logger?.columns?.map { it.key } != LogColumns.enabled().map { it.key })) {
                 logger?.close(); logger = null
@@ -909,14 +850,9 @@ class EcuService : Service() {
         updateNotification()
     }
 
-    /**
-     * The car is what its ECU says, nothing to set by hand: another ROM than last time is another car (fresh
-     * boost, MAF and load scales), and the 3D car on the home screen follows it unless the driver chose one.
-     */
     private fun carFromEcu(romId: String) {
         val s = Repo.settings
         if (s.lastRomId.isNotEmpty() && s.lastRomId != romId) {
-            // another car: its own scales, IAM, usual boost and idle history
             kg.forester.sg.data.Scales.reset()
             RulesHost.forgetCar(this)
             guard.reset()
@@ -927,10 +863,6 @@ class EcuService : Service() {
         Repo.carVersion.value++
     }
 
-    /**
-     * The head unit still on long after the ignition went off (the ECU silent after a drive, the screen awake):
-     * an ACC wire on constant 12 V or a unit that never sleeps empties the battery overnight. Said at 10 and 60 min.
-     */
     private suspend fun headUnitWatch() {
         var ranMs = 0L
         var silentSince = 0L
@@ -939,7 +871,7 @@ class EcuService : Service() {
         while (scope.isActive) {
             delay(30_000)
             val now = System.currentTimeMillis()
-            if (Repo.settings.demo) { ranMs = 0L; silentSince = 0L; said = 0; continue } // the demo's engine is no drive
+            if (Repo.settings.demo) { ranMs = 0L; silentSince = 0L; said = 0; continue }
             if (Repo.link.value == LinkState.CONNECTED) {
                 if ((Repo.live.value.rpm ?: 0) > 400) ranMs = now
                 silentSince = 0L; said = 0
@@ -957,7 +889,6 @@ class EcuService : Service() {
         }
     }
 
-    /** Engine guard, G-meter, acceleration timer: everything that only reads the samples. */
     private fun extras(snap: EcuSnapshot, now: Long) {
         runCatching { guard.process(snap, Repo.tcu.value, now) }.onFailure { SsmTrace.log("guard: $it") }
         val s = Repo.settings
@@ -965,10 +896,6 @@ class EcuService : Service() {
         if (s.feature("perf")) runCatching { Perf.process(snap, Repo.gps.value, now) }.onFailure { SsmTrace.log("perf: $it") }
     }
 
-    /**
-     * A CANable on the dash CAN of a sports ECU (Link G4X…): nothing is asked, the ECU streams by itself. The Link's
-     * Dash2Pro or Generic Dash is found on its own; anything else is read with the driver's own CAN channels.
-     */
     private suspend fun canableSession(port: UsbSerialPort) {
         val kbit = Repo.settings.canKbit
         val bus = kg.forester.sg.ssm.SlcanPort(port)
@@ -977,7 +904,6 @@ class EcuService : Service() {
         canSession(bus, kbit) { Repo.settings.canKbit == kbit }
     }
 
-    /** The frames of [bus] (a CANable or the Link demo) through the Link's decoding, while [on]. */
     private suspend fun canSession(bus: kg.forester.sg.ssm.CanSource, kbit: Int, on: () -> Boolean) {
         val link = kg.forester.sg.ssm.LinkDash
         link.reset()
@@ -985,10 +911,7 @@ class EcuService : Service() {
         kg.forester.sg.data.CanChannels.clearValues()
         kg.forester.sg.data.CanEcu.reset()
         kg.forester.sg.data.CanEcu.active = true
-        // the Link car is a car of its own: switching to it (or back to the stock ECU) starts its scales, usual boost
-        // and idle history afresh, as another ROM does
         runCatching { carFromEcu("LINK") }
-        // the untouched factory screen: the cards a Link fills, not the stock ECU's it leaves empty
         if (Repo.settings.homeTiles.isEmpty()) Repo.settings.homeTiles = kg.forester.sg.data.HomeLayout.linkDefault()
         ecuWatch.clear(); tcuWatch.clear()
         Repo.obdMode.value = false
@@ -1040,7 +963,6 @@ class EcuService : Service() {
         }
     }
 
-    /** Standard OBD-II polling until the ECU goes silent. Returns false if the ECU did not answer at all. */
     private suspend fun obdSession(link: ObdLink): Boolean {
         val obd = Obd2(link)
         try {
@@ -1065,7 +987,6 @@ class EcuService : Service() {
                 }
                 failures = 0
                 onSnapshot(snap, now)
-                // a fast CAN adapter would go round 100 times a second: 5 a second is plenty
                 delay((200 - (System.currentTimeMillis() - now)).coerceAtLeast(0))
             }
             Repo.link.value = LinkState.NO_ECU
@@ -1090,10 +1011,6 @@ class EcuService : Service() {
         Repo.rrPolled.value = ecuWatch.params + tcuWatch.params
     }
 
-    /**
-     * The parameters ticked on the «Датчики» screen that one unit has, read in a request of their own after the
-     * regular one: an address this ECU does not know can then only cost these, not the gauges.
-     */
     private inner class Watch(private val dest: Int, private val tcu: Boolean) {
         var params: List<RrParam> = emptyList()
             private set
@@ -1126,7 +1043,6 @@ class EcuService : Service() {
         private var custom = 0
 
         suspend fun poll(client: SsmClient) {
-            // own addresses added or edited while connected: the list of what this unit has changes
             if (custom != Repo.customVersion.value) {
                 custom = Repo.customVersion.value
                 init?.let { avail = RomRaider.available(this@EcuService, it, tcu); if (tcu) tcuAvail = avail else ecuAvail = avail }
@@ -1151,7 +1067,6 @@ class EcuService : Service() {
             Repo.rrValues.value = Repo.rrValues.value + RomRaider.decode(params, addrs, raw, all)
         }
 
-        /** The unit keeps refusing the request: keep only the parameters that answer on their own. */
         private suspend fun prune(client: SsmClient) {
             val ok = params.filter { p ->
                 val a = RomRaider.readList(listOf(p), all)
@@ -1165,10 +1080,6 @@ class EcuService : Service() {
         }
     }
 
-    /**
-     * The SG answers the whole list at once. Other ECUs stay silent when one address in the request is
-     * unknown to them, so fall back to the addresses the init marks as supported, then probe one by one.
-     */
     private suspend fun choosePollAddresses(client: SsmClient, init: EcuInit): IntArray? {
         suspend fun works(a: IntArray) = a.isNotEmpty() &&
             (1..2).any { EcuLink.mutex.withLock { client.read(a) } != null }
@@ -1193,11 +1104,6 @@ class EcuService : Service() {
         return ok.takeIf { it.isNotEmpty() && works(it) }
     }
 
-    /**
-     * Once per connection, only where the init says the ECU has it (FreeSSM's flag bytes, + 8 in our numbering):
-     * the VIN (byte 36 bit 0: a 3-byte pointer at 0xDA, 17 ASCII bytes there) and the test mode connectors
-     * (byte 11 bit 5: 0x61 bit 5). Joined green connectors make the check engine lamp blink and store false codes.
-     */
     private suspend fun connectChecks(client: SsmClient, init: EcuInit) {
         Repo.vin.value = ""
         if (init.supports(44, 0)) {
@@ -1221,15 +1127,12 @@ class EcuService : Service() {
         }
     }
 
-    /** The transmission unit answers at 0x18 on the same K-line; poll it every few ECU cycles. */
     private suspend fun pollTcu(client: SsmClient, now: Long) {
         var addrs = tcuAddrs
         if (addrs == null) {
             if (now < tcuNextTryMs) return
             val init = EcuLink.mutex.withLock { client.init(SsmClient.TCU) }
             if (init == null) {
-                // MY1999–2000 (Impreza GC/GF, Forester SF, Legacy BE/BH early): the engine already speaks SSM2 on the
-                // K-line, the TCU still the old SSM1 on its own line; FreeSSM can't read those either
                 Repo.tcuStatus.value = "Блок АКПП не отвечает по SSM. На Subaru 1999–2000 годов (Impreza GC/GF, Forester SF, " +
                     "ранние Legacy BE/BH) он работает по старому протоколу SSM1 на другой линии, через K-line его не прочитать " +
                     "(FreeSSM тоже не видит). У механики блока нет, а через часть Bluetooth-адаптеров он недоступен (надёжнее KKL-кабель)"
@@ -1244,7 +1147,6 @@ class EcuService : Service() {
             Repo.tcuStatus.value = "АКПП: ROM ${init.romId}"
         }
         if (addrs.isEmpty()) return
-        // "only ATF": the temperature and the selector, a much shorter request
         if (Repo.settings.tcuAtfOnly != tcuAtfOnly) {
             tcuAtfOnly = Repo.settings.tcuAtfOnly
             addrs = TcuParams.supported(Repo.tcuInit.value ?: return).let { all ->
@@ -1263,10 +1165,6 @@ class EcuService : Service() {
 
     private var lockSlipSinceMs = 0L
 
-    /**
-     * Converter slip from the engine and turbine speeds, and the lock-up state checked against it: a TCU that
-     * keeps commanding lock-up while the clutch still slips for seconds gets a warning (worn clutch, tired ATF).
-     */
     private fun lockUp(t: TcuSnapshot, rpm: Int?, now: Long): TcuSnapshot {
         val slip = t.turbineRpm?.let { tr -> if (rpm != null && rpm > 800) (rpm - tr) * 100f / rpm else null }
         val slipping = (t.lockUpPct ?: 0f) > 60f && (slip ?: 0f) > 10f && (rpm ?: 0) > 1200
@@ -1282,7 +1180,6 @@ class EcuService : Service() {
     }
 
     private fun forceUsbHostMode() {
-        // This head unit's OTG controller can get stuck in device mode (seen after toggling USB debugging).
         val f = "/sys/devices/platform/soc/soc:aon/5fff0000.usb/mode_switch"
         runCatching {
             Runtime.getRuntime().exec(arrayOf("su", "-c", "[ \"\$(cat $f)\" = device ] && echo host > $f")).waitFor()
@@ -1294,8 +1191,6 @@ class EcuService : Service() {
         val pi = PendingIntent.getBroadcast(this, 0, Intent(ACTION_USB_PERMISSION).setPackage(packageName), flags)
         usb.requestPermission(device, pi)
     }
-
-    // ---- GPS ----
 
     @Volatile private var lastGpsFixMs = 0L
     @Volatile private var gpsSats = 0
@@ -1322,7 +1217,6 @@ class EcuService : Service() {
         override fun onProviderDisabled(provider: String) { gpsCheck() }
     }
 
-    /** Position from the network while GPS has nothing (indoors, just woken up): for the map only, no speed. */
     private val netListener = object : LocationListener {
         override fun onLocationChanged(l: Location) {
             if (System.currentTimeMillis() - lastGpsFixMs < 30_000) return
@@ -1369,7 +1263,6 @@ class EcuService : Service() {
         SsmTrace.log("gps started, providers ${lm.allProviders}, enabled ${lm.getProviders(true)}")
     }
 
-    /** Why there is no position, for the GPS card and the mini-map. */
     private fun gpsCheck() {
         if (System.currentTimeMillis() - lastGpsFixMs < 5000) return
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -1377,15 +1270,10 @@ class EcuService : Service() {
             checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ->
                 "нет разрешения на геолокацию: откройте приложение и разрешите"
             !lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> "геолокация выключена в настройках Android"
-            // keep the satellite count from GnssStatus, but never a stale "no permission" / "switched off"
             else -> Repo.gpsStatus.value.takeIf { it.startsWith("ищу") } ?: "ищу спутники…"
         }
     }
 
-    /**
-     * Called every half minute: re-subscribes when GPS has been silent for a minute (after the head unit's sleep
-     * the GPS module comes back, but the old subscription often stays dead) and refreshes the status text.
-     */
     private fun gpsWatchdog() {
         if (Repo.settings.demo) return
         val now = System.currentTimeMillis()
@@ -1394,8 +1282,6 @@ class EcuService : Service() {
             startGps()
         } else gpsCheck()
     }
-
-    // ---- notification ----
 
     private fun startInForeground() {
         val nm = getSystemService(NotificationManager::class.java)
@@ -1411,7 +1297,6 @@ class EcuService : Service() {
             ) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
-            // Android 14+ refuses some types (e.g. microphone when started at boot): keep the USB part at least.
             try {
                 startForeground(1, n, type)
             } catch (e: Exception) {
@@ -1453,10 +1338,8 @@ class EcuService : Service() {
         const val ACTION_USB_PERMISSION = "kg.forester.sg.USB_PERMISSION"
         const val ACTION_RESET_TRIP = "kg.forester.sg.RESET_TRIP"
         const val ACTION_START_GPS = "kg.forester.sg.START_GPS"
-        /** From the notification: stop everything and close the app. */
         const val ACTION_EXIT = "kg.forester.sg.EXIT"
         val exitRequested = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-        /** Paired Bluetooth devices worth trying in "Auto". */
         private val OBD_NAMES = listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE", "ICAR", "OBDLINK", "CARISTA", "VEEPEAK")
 
         fun start(ctx: Context, action: String? = null) {
@@ -1466,24 +1349,16 @@ class EcuService : Service() {
     }
 }
 
-/**
- * Autostart: a real boot, a "quick boot", or ACC on after the FYT/Teyes head unit slept (those units mostly
- * sleep instead of shutting down, so BOOT_COMPLETED alone is not enough). Which ACC broadcast a given firmware
- * sends varies, so several known ones are listed in the manifest.
- */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Repo.init(context)
         val s = Repo.settings
-        // after an update the service was running before: it comes back whatever the autostart says
         val updated = intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
         if (updated || s.autostartService || s.autostartApp) EcuService.start(context)
-        // allowed from the background only with "display over other apps" (Android 10+)
         if (!updated) WakeWatch.openApp(context)
     }
 }
 
-/** One CSV file per engine run in Android/data/kg.forester.sg/files/logs; columns as chosen on the «Лог» screen. */
 class CsvLogger(ctx: Context, val extras: List<RrParam> = emptyList()) {
     val file: File
     private val w: FileWriter
