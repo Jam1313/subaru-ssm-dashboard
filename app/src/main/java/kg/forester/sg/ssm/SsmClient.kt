@@ -21,9 +21,7 @@ data class EcuInit(
  * e.g. E8 for A8). The SSM commands are the same on K-line and CAN, only the framing differs.
  */
 interface SsmTransport {
-    /** Shown in the status line, e.g. "KKL, K-Line". */
     val name: String
-    /** CAN units answer the init with 0xAA/0xEA instead of 0xBF/0xFF. */
     val isCan: Boolean
     val passive: Boolean get() = false
     fun sniffed(addrs: IntArray, maxAgeMs: Long): Pair<IntArray, ByteArray>? = null
@@ -43,10 +41,14 @@ abstract class KLineTransport : SsmTransport {
     @Volatile protected var ioError: Exception? = null
     override val isCan = false
 
-    // Теперь writeRaw доступен для SsmClient (убран protected)
     abstract fun writeRaw(packet: ByteArray)
 
-    // ---- НОВОЕ: Коллбэк для режима Fast Poll ----
+    // --- НОВОЕ: метод для отправки с отслеживанием эха ---
+    fun writeRawAndTrack(packet: ByteArray) {
+        sending = packet
+        writeRaw(packet)
+    }
+
     @Volatile var fastPollCallback: ((ByteArray) -> Unit)? = null
 
     private val stream = java.io.ByteArrayOutputStream()
@@ -97,16 +99,14 @@ abstract class KLineTransport : SsmTransport {
         if (body.isEmpty()) return
         val now = System.currentTimeMillis()
 
-        // ---- НОВОЕ: Перехват пакетов Fast Poll ----
         if (dst == 0xF0 && src == SsmClient.ECU && body[0] == 0xE8.toByte() && fastPollCallback != null) {
             fastPollCallback?.invoke(body)
-            return // Выходим, не обрабатывая как обычный ответ
+            return 
         }
-        // --------------------------------------------
 
         if (src == 0xF0 && (dst == SsmClient.ECU || dst == SsmClient.TCU)) {
             val mine = sending
-            if (mine != null && mine.contentEquals(f)) { sending = null; return }
+            if (mine != null && mine.contentEquals(f)) { sending = null; return } // Наше эхо
             lastForeignMs = now
             when (body[0].toInt() and 0xFF) {
                 0xA8 -> pending[dst] = IntArray((body.size - 2) / 3) { k ->
@@ -292,7 +292,6 @@ class SsmClient(val transport: SsmTransport) {
         return data[1].toInt() and 0xFF
     }
 
-    // ⬇️ МЕТОДЫ FAST POLL ТЕПЕРЬ ЗДЕСЬ ⬇️
     fun startFastPoll(addresses: IntArray, dest: Int = ECU): Boolean {
         val body = ByteArray(2 + addresses.size * 3)
         body[0] = 0xA8.toByte()
@@ -313,7 +312,7 @@ class SsmClient(val transport: SsmTransport) {
 
         val kt = transport as? KLineTransport ?: return false
         SsmTrace.log("TX Start FastPoll", packet)
-        kt.writeRaw(packet)
+        kt.writeRawAndTrack(packet) // <--- ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
         return true
     }
 
@@ -329,9 +328,8 @@ class SsmClient(val transport: SsmTransport) {
 
         val kt = transport as? KLineTransport
         SsmTrace.log("TX Stop FastPoll", packet)
-        kt?.writeRaw(packet)
+        kt?.writeRawAndTrack(packet) // <--- ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
     }
-    // ⬆️ --------------------------------- ⬆️
 
     fun close() = transport.close()
 
