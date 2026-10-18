@@ -82,7 +82,7 @@ object FuelCalc {
         }.getOrDefault(false)
         // the driver's injectors when set (a Link car's are rarely stock), else typical for the engine
         val ccPerMin = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0).takeIf { it in 100..3000 }?.toDouble()
-            ?: if (turbo) 490 else 260.0
+            ?: if (turbo) 490.0 else 260.0
         val openMs = (pw - 0.6).coerceAtLeast(0.0)
         return rpm * openMs * ccPerMin * 2e-6 * k
     }
