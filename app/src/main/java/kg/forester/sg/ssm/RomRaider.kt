@@ -281,7 +281,8 @@ object RomRaider {
         "P13",
         "P4",
         "P30",
-        "P7"
+        "P7",
+        "P90"
     )
     
     private fun capOk(p: RrParam, init: EcuInit): Boolean = p.id in forceAvailable || p.capByte < 0 || init.supports(p.capByte, p.capBit)
