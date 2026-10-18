@@ -275,8 +275,16 @@ object RomRaider {
     /** ROMs whose extended parameters come from a sibling (see [sibling]), for the log. */
     fun siblingOf(rom: String): String? = if (byRom.containsKey(rom.uppercase())) null
         else sibling(rom.uppercase()).firstOrNull()?.desc?.substringAfter("прошивки ")?.substringBefore(':')
-
-    private fun capOk(p: RrParam, init: EcuInit) = p.capByte < 0 || init.supports(p.capByte, p.capBit)
+    private val forceAvailable = setOf(
+        "P11",
+        "P12",
+        "P13",
+        "P4",
+        "P30",
+        "P7"
+    )
+    
+    private fun capOk(p: RrParam, init: EcuInit): Boolean = p.id in forceAvaiLable || p.capByte < 0 || init.supports(p.capByte, p.capBit)
 
     /**
      * Values of [params] from one read of [addrs] ([raw] in the same order); calculated parameters use the
