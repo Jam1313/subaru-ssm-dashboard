@@ -25,19 +25,9 @@ interface SsmTransport {
     val name: String
     /** CAN units answer the init with 0xAA/0xEA instead of 0xBF/0xFF. */
     val isCan: Boolean
-    /**
-     * Another tester (a laptop on a second cable on the same K-line) is talking to the ECU: we must not, or the
-     * requests collide. Meanwhile [sniffed] gives what the ECU answered it.
-     */
     val passive: Boolean get() = false
-    /** The latest values the ECU sent the other tester for any of [addrs], at most [maxAgeMs] old: (addresses, bytes). */
     fun sniffed(addrs: IntArray, maxAgeMs: Long): Pair<IntArray, ByteArray>? = null
-    /** Addresses per read request (an ELM327 fits only one into its single frame). */
     val maxReadAddrs: Int get() = 64
-    /**
-     * States of the cable's control lines worth trying when the ECU stays silent: KKL cables with a chip
-     * inside (VAG K+CAN Commander and the like) only pass the K-line through with DTR/RTS set their way.
-     */
     val lineModes: Int get() = 1
     fun setLineMode(i: Int) {}
     fun exchange(dest: Int, body: ByteArray): ByteArray?
@@ -46,10 +36,6 @@ interface SsmTransport {
 
 /**
  * K-line SSM2 framing: 80 <dest> F0 <len> <body> <checksum>, the answer comes back as 80 F0 <dest> …
- *
- * Every byte on the line is also read as a stream of frames, so a second tester on the same K-line (a laptop with its
- * own cable, for diagnostics) shows up: its requests are not ours. Then we fall silent ([passive]) and keep the
- * values the ECU sends it ([sniffed]); when it has been quiet for a few seconds we ask again ourselves.
  */
 abstract class KLineTransport : SsmTransport {
     private val inbox = java.io.ByteArrayOutputStream()
@@ -57,18 +43,17 @@ abstract class KLineTransport : SsmTransport {
     @Volatile protected var ioError: Exception? = null
     override val isCan = false
 
-    protected abstract fun writeRaw(packet: ByteArray)
+    // Теперь writeRaw доступен для SsmClient (убран protected)
+    abstract fun writeRaw(packet: ByteArray)
 
-    // ---- the line as a whole
+    // ---- НОВОЕ: Коллбэк для режима Fast Poll ----
+    @Volatile var fastPollCallback: ((ByteArray) -> Unit)? = null
+
     private val stream = java.io.ByteArrayOutputStream()
-    /** Our request on its way: its echo is ours, any other request is someone else's. */
     @Volatile private var sending: ByteArray? = null
     @Volatile private var lastForeignMs = 0L
-    /** What the other tester asked last, per unit: the addresses whose values come back in that order. */
     private val pending = HashMap<Int, IntArray>()
-    /** ECU memory as the other tester's answers showed it: address → (value, when). */
     private val seen = java.util.concurrent.ConcurrentHashMap<Int, Pair<Byte, Long>>()
-    /** The ECU's init answer to the other tester (its ROM ID), if it asked. */
     @Volatile var sniffedInit: ByteArray? = null
         private set
 
@@ -81,7 +66,6 @@ abstract class KLineTransport : SsmTransport {
         return got.toIntArray() to ByteArray(got.size) { seen.getValue(got[it]).first }
     }
 
-    /** Bytes received from the line (with or without the echo of our own request). */
     protected fun onBytes(data: ByteArray) {
         synchronized(lock) {
             inbox.write(data)
@@ -90,7 +74,6 @@ abstract class KLineTransport : SsmTransport {
         }
     }
 
-    /** Whole frames out of [stream]: a request of another tester marks the line busy, the ECU's answer to it is kept. */
     private fun scan() {
         val b = stream.toByteArray()
         var i = 0
@@ -104,7 +87,6 @@ abstract class KLineTransport : SsmTransport {
             i += total
         }
         stream.reset()
-        // keep at most one frame's worth of an unfinished tail
         if (i < b.size) stream.write(b, i, minOf(b.size - i, 300))
     }
 
@@ -114,30 +96,34 @@ abstract class KLineTransport : SsmTransport {
         val body = f.copyOfRange(4, f.size - 1)
         if (body.isEmpty()) return
         val now = System.currentTimeMillis()
+
+        // ---- НОВОЕ: Перехват пакетов Fast Poll ----
+        if (dst == 0xF0 && src == SsmClient.ECU && body[0] == 0xE8.toByte() && fastPollCallback != null) {
+            fastPollCallback?.invoke(body)
+            return // Выходим, не обрабатывая как обычный ответ
+        }
+        // --------------------------------------------
+
         if (src == 0xF0 && (dst == SsmClient.ECU || dst == SsmClient.TCU)) {
             val mine = sending
-            if (mine != null && mine.contentEquals(f)) { sending = null; return } // our own echo
+            if (mine != null && mine.contentEquals(f)) { sending = null; return }
             lastForeignMs = now
             when (body[0].toInt() and 0xFF) {
-                // A8 00 aaa aaa …: single addresses
                 0xA8 -> pending[dst] = IntArray((body.size - 2) / 3) { k ->
                     ((body[2 + k * 3].toInt() and 0xFF) shl 16) or ((body[3 + k * 3].toInt() and 0xFF) shl 8) or (body[4 + k * 3].toInt() and 0xFF)
                 }
-                // A0 00 aaa nn: a block of nn + 1 bytes
                 0xA0 -> if (body.size >= 6) {
                     val a = ((body[2].toInt() and 0xFF) shl 16) or ((body[3].toInt() and 0xFF) shl 8) or (body[4].toInt() and 0xFF)
                     pending[dst] = IntArray((body[5].toInt() and 0xFF) + 1) { a + it }
                 }
                 else -> pending.remove(dst)
             }
-            if (lastForeignMs - lastLoggedMs > 30_000) { lastLoggedMs = lastForeignMs; SsmTrace.log("another tester on the K-line: listening", f) }
             return
         }
         if (dst == 0xF0 && src == SsmClient.ECU) {
             when (body[0].toInt() and 0xFF) {
                 0xFF -> if (now - lastForeignMs < QUIET_MS) sniffedInit = body
                 0xE8, 0xE0 -> {
-                    // an answer to the other tester, not to us
                     if (now - lastForeignMs >= QUIET_MS) return
                     val asked = pending.remove(SsmClient.ECU) ?: return
                     for (k in asked.indices) if (1 + k < body.size) seen[asked[k]] = body[1 + k] to now
@@ -146,11 +132,8 @@ abstract class KLineTransport : SsmTransport {
         }
     }
 
-    private var lastLoggedMs = 0L
-
     @Synchronized
     override fun exchange(dest: Int, body: ByteArray): ByteArray? {
-        // someone else has the line: asking now would garble both
         if (passive) return null
         val packet = ByteArray(body.size + 5)
         packet[0] = 0x80.toByte()
@@ -166,7 +149,6 @@ abstract class KLineTransport : SsmTransport {
         sending = packet
         writeRaw(packet)
 
-        // 2 s like RomRaider and FreeSSM: older (16-bit) ECUs can be slow with the first answer
         val deadline = System.currentTimeMillis() + 2000
         var all = ByteArray(0)
         while (System.currentTimeMillis() < deadline) {
@@ -195,7 +177,7 @@ abstract class KLineTransport : SsmTransport {
 
     private fun stripEcho(all: ByteArray, packet: ByteArray): ByteArray? {
         if (all.size < packet.size) return null
-        for (i in packet.indices) if (all[i] != packet[i]) return all // no echo (cable without loopback)
+        for (i in packet.indices) if (all[i] != packet[i]) return all
         return all.copyOfRange(packet.size, all.size)
     }
 
@@ -207,7 +189,6 @@ abstract class KLineTransport : SsmTransport {
     }
 
     companion object {
-        /** The other tester quiet this long: the line is ours again. */
         const val QUIET_MS = 3000L
 
         fun checksum(b: ByteArray, len: Int): Byte {
@@ -218,7 +199,6 @@ abstract class KLineTransport : SsmTransport {
     }
 }
 
-/** Tactrix OpenPort 1.3 (M, S and U versions): an FTDI K-line cable with Tactrix product ids. */
 object OpenPort13 {
     const val VID = 0x0403
     val PIDS = intArrayOf(0xCC48, 0xCC49, 0xCC4A)
@@ -226,11 +206,6 @@ object OpenPort13 {
     fun matches(vid: Int, pid: Int) = vid == VID && pid in PIDS
 }
 
-/**
- * Plain USB KKL cable (CH340/FTDI/PL2303/CP210x) or OpenPort 1.3: the K-line is the serial port itself, 4800 8N1.
- * DTR and RTS start on (RTS off for the OpenPort 1.3, as RomRaider does); the other combinations are tried
- * while the ECU stays silent, both off being what Windows programs leave them at.
- */
 class KklTransport(private val port: UsbSerialPort, private val openPort13: Boolean = false) : KLineTransport() {
     private val modes = if (openPort13) listOf(true to false, true to true, false to false, false to true)
     else listOf(true to true, false to false, true to false, false to true)
@@ -262,7 +237,6 @@ class KklTransport(private val port: UsbSerialPort, private val openPort13: Bool
 
     override fun writeRaw(packet: ByteArray) = port.write(packet, 1000)
 
-    /** Stops reading; the port itself is closed by whoever opened it. */
     override fun close() {
         runCatching { io?.stop() }
     }
@@ -272,8 +246,6 @@ class SsmClient(val transport: SsmTransport) {
 
     fun init(dest: Int = ECU): EcuInit? {
         val (cmd, ok) = if (transport.isCan) 0xAA to 0xEA else 0xBF to 0xFF
-        // the engine unit gets one more try on K-line: just woken up, it may let the first request pass unanswered
-        // (not the transmission: its retries every minute would freeze the gauges twice as long)
         val data = transport.exchange(dest, byteArrayOf(cmd.toByte()))
             ?: (if (transport.isCan || dest != ECU) null else transport.exchange(dest, byteArrayOf(cmd.toByte())))
             ?: return null
@@ -319,6 +291,47 @@ class SsmClient(val transport: SsmTransport) {
         if (data.size < 2 || data[0] != 0xF8.toByte()) return null
         return data[1].toInt() and 0xFF
     }
+
+    // ⬇️ МЕТОДЫ FAST POLL ТЕПЕРЬ ЗДЕСЬ ⬇️
+    fun startFastPoll(addresses: IntArray, dest: Int = ECU): Boolean {
+        val body = ByteArray(2 + addresses.size * 3)
+        body[0] = 0xA8.toByte()
+        body[1] = 0x01.toByte() // Fast Poll mode
+        addresses.forEachIndexed { i, a ->
+            body[2 + i * 3] = (a shr 16).toByte()
+            body[3 + i * 3] = (a shr 8).toByte()
+            body[4 + i * 3] = a.toByte()
+        }
+        
+        val packet = ByteArray(body.size + 5)
+        packet[0] = 0x80.toByte()
+        packet[1] = dest.toByte()
+        packet[2] = 0xF0.toByte()
+        packet[3] = body.size.toByte()
+        body.copyInto(packet, 4)
+        packet[packet.size - 1] = KLineTransport.checksum(packet, packet.size - 1)
+
+        val kt = transport as? KLineTransport ?: return false
+        SsmTrace.log("TX Start FastPoll", packet)
+        kt.writeRaw(packet)
+        return true
+    }
+
+    fun stopFastPoll(dest: Int = ECU) {
+        val body = byteArrayOf(0xA8.toByte(), 0x00.toByte())
+        val packet = ByteArray(body.size + 5)
+        packet[0] = 0x80.toByte()
+        packet[1] = dest.toByte()
+        packet[2] = 0xF0.toByte()
+        packet[3] = body.size.toByte()
+        body.copyInto(packet, 4)
+        packet[packet.size - 1] = KLineTransport.checksum(packet, packet.size - 1)
+
+        val kt = transport as? KLineTransport
+        SsmTrace.log("TX Stop FastPoll", packet)
+        kt?.writeRaw(packet)
+    }
+    // ⬆️ --------------------------------- ⬆️
 
     fun close() = transport.close()
 
