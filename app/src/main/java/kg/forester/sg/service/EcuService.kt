@@ -55,7 +55,7 @@ import kg.forester.sg.ssm.TcuParams
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
 import kg.forester.sg.ssm.LockState
-import kg.forester.sg.ssm.KLineTransport // <-- Импорт для Fast Poll
+import kg.forester.sg.ssm.KLineTransport // Добавлено для Fast Poll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,8 +66,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.channels.Channel // <-- Импорт для Fast Poll
-import kotlinx.coroutines.withTimeoutOrNull // <-- Импорт для Fast Poll
+import kotlinx.coroutines.channels.Channel // Добавлено для Fast Poll
+import kotlinx.coroutines.withTimeoutOrNull // Добавлено для Fast Poll
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -552,6 +552,9 @@ class EcuService : Service() {
     private fun openOp2(op2: OpenPort2, kline: Boolean): SsmTransport =
         if (kline) Op2KLineTransport(op2).also { it.open() } else Op2CanTransport(op2).also { it.open(Repo.settings.canListen) }
 
+    // =========================================================================
+    // ОБНОВЛЕННАЯ ФУНКЦИЯ SESSION (Fast Poll + Custom Vars + TCU 10s)
+    // =========================================================================
     private suspend fun session(
         klineOnly: Boolean = false,
         obd: (() -> ObdLink?)? = null,
@@ -656,30 +659,20 @@ class EcuService : Service() {
             val kt = transport as? KLineTransport
 
             if (kt != null) {
-                // === РЕЖИМ FAST POLL ===
+                // === РЕЖИМ FAST POLL (со сторонними переменными) ===
                 SsmTrace.log("Fast Poll start")
                 var lastFastPollMs = System.currentTimeMillis()
-                var lastAuxPollMs = 0L
-                var lastTcuPollMs = 0L // <--- Таймер для АКПП
+                var lastTcuPollMs = 0L
                 var isFastPolling = false
-                
-                data class FastData(val raw: ByteArray, val snap: EcuSnapshot)
+                var currentWatchVersion = -1L
+
+                data class FastData(val raw: ByteArray, val snap: EcuSnapshot, val customValues: Map<String, Double>)
                 val snapChannel = Channel<FastData>(Channel.CONFLATED)
 
-                val fastCallback: (ByteArray) -> Unit = { body ->
-                    val raw = body.copyOfRange(1, body.size)
-                    val now = System.currentTimeMillis()
-                    lastFastPollMs = now
-                    var snap = EcuParams.decode(addrs, raw, now, skip)
-                    if (!afSensor) snap = snap.copy(lambda = null)
-                    snapChannel.trySend(FastData(raw, snap))
-                }
+                var fastAddrs = addrs
+                var fastCallback: ((ByteArray) -> Unit)? = null
 
                 try {
-                    kt.fastPollCallback = fastCallback
-                    client.startFastPoll(addrs)
-                    isFastPolling = true
-
                     while (scope.isActive && failures < 5 && !Repo.settings.demo) {
                         if (transport.passive) {
                             if (isFastPolling) {
@@ -694,8 +687,44 @@ class EcuService : Service() {
                             wasPassive = false
                             SsmTrace.log("the other tester went quiet: polling again")
                             Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+                            isFastPolling = false // заставим перезапустить поток
+                        }
+
+                        // Проверяем, не изменился ли список кастомных переменных
+                        if (currentWatchVersion != Repo.watchVersion.value) {
+                            if (isFastPolling) {
+                                kt.fastPollCallback = null
+                                client.stopFastPoll()
+                                isFastPolling = false
+                            }
+                            currentWatchVersion = Repo.watchVersion.value
+                            
+                            // Собираем кастомные адреса
+                            val watchAddrs = RomRaider.readList(ecuWatch.params, RomRaider.load(this@EcuService))
+                            
+                            // Склеиваем стандартные и кастомные адреса
+                            fastAddrs = (addrs.toSet() + watchAddrs.toSet()).toIntArray()
+                            SsmTrace.log("Fast Poll combined addresses: ${fastAddrs.size}")
+
+                            // Обновляем коллбэк для декодирования всего сразу
+                            fastCallback = { body ->
+                                val raw = body.copyOfRange(1, body.size)
+                                val now = System.currentTimeMillis()
+                                lastFastPollMs = now
+                                
+                                var snap = EcuParams.decode(addrs, raw, now, skip)
+                                if (!afSensor) snap = snap.copy(lambda = null)
+                                
+                                val customVals = RomRaider.decode(ecuWatch.params, fastAddrs, raw, RomRaider.load(this@EcuService))
+                                
+                                snapChannel.trySend(FastData(raw, snap, customVals))
+                            }
+                        }
+
+                        if (!isFastPolling) {
+                            kt.resetLineState()
                             kt.fastPollCallback = fastCallback
-                            client.startFastPoll(addrs)
+                            client.startFastPoll(fastAddrs)
                             isFastPolling = true
                         }
 
@@ -712,6 +741,11 @@ class EcuService : Service() {
                             }
                             cycle++
                             onSnapshot(data.snap, data.snap.timeMs)
+                            
+                            if (data.customValues.isNotEmpty()) {
+                                Repo.rrValues.value = Repo.rrValues.value + data.customValues
+                            }
+                            
                             failures = 0
                         } else {
                             if (now - lastFastPollMs > 2000) {
@@ -719,52 +753,38 @@ class EcuService : Service() {
                                 tracker.tick(now)
                                 SsmTrace.log("Fast Poll timeout, retry $failures")
                                 if (failures < 5) {
-                                    client.startFastPoll(addrs)
-                                    lastFastPollMs = now
+                                    isFastPolling = false
                                 }
                             }
                         }
 
-                        // Пауза для опроса доп. модулей
-                        if (now - lastAuxPollMs > 1000) {
+                        // Пауза ТОЛЬКО для опроса АКПП (раз в 10 секунд)
+                        if (Repo.settings.gearbox != "mt" && now - lastTcuPollMs > 10000) {
+                            lastTcuPollMs = now
+                            
                             if (isFastPolling) {
                                 kt.fastPollCallback = null
                                 client.stopFastPoll()
                                 isFastPolling = false
-                                delay(100)
+                                delay(50)
                             }
                             
-                            // Очистка линии от мусора перед обычными запросами
-                            kt.resetLineState() 
-
-                            // RomRaider опрашиваем каждую секунду
-                            ecuWatch.poll(client)
-
-                            // АКПП опрашиваем РАЗ В 5 СЕКУНД
-                            if (Repo.settings.gearbox != "mt" && now - lastTcuPollMs > 5000) {
-                                lastTcuPollMs = now
-                                pollTcu(client, now)
-                            }
-
-                            // Очистка линии перед запуском потока
                             kt.resetLineState()
-                            
-                            if (!transport.passive) {
-                                kt.fastPollCallback = fastCallback
-                                client.startFastPoll(addrs)
-                                isFastPolling = true
-                                lastAuxPollMs = System.currentTimeMillis() // <--- Обновляем таймер только после успешного запуска
-                            }
+                            pollTcu(client, now)
+                            kt.resetLineState()
                         }
                     }
                 } finally {
                     kt.fastPollCallback = null
-                    if (isFastPolling) client.stopFastPoll()
+                    if (isFastPolling) {
+                        isFastPolling = false // Сброс ДО вызова stop, чтобы избежать дубля
+                        client.stopFastPoll()
+                    }
                 }
                 SsmTrace.log("Fast Poll stop")
 
             } else {
-                // === ОБЫЧНЫЙ РЕЖИМ ===
+                // === ОБЫЧНЫЙ РЕЖИМ (для CAN/ELM) ===
                 while (scope.isActive && failures < 5 && !Repo.settings.demo) {
                     if (transport.passive) {
                         passiveRound(transport, addrs, skip, afSensor)
@@ -1145,6 +1165,7 @@ class EcuService : Service() {
         var addrs = tcuAddrs
         if (addrs == null) {
             if (now < tcuNextTryMs) return
+            // Для init() коробки используется таймаут 300 мс (зашито в SsmClient.init)
             val init = EcuLink.mutex.withLock { client.init(SsmClient.TCU) }
             if (init == null) {
                 Repo.tcuStatus.value = "Блок АКПП не отвечает по SSM. На Subaru 1999–2000 годов (Impreza GC/GF, Forester SF, " +
@@ -1168,6 +1189,7 @@ class EcuService : Service() {
             }
             tcuAddrs = addrs
         }
+        // При чтении коробки стандартный вызов read() использует таймаут 2000 мс, но коробка отвечает быстро (если отвечает)
         val raw = EcuLink.mutex.withLock { client.read(addrs, SsmClient.TCU) } ?: return
         tcuWatch.poll(client)
         val t = lockUp(TcuParams.decode(addrs, raw, now), Repo.live.value.rpm, now)
