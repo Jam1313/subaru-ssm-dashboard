@@ -10,8 +10,8 @@ import kotlin.math.abs
 
 object AfrMap {
     // Оси таблицы (X - обороты, Y - нагрузка в г/об)
-    private val rpmAxis = floatArrayOf(500f, 800f, 1200f, 1600f, 2000f, 2400f, 2800f, 3200f, 3600f, 4000f, 4400f, 4800f, 5200f, 5600f, 6000f, 6800f)
-    private val loadAxis = floatArrayOf(0.4f, 0.6f, 0.8f, 1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f, 2.2f, 2.4f, 2.6f, 2.8f, 3.0f, 3.2f, 3.5f)
+    private val rpmAxis = floatArrayOf( 800f, 1200f, 1600f, 2000f, 2400f, 2800f, 3200f, 3600f, 4000f, 4400f, 4800f, 5200f, 5600f, 6000f, 6800f)
+    private val loadAxis = floatArrayOf(0.18f, 0.36f, 0.98f, 1.07f, 1.16f, 1.24f, 1.33f, 1.42f, 1.51f, 1.69f, 1.78f, 2.0f, 2.22f, 2.4f, 2.58f, 2.76f)
 
     // По умолчанию 14.7 (пока не загрузим из ЭБУ)
     private val map = Array(16) { DoubleArray(16) { 14.7 } }
