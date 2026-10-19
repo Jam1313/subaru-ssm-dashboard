@@ -9,7 +9,6 @@ import kg.forester.sg.ssm.EcuSnapshot
 import kotlin.math.abs
 
 object VirtualAfr {
-    // Возвращаем Double? вместо Float?
     fun calculate(s: EcuSnapshot): Double? {
         val maf = s.mafGs?.toDouble() ?: return null
         val rpm = s.rpm ?: return null
@@ -18,15 +17,18 @@ object VirtualAfr {
         if (rpm < 300 || pw < 0.3) return null
 
         val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
+        // Дефолт 565 для турбо, 260 для атмо
         val injectorCc = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
             .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 565.0 else 260.0
 
+        // Вычитаем латентность (время открытия форсунки)
         val openMs = (pw - 0.6).coerceAtLeast(0.0)
         val fuelLh = rpm.toDouble() * openMs * injectorCc * 2e-6
         val fuelGs = fuelLh * 745.0 / 3600.0
         
         if (fuelGs < 0.01) return null 
 
+        // Никаких тримов. Чистый воздух делим на чистое топливо.
         val afr = maf / fuelGs
         return if (afr in 9.0..18.0) afr else null
     }
@@ -41,18 +43,15 @@ object FuelCalc {
         val pw = s.injPwMs
         if (pw != null && pw < 0.2f && rpm > 1100) return 0.0 
 
-        // Явно приводим MAF к Double
         val maf = s.mafGs?.toDouble() ?: return byInjectors(pw, rpm, k)
         source = "maf"
         
-        // Теперь measured имеет тип Double?
         val measured = s.afr?.toDouble() ?: VirtualAfr.calculate(s)
         val closedLoop = measured == null || measured in 13.5..16.0
         
         val fuelGs = if (closedLoop) {
-            // Приводим тримы к Double
-            val trims = ((s.afCorrPct ?: 0f).toDouble() + (s.afLearnPct ?: 0f).toDouble()) / 100.0
-            maf / 14.7 * (1.0 + trims.coerceIn(-0.35, 0.35))
+            // ТРИМЫ ОТКЛЮЧЕНЫ. Делим только на стехиометрию.
+            maf / 14.7
         } else {
             maf / measured!!.coerceIn(10.0, 18.5)
         } * k
@@ -69,10 +68,14 @@ object FuelCalc {
         val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
         val ccPerMin = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
             .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 565.0 else 260.0
+        
+        // Вычитаем латентность
         val openMs = (pw - 0.6f).coerceAtLeast(0f).toDouble()
+        
         return rpm.toDouble() * openMs * ccPerMin * 2e-6 * k
     }
 }
+
 /** The SensorBox fuel line's learning: points ready, share of the tank covered (null: no such input). */
 val boxProgress = kotlinx.coroutines.flow.MutableStateFlow<Pair<Int, Double>?>(null)
 
@@ -131,6 +134,8 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
 
         val gpsFresh = gps != null && now - gps.timeMs < 3000 && gps.accuracyM < 15
         learnSpeed(e, gps, gpsFresh, now)
+        
+        // Берем скорость ТОЛЬКО с датчика ЭБУ. GPS - только аварийный резерв.
         val speed = when {
             e.speedKmh != null -> e.speedKmh * speedK
             gpsFresh -> gps!!.speedKmh.toDouble()
@@ -154,6 +159,8 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
             speedWindow.addLast(now to speed)
             while (speedWindow.isNotEmpty() && now - speedWindow.first().first > 120_000) speedWindow.removeFirst()
             val avg = speedWindow.sumOf { it.second } / speedWindow.size
+            
+            // Порог движения снижен до 1 км/ч
             val moving = speed >= 1
             val accel = (speed - lastSpeed) / 3.6 / dt // m/s^2
             var hardA = 0
@@ -311,7 +318,7 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
         Repo.trip.value = TripState(
             trip = t,
             instLh = lh,
-            // below 20 km/h litres per 100 km shoot past 100 when pulling away: show litres per hour there
+            // Показываем л/100 км на любой скорости выше 1 км/ч
             instPer100 = if (speed >= 1) lh / speed * 100 else null,
             fuelLeftL = left,
             fuelFromSensor = sensorLeftL != null,
