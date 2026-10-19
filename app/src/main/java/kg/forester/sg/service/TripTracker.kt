@@ -8,29 +8,62 @@ import kg.forester.sg.data.TripState
 import kg.forester.sg.ssm.EcuSnapshot
 import kotlin.math.abs
 
-object VirtualAfr {
-    fun calculate(s: EcuSnapshot): Double? {
-        val maf = s.mafGs?.toDouble() ?: return null
-        val rpm = s.rpm ?: return null
-        val pw = s.injPwMs?.toDouble() ?: return null
-        
-        if (rpm < 300 || pw < 0.3) return null
+object AfrMap {
+    // Оси таблицы (X - обороты, Y - нагрузка в г/об)
+    private val rpmAxis = floatArrayOf(500f, 800f, 1200f, 1600f, 2000f, 2400f, 2800f, 3200f, 3600f, 4000f, 4400f, 4800f, 5200f, 5600f, 6000f, 6800f)
+    private val loadAxis = floatArrayOf(0.4f, 0.6f, 0.8f, 1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f, 2.2f, 2.4f, 2.6f, 2.8f, 3.0f, 3.2f, 3.5f)
 
-        val turbo = runCatching { kg.forester.sg.data.Repo.guard.value.turboCar }.getOrDefault(false)
-        // Дефолт 565 для турбо, 260 для атмо
-        val injectorCc = runCatching { kg.forester.sg.data.Repo.settings.injectorCc }.getOrDefault(0)
-            .takeIf { it in 100..3000 }?.toDouble() ?: if (turbo) 565.0 else 260.0
+    // По умолчанию 14.7 (пока не загрузим из ЭБУ)
+    private val map = Array(16) { DoubleArray(16) { 14.7 } }
+    
+    @Volatile var isLoaded = false
+        private set
 
-        // Вычитаем латентность (время открытия форсунки)
-        val openMs = (pw - 0.6).coerceAtLeast(0.0)
-        val fuelLh = rpm.toDouble() * openMs * injectorCc * 2e-6
-        val fuelGs = fuelLh * 745.0 / 3600.0
-        
-        if (fuelGs < 0.01) return null 
+    /** Загружает карту из сырых байтов прошивки (256 байт). */
+    fun loadFromEcu(raw: ByteArray, formula: (Int) -> Double) {
+        if (raw.size < 256) return
+        var index = 0
+        for (y in 0 until 16) {
+            for (x in 0 until 16) {
+                val rawValue = raw[index].toInt() and 0xFF
+                map[y][x] = formula(rawValue)
+                index++
+            }
+        }
+        isLoaded = true
+        kg.forester.sg.ssm.SsmTrace.log("AfrMap: Таблица AFR успешно загружена из прошивки.")
+    }
 
-        // Никаких тримов. Чистый воздух делим на чистое топливо.
-        val afr = maf / fuelGs
-        return if (afr in 9.0..18.0) afr else null
+    /** Билинейная интерполяция для получения точного AFR. */
+    fun getAfr(rpm: Int, load: Float): Double {
+        if (!isLoaded) return 14.7 // Страховка, если чтение не удалось
+
+        if (rpm <= rpmAxis.first() || load <= loadAxis.first()) return map.first().first()
+        if (rpm >= rpmAxis.last() || load >= loadAxis.last()) return map.last().last()
+
+        var x1 = 0
+        while (x1 < rpmAxis.size - 1 && rpm > rpmAxis[x1 + 1]) x1++
+        val x2 = x1 + 1
+
+        var y1 = 0
+        while (y1 < loadAxis.size - 1 && load > loadAxis[y1 + 1]) y1++
+        val y2 = y1 + 1
+
+        val x1v = rpmAxis[x1]; val x2v = rpmAxis[x2]
+        val y1v = loadAxis[y1]; val y2v = loadAxis[y2]
+
+        val q11 = map[y1][x1]
+        val q12 = map[y2][x1]
+        val q21 = map[y1][x2]
+        val q22 = map[y2][x2]
+
+        val xRatio = (rpm - x1v) / (x2v - x1v)
+        val yRatio = (load - y1v) / (y2v - y1v)
+
+        val r1 = q11 * (1 - xRatio) + q21 * xRatio
+        val r2 = q12 * (1 - xRatio) + q22 * xRatio
+
+        return r1 * (1 - yRatio) + r2 * yRatio
     }
 }
 
@@ -46,14 +79,26 @@ object FuelCalc {
         val maf = s.mafGs?.toDouble() ?: return byInjectors(pw, rpm, k)
         source = "maf"
         
-        val measured = s.afr?.toDouble() ?: VirtualAfr.calculate(s)
-        val closedLoop = measured == null || measured in 13.5..16.0
+        // 1. Определяем целевой AFR: если нет ШДК (s.afr == null), берем из таблицы прошивки
+        val measured = s.afr?.toDouble()
+        val load = s.loadGRev ?: 0f
         
-        val fuelGs = if (closedLoop) {
-            // ТРИМЫ ОТКЛЮЧЕНЫ. Делим только на стехиометрию.
-            maf / 14.7
+        val targetAfr = if (measured != null && measured in 13.5..16.0) {
+            measured // Используем реальный ШДК
         } else {
-            maf / measured!!.coerceIn(10.0, 18.5)
+            AfrMap.getAfr(rpm, load) // Берем из прошивки!
+        }
+
+        // 2. Зона Closed Loop: AFR около 14.7. Там работают тримы.
+        val isClosedLoop = targetAfr in 14.0..15.5
+
+        val fuelGs = if (isClosedLoop) {
+            // В Closed Loop тримы РАБОТАЮТ, поэтому их нужно учесть
+            val trims = ((s.afCorrPct ?: 0f).toDouble() + (s.afLearnPct ?: 0f).toDouble()) / 100.0
+            (maf / targetAfr) * (1.0 + trims.coerceIn(-0.35, 0.35))
+        } else {
+            // В Open Loop (буст) тримы НЕ РАБОТАЮТ, считаем строго по карте
+            maf / targetAfr
         } * k
         
         return fuelGs * 3600.0 / GASOLINE_G_PER_L
