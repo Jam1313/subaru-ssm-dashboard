@@ -154,7 +154,7 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
             speedWindow.addLast(now to speed)
             while (speedWindow.isNotEmpty() && now - speedWindow.first().first > 120_000) speedWindow.removeFirst()
             val avg = speedWindow.sumOf { it.second } / speedWindow.size
-            val moving = speed >= 2
+            val moving = speed >= 1
             val accel = (speed - lastSpeed) / 3.6 / dt // m/s^2
             var hardA = 0
             var hardB = 0
@@ -312,7 +312,7 @@ class TripTracker(ctx: android.content.Context, private val onNewTrip: (Long) ->
             trip = t,
             instLh = lh,
             // below 20 km/h litres per 100 km shoot past 100 when pulling away: show litres per hour there
-            instPer100 = if (speed >= 20) lh / speed * 100 else null,
+            instPer100 = if (speed >= 1) lh / speed * 100 else null,
             fuelLeftL = left,
             fuelFromSensor = sensorLeftL != null,
             rangeKm = left?.let { it / avg * 100 },
