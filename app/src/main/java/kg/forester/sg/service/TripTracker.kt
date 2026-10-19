@@ -10,8 +10,8 @@ import kotlin.math.abs
 
 object AfrMap {
     // Оси таблицы (X - обороты, Y - нагрузка в г/об)
-    private val rpmAxis = floatArrayOf( 800f, 1200f, 1600f, 2000f, 2400f, 2800f, 3200f, 3600f, 4000f, 4400f, 4800f, 5200f, 5600f, 6000f, 6800f)
-    private val loadAxis = floatArrayOf(0.18f, 0.36f, 0.98f, 1.07f, 1.16f, 1.24f, 1.33f, 1.42f, 1.51f, 1.69f, 1.78f, 2.0f, 2.22f, 2.4f, 2.58f, 2.76f)
+    private val rpmAxis = floatArrayOf(500f, 800f, 1200f, 1600f, 2000f, 2400f, 2800f, 3200f, 3600f, 4000f, 4400f, 4800f, 5200f, 5600f, 6000f, 6800f)
+    private val loadAxis = floatArrayOf(0.4f, 0.6f, 0.8f, 1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f, 2.2f, 2.4f, 2.6f, 2.8f, 3.0f, 3.2f, 3.5f)
 
     // По умолчанию 14.7 (пока не загрузим из ЭБУ)
     private val map = Array(16) { DoubleArray(16) { 14.7 } }
@@ -19,7 +19,7 @@ object AfrMap {
     @Volatile var isLoaded = false
         private set
 
-    /** Загружает карту из сырых байтов прошивки (256 байт). */
+    /** Загружает карту из сырых байтов прошивки. */
     fun loadFromEcu(raw: ByteArray, formula: (Int) -> Double) {
         if (raw.size < 256) return
         var index = 0
@@ -34,36 +34,23 @@ object AfrMap {
         kg.forester.sg.ssm.SsmTrace.log("AfrMap: Таблица AFR успешно загружена из прошивки.")
     }
 
-    /** Билинейная интерполяция для получения точного AFR. */
+    /** Жесткий поиск по ячейкам (без сглаживания, как в ЭБУ) */
     fun getAfr(rpm: Int, load: Float): Double {
-        if (!isLoaded) return 14.7 // Страховка, если чтение не удалось
+        if (!isLoaded) return 14.7
 
-        if (rpm <= rpmAxis.first() || load <= loadAxis.first()) return map.first().first()
-        if (rpm >= rpmAxis.last() || load >= loadAxis.last()) return map.last().last()
+        // Находим индекс по оборотам (берем ближайшую меньшую или равную)
+        var x = 0
+        for (i in rpmAxis.indices) {
+            if (rpm >= rpmAxis[i]) x = i else break
+        }
 
-        var x1 = 0
-        while (x1 < rpmAxis.size - 1 && rpm > rpmAxis[x1 + 1]) x1++
-        val x2 = x1 + 1
+        // Находим индекс по нагрузке (берем ближайшую меньшую или равную)
+        var y = 0
+        for (i in loadAxis.indices) {
+            if (load >= loadAxis[i]) y = i else break
+        }
 
-        var y1 = 0
-        while (y1 < loadAxis.size - 1 && load > loadAxis[y1 + 1]) y1++
-        val y2 = y1 + 1
-
-        val x1v = rpmAxis[x1]; val x2v = rpmAxis[x2]
-        val y1v = loadAxis[y1]; val y2v = loadAxis[y2]
-
-        val q11 = map[y1][x1]
-        val q12 = map[y2][x1]
-        val q21 = map[y1][x2]
-        val q22 = map[y2][x2]
-
-        val xRatio = (rpm - x1v) / (x2v - x1v)
-        val yRatio = (load - y1v) / (y2v - y1v)
-
-        val r1 = q11 * (1 - xRatio) + q21 * xRatio
-        val r2 = q12 * (1 - xRatio) + q22 * xRatio
-
-        return r1 * (1 - yRatio) + r2 * yRatio
+        return map[y][x]
     }
 }
 
