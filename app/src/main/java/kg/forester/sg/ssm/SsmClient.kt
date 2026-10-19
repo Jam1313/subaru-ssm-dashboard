@@ -290,6 +290,22 @@ class SsmClient(val transport: SsmTransport) {
         return data.copyOfRange(1, 1 + addresses.size)
     }
 
+    /** Читает блок памяти из прошивки (команда 0xA0). Возвращает сырые байты. */
+    fun readBlock(address: Int, count: Int, dest: Int = ECU): ByteArray? {
+        val body = byteArrayOf(
+            0xA0.toByte(),
+            0x00, // Pad
+            (address shr 16).toByte(),
+            (address shr 8).toByte(),
+            address.toByte(),
+            (count - 1).toByte()
+        )
+        val data = transport.exchange(dest, body) ?: return null
+        // Ответ на A0 должен начинаться с E0
+        if (data.isEmpty() || data[0] != 0xE0.toByte() || data.size < 1 + count) return null
+        return data.copyOfRange(1, 1 + count)
+    }
+
     fun write(address: Int, value: Int, dest: Int = ECU): Int? {
         val body = byteArrayOf(
             0xB8.toByte(),
