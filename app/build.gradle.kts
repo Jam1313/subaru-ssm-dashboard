@@ -12,8 +12,14 @@ android {
         applicationId = "kg.forester.sg"
         minSdk = 26
         targetSdk = 34
-        versionCode = 29
+        
+        // АВТОМАТИЧЕСКИЙ VERSION CODE
+        // Генерирует уникальный номер версии на основе текущего времени в секундах.
+        // Гарантирует, что новая сборка всегда будет устанавливаться поверх старой.
+        versionCode = (System.currentTimeMillis() / 1000L).toInt()
+        
         versionName = "0.9-beta21"
+        
         // head units and phones are ARM; the x86 copies of the native speech libraries only made the APK bigger
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
