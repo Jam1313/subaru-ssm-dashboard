@@ -50,21 +50,12 @@ data class EcuSnapshot(
     val injDutyPct: Float?
         get() = if (injPwMs != null && rpm != null) injPwMs * rpm / 1200f else null
 
-    /**
-     * Drops a MAF reading no engine of these cars can pull: a 2.5 l at 2.5 bar absolute takes ~3.8 g per rev
-     * (0.063 g/s per rpm), plus a margin for idle. A garbled answer or an address this ROM keeps elsewhere
-     * (0xFFFF = 655 g/s) would otherwise show 200+ l/h at idle and spoil the trip, refills and calibration.
-     */
     fun saneMaf(): EcuSnapshot {
         val maf = mafGs ?: return this
         return if (maf > (rpm ?: 0) * 0.07f + 15f || maf > 400f) copy(mafGs = null) else this
     }
 }
 
-/**
- * Standard SSM2 single-byte addresses (RomRaider logger "STD" set) polled in one request.
- * Order matters: values come back in the same order.
- */
 object EcuParams {
     const val COOLANT = 0x08
     const val RPM_H = 0x0E
@@ -82,8 +73,10 @@ object EcuParams {
     const val BOOST = 0x24
     const val AF_CORR = 0x09
     const val AF_LEARN = 0x0A
-    const val AF_SENSOR = 0x46
     const val WGDC = 0x30
+
+    // Эти параметры оставлены для справки (CustomParam), но в опрос не включены
+    const val AF_SENSOR = 0x46
     const val PEDAL = 0x29
     const val MAP = 0x0D
     const val AVCS = 0x3C
@@ -92,10 +85,10 @@ object EcuParams {
     const val FUEL_LEVEL_V = 0x2E
     const val FUEL_LEVEL_OHM = 0x10D
 
+    // ОСТАВЛЕНЫ ТОЛЬКО РАБОТАЮЩИЕ И НУЖНЫЕ ДАТЧИКИ (17 адресов вместо 23)
     val pollAddresses = intArrayOf(
         COOLANT, RPM_H, RPM_L, SPEED, TIMING, INTAKE, MAF_H, MAF_L, THROTTLE, BATTERY,
-        INJ_PW, KNOCK, ATM, BOOST, AF_CORR, AF_LEARN, AF_SENSOR, WGDC,
-        PEDAL, MAP, AVCS, ALT_DUTY, THROTTLE_MOTOR,
+        INJ_PW, KNOCK, ATM, BOOST, AF_CORR, AF_LEARN, WGDC
     )
 
     /** Capability bit of each address: (index in the init capability bytes, bit), from FreeSSM. */
@@ -113,23 +106,18 @@ object EcuParams {
     fun optionalSupported(init: EcuInit): IntArray =
         optional.filter { (_, c) -> init.supports(c.first + 8, c.second) }.keys.toIntArray()
 
-    /** False only when the init clearly lists the capability byte and the bit is off (then the byte is junk). */
-        /** Адреса, которые ЭБУ ошибочно помечает как неподдерживаемые (JECS баг), но они реально работают */
-    private val forceSupported = setOf(MAF_H, MAF_L, INTAKE, THROTTLE, AF_LEARN, PEDAL, MAP)
+    /** Обход ложных capabilities для JECS: MAF, впуск, дроссель и обучение A/F реально работают */
+    private val forceSupported = setOf(MAF_H, MAF_L, INTAKE, THROTTLE, AF_LEARN)
 
     /** False only when the init clearly lists the capability byte and the bit is off (then the byte is junk). */
     fun reported(init: EcuInit, addr: Int): Boolean {
-        if (addr in forceSupported) return true // <-- Принудительно разрешаем MAF и остальные
+        if (addr in forceSupported) return true // Принудительно разрешаем
         val (i, bit) = capability[addr] ?: return true
         return i >= init.capabilities.size || init.supports(i + 8, bit)
     }
-    /**
-     * Addresses in [addrs] the init clearly marks as not supported: SSM answers them anyway with junk (an EJ253
-     * showed "knock correction +63.5°"), so their values are dropped.
-     */
+
     fun unsupported(init: EcuInit, addrs: IntArray): Set<Int> = addrs.filter { !reported(init, it) }.toSet()
 
-    /** The poll addresses this ECU reports as supported in its init answer. */
     fun supported(init: EcuInit): IntArray =
         pollAddresses.filter { a -> capability[a]?.let { (i, bit) -> init.supports(i + 8, bit) } ?: false }.toIntArray()
 
@@ -137,10 +125,11 @@ object EcuParams {
     fun decode(addrs: IntArray, raw: ByteArray, now: Long, skip: Set<Int> = emptySet()): EcuSnapshot {
         val v = HashMap<Int, Int>(addrs.size)
         addrs.forEachIndexed { i, a -> if (i < raw.size && a !in skip) v[a] = raw[i].toInt() and 0xFF }
-        // knock correction 0xFF (+63.5°) is what an ECU without the parameter sends back
+        
         if (v[KNOCK] == 0xFF) v.remove(KNOCK)
         fun g(a: Int) = v[a]
         fun pair(h: Int, l: Int) = g(h)?.let { hi -> g(l)?.let { lo -> (hi shl 8) or lo } }
+        
         return EcuSnapshot(
             timeMs = now,
             coolantC = g(COOLANT)?.let { it - 40 },
@@ -148,7 +137,7 @@ object EcuParams {
             speedKmh = g(SPEED),
             timingDeg = g(TIMING)?.let { (it - 128) / 2f },
             intakeC = g(INTAKE)?.let { it - 40 },
-            mafGs = pair(MAF_H, MAF_L)?.let { it /65535f * 250f },
+            mafGs = pair(MAF_H, MAF_L)?.let { it / 65535f * 250f },
             throttlePct = g(THROTTLE)?.let { it * 100f / 255f },
             batteryV = g(BATTERY)?.let { it * 0.08f },
             injPwMs = g(INJ_PW)?.let { it * 0.256f },
