@@ -290,8 +290,15 @@ class SsmClient(val transport: SsmTransport) {
         return data.copyOfRange(1, 1 + addresses.size)
     }
 
-    /** Читает блок памяти из прошивки (команда 0xA0). Возвращает сырые байты. */
+    /** Читает блок памяти из прошивки (команда 0xA0). Разбивает на куски по 128 байт, чтобы не переполнять буфер. */
     fun readBlock(address: Int, count: Int, dest: Int = ECU): ByteArray? {
+        // Если просят больше 128 байт, читаем частями
+        if (count > 128) {
+            val first = readBlock(address, 128, dest) ?: return null
+            val second = readBlock(address + 128, count - 128, dest) ?: return null
+            return first + second
+        }
+        
         val body = byteArrayOf(
             0xA0.toByte(),
             0x00, // Pad
