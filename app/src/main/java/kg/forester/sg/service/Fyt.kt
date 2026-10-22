@@ -1,17 +1,26 @@
 package kg.forester.sg.service
 
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioManager
+import android.media.MediaMetadata
+import android.media.session.MediaController
 import android.os.Binder
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.Parcel
+import android.os.SystemClock
+import android.util.Log
+import android.view.KeyEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
 import java.util.Locale
@@ -25,6 +34,7 @@ data class MusicState(
     val source: String = "",           // "music" (stock player) or "bt"
     val title: String = "",
     val artist: String = "",
+    val art: Bitmap? = null,           // BT: only when the phone sends a cover (AVRCP cover art is often missing)
     val playing: Boolean = false,
     val posMs: Long = 0,
     val totalMs: Long = 0,
@@ -48,11 +58,14 @@ class FytMusicService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         intent?.extras?.let { e ->
+            val playing = e.getBoolean("play_state", false)
+            // the stock player keeps pushing while paused: with BT as the source it must not take BT's place
+            if (Fyt.appId.value == 3 && !playing) return@let
             Fyt.music.value = MusicState(
                 source = "music",
                 title = e.getString("title").orEmpty(),
                 artist = e.getString("play_artist").orEmpty(),
-                playing = e.getBoolean("play_state", false),
+                playing = playing,
                 posMs = e.getLong("play_cur", 0),
                 totalMs = e.getLong("play_total", 0),
                 updatedMs = System.currentTimeMillis(),
@@ -76,8 +89,11 @@ object Fyt {
     private const val M_BT = 2
     /** Sound module: the master volume lives in the MCU, Android's stream volume doesn't move it on these units. */
     private const val M_SOUND = 4
+    private const val TAG = "Fyt"
 
     val music = MutableStateFlow(MusicState())
+    /** The phone's music over the unit's Bluetooth on its own ([music] is whichever pushed last). */
+    val btMusic = MutableStateFlow(MusicState(source = "bt"))
     val radio = MutableStateFlow(RadioState())
     val appId = MutableStateFlow(0) // current audio source: 1 radio, 3 BT music, 8 music player
     /** Master volume as the MCU reports it (update U_VOL = 2), -1 = unknown. */
@@ -137,13 +153,14 @@ object Fyt {
 
     private val mainCb = object : Callback() {
         override fun onUpdate(code: Int, ints: IntArray?, strs: Array<String?>?) {
-            if (code == 0) appId.value = ints?.getOrNull(0) ?: 0
+            if (code == 0) appId.value = (ints?.getOrNull(0) ?: 0).also { Log.i(TAG, "source $it") }
         }
     }
 
     private val radioCb = object : Callback() {
         override fun onUpdate(code: Int, ints: IntArray?, strs: Array<String?>?) {
             val v = ints?.getOrNull(0) ?: return
+            Log.i(TAG, "radio update $code = $v")
             val r = radio.value
             radio.value = when (code) {
                 0 -> r.copy(band = v)
@@ -161,30 +178,75 @@ object Fyt {
     }
 
     private var btState = MusicState(source = "bt")
+    /** The other BT module updates as last seen, so the log shows each change once (which code holds what). */
+    private val btSeen = HashMap<Int, String>()
 
     private val btCb = object : Callback() {
         override fun onUpdate(code: Int, ints: IntArray?, strs: Array<String?>?) {
             val m = btState
-            btState = when (code) {
+            val next = when (code) {
                 0 -> m.copy(title = strs?.getOrNull(0).orEmpty())
                 1 -> m.copy(artist = strs?.getOrNull(0).orEmpty())
                 2 -> m.copy(totalMs = (ints?.getOrNull(0) ?: 0).toLong())
                 13 -> m.copy(playing = ints?.getOrNull(0) == 1)
                 28 -> m.copy(posMs = (ints?.getOrNull(0) ?: 0).toLong())
-                else -> return
-            }.copy(updatedMs = System.currentTimeMillis())
-            // show BT only when it actually has something and the stock player isn't the fresher source
-            val stockFresh = music.value.source == "music" && System.currentTimeMillis() - music.value.updatedMs < 5000
-            if (btState.title.isNotBlank() && (btState.playing || !stockFresh)) music.value = btState
+                else -> {
+                    val v = "ints=${ints?.joinToString()} strs=${strs?.joinToString()}"
+                    if (synchronized(btSeen) { btSeen.put(code, v) } != v) Log.i(TAG, "bt update $code (unused): $v")
+                    return
+                }
+            }
+            if (code != 28) Log.i(TAG, "bt update $code: playing=${next.playing} title=${next.title} artist=${next.artist}")
+            setBt(next)
         }
     }
+
+    private fun setBt(next: MusicState) {
+        btState = next.copy(updatedMs = System.currentTimeMillis())
+        btMusic.value = btState
+        // show BT only when it actually has something and the stock player isn't the fresher source
+        val stockFresh = music.value.source == "music" && System.currentTimeMillis() - music.value.updatedMs < 5000
+        if (btState.title.isNotBlank() && (btState.playing || !stockFresh)) music.value = btState
+    }
+
+    /**
+     * The track from elsewhere when the BT module leaves it empty: Android's own AVRCP controller (units whose
+     * phone music goes through Android's Bluetooth) announces it, and some BT apps send the old music-player
+     * broadcast. That one comes from other players too, so it counts only with BT as the source.
+     */
+    private val btMeta = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, i: Intent?) {
+            val intent = i ?: return
+            val avrcp = intent.action == AVRCP_TRACK
+            if (!avrcp && appId.value != 3) return
+            val md = if (avrcp) runCatching {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra<MediaMetadata>("android.bluetooth.avrcp-controller.profile.extra.METADATA")
+            }.getOrNull() else null
+            val title = md?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: intent.getStringExtra("track")
+            val artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: intent.getStringExtra("artist")
+            val art = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            Log.i(TAG, "bt meta ${intent.action}: title=$title artist=$artist art=${art != null}")
+            if (title.isNullOrBlank()) return
+            // the module's own words win while it gives them
+            val m = btState
+            if (m.title.isNotBlank() && m.title != btMetaTitle) return
+            btMetaTitle = title
+            setBt(m.copy(title = title, artist = artist.orEmpty(), art = art,
+                totalMs = md?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 } ?: m.totalMs))
+        }
+    }
+    /** The title [btMeta] put in, told apart from one the BT module sent. */
+    private var btMetaTitle = ""
+    private const val AVRCP_TRACK = "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT"
 
     private val conn = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val tk = service ?: return
             main = module(tk, M_MAIN)?.also { register(it, mainCb, 0) }
             radioModule = module(tk, M_RADIO)?.also { m -> listOf(0, 1, 3).forEach { register(m, radioCb, it) } }
-            bt = module(tk, M_BT)?.also { m -> listOf(0, 1, 2, 13, 28).forEach { register(m, btCb, it) } }
+            // all the module's updates, not only the known ones: the log tells which code carries what on this unit
+            bt = module(tk, M_BT)?.also { m -> (0 until 100).forEach { register(m, btCb, it) } }
             sound = module(tk, M_SOUND)?.also { register(it, soundCb, 2) }
         }
 
@@ -195,6 +257,11 @@ object Fyt {
     }
 
     fun bind(ctx: Context) {
+        if (app == null) runCatching {
+            val f = IntentFilter(AVRCP_TRACK).apply { addAction("com.android.music.metachanged") }
+            // the head unit's Bluetooth module and players are other apps
+            androidx.core.content.ContextCompat.registerReceiver(ctx.applicationContext, btMeta, f, androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
+        }
         app = ctx.applicationContext
         loadStations()
         runCatching {
@@ -226,14 +293,17 @@ object Fyt {
         runCatching { app?.startService(Intent(action).setPackage("com.syu.music")) }
     }
 
+    /** BT is what plays: the active source says so; before the unit has told it, the latest now-playing push. */
+    private fun btActive() = appId.value == 3 || (appId.value != 8 && music.value.source == "bt")
+
     fun playPause() {
-        if (music.value.source == "bt") cmd(bt, 2) else startMusicService("com.syu.music.playpause")
+        if (btActive()) btPlay(!btMusic.value.playing) else startMusicService("com.syu.music.playpause")
     }
 
     fun next() {
         when {
             appId.value == 1 -> cmd(radioModule, 0)
-            music.value.source == "bt" -> cmd(bt, 1)
+            btActive() -> btNext()
             else -> startMusicService("com.syu.music.next")
         }
     }
@@ -241,24 +311,105 @@ object Fyt {
     fun prev() {
         when {
             appId.value == 1 -> cmd(radioModule, 1)
-            music.value.source == "bt" -> cmd(bt, 0)
+            btActive() -> btPrev()
             else -> startMusicService("com.syu.music.prev")
         }
     }
 
-    /** Radio needs to be the active source and its activity created once; then return to our screen. */
+    // --- Bluetooth music -----------------------------------------------------------------------------
+
+    /*
+     * BT is made the source first and the command waits for the switch: the unit resumes the phone by itself
+     * when BT becomes the source, so a play/pause toggle sent at once paused it again, and ⏮ ⏭ sent before the
+     * switch went to the old source (the radio's presets, the stock player). Then the BT module's command; when
+     * the phone shows no reaction to it, the phone's media session if the unit has one, else the media key.
+     */
+
+    fun btPlay(play: Boolean) {
+        val wasSource = appId.value == 3
+        if (!wasSource) source(3)
+        whenBtSource(wasSource) {
+            // becoming the source already resumed it
+            if (!wasSource && play && btMusic.value.playing) { Log.i(TAG, "bt resumed by the source switch"); return@whenBtSource }
+            btCmd(2, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, { before, now -> now.playing != before.playing }) { if (play) it.play() else it.pause() }
+        }
+    }
+
+    // a new track, or the same one from its start (⏮ late in a track)
+    fun btNext() = btSkip(1, KeyEvent.KEYCODE_MEDIA_NEXT) { it.skipToNext() }
+    fun btPrev() = btSkip(0, KeyEvent.KEYCODE_MEDIA_PREVIOUS) { it.skipToPrevious() }
+
+    private fun btSkip(code: Int, key: Int, session: (MediaController.TransportControls) -> Unit) {
+        val wasSource = appId.value == 3
+        if (!wasSource) source(3)
+        whenBtSource(wasSource) {
+            btCmd(code, key, { before, now -> now.title != before.title || now.posMs + 2000 < before.posMs }, session)
+        }
+    }
+
+    private fun whenBtSource(wasSource: Boolean, block: () -> Unit) {
+        if (wasSource) { block(); return }
+        val t0 = SystemClock.uptimeMillis()
+        handler.post(object : Runnable {
+            override fun run() {
+                // the switch has come (or isn't coming), then a moment for the unit to resume the phone
+                if (appId.value == 3 || SystemClock.uptimeMillis() - t0 > 2500) handler.postDelayed(block, 800)
+                else handler.postDelayed(this, 100)
+            }
+        })
+    }
+
+    private fun btCmd(code: Int, key: Int, reacted: (MusicState, MusicState) -> Boolean, session: (MediaController.TransportControls) -> Unit) {
+        val before = btMusic.value
+        val m = bt
+        Log.i(TAG, "bt cmd $code (module ${if (m != null) "bound" else "missing"}, source ${appId.value})")
+        if (m == null) { btFallback(key, session); return }
+        cmd(m, code)
+        // the module never reported anything: nothing to tell a reaction by, and a second try could undo the first
+        if (before.updatedMs == 0L) return
+        handler.postDelayed({ if (!reacted(before, btMusic.value)) btFallback(key, session) }, 2500)
+    }
+
+    private fun btFallback(key: Int, session: (MediaController.TransportControls) -> Unit) {
+        val ctx = app ?: return
+        val c = listOf("com.syu.bt", "com.android.bluetooth", "com.google.android.bluetooth").firstNotNullOfOrNull { MediaSessions.controllerOf(ctx, it) }
+        if (c != null) { Log.i(TAG, "bt: no reaction, via the session of ${c.packageName}"); session(c.transportControls); return }
+        // the key goes to the app that played last: not when that is the app's own player, it would start instead
+        if (LocalMusic.state.value.queue.isNotEmpty()) { Log.i(TAG, "bt: no reaction, own player would take the key"); return }
+        Log.i(TAG, "bt: no reaction, media key $key")
+        val am = ctx.getSystemService(AudioManager::class.java) ?: return
+        am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
+        am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
+    }
+
+    private var radioAskedMs = -10_000L
+
+    /**
+     * Radio as the active source: the source command alone, as a rule. The radio's activity flashed up on every
+     * station picked, so it is started (and our screen brought back) only when the source hasn't switched in 1.5 s.
+     */
     fun ensureRadio() {
         if (appId.value == 1) return
         val ctx = app ?: return
-        runCatching {
-            ctx.startActivity(Intent().setClassName("com.syu.radio", "com.syu.radio.Launch").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
+        // asked a moment ago and the switch is on its way: launched again, the radio starts over at its own last
+        // station and undoes the seek or preset that follows
+        if (SystemClock.uptimeMillis() - radioAskedMs < 3000) return
+        radioAskedMs = SystemClock.uptimeMillis()
+        Log.i(TAG, "radio on (source ${appId.value})")
         cmd(main, 0, intArrayOf(1))
         handler.postDelayed({
-            ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let {
-                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT); runCatching { ctx.startActivity(it) }
+            if (appId.value == 1) return@postDelayed
+            Log.i(TAG, "radio: source still ${appId.value}, starting the radio's activity")
+            runCatching {
+                ctx.startActivity(Intent().setClassName("com.syu.radio", "com.syu.radio.Launch").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
-        }, 900)
+            cmd(main, 0, intArrayOf(1))
+            handler.postDelayed({
+                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let {
+                    it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT); runCatching { ctx.startActivity(it) }
+                }
+            }, 900)
+        }, 1500)
     }
 
     /**
@@ -282,8 +433,13 @@ object Fyt {
     /** Makes [id] the head unit's audio source: 1 radio, 3 BT music, 8 music player (the call ensureRadio makes). */
     fun source(id: Int) { cmd(main, 0, intArrayOf(id)) }
 
-    fun radioSeek(up: Boolean) { ensureRadio(); cmd(radioModule, if (up) 5 else 6) }
-    fun radioPreset(next: Boolean) { ensureRadio(); cmd(radioModule, if (next) 0 else 1) }
+    /** [ensure] false: the caller has made the radio the source and waited for it already. */
+    fun radioSeek(up: Boolean, ensure: Boolean = true) {
+        if (ensure) ensureRadio()
+        Log.i(TAG, "radio seek ${if (up) "up" else "down"} from ${radio.value.freq}")
+        cmd(radioModule, if (up) 5 else 6)
+    }
+    fun radioPreset(next: Boolean, ensure: Boolean = true) { if (ensure) ensureRadio(); cmd(radioModule, if (next) 0 else 1) }
     fun radioBand() { ensureRadio(); cmd(radioModule, 11) }
     fun openRadio() {
         runCatching { app?.startActivity(Intent().setClassName("com.syu.radio", "com.syu.radio.Launch").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

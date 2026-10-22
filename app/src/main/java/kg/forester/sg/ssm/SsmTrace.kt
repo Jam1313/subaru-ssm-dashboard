@@ -74,7 +74,7 @@ object SsmTrace {
     private fun report(ctx: Context, header: String): String {
         val ver = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull()
         return buildString {
-            append("Subaru Dashboard $ver, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ")
+            append("CarPulse $ver, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ")
             append("${Build.MANUFACTURER} ${Build.MODEL}\n")
             append(header).append("\n\n")
             ring.forEach { append(it).append('\n') }
@@ -88,18 +88,18 @@ object SsmTrace {
     /** Share sheet (Telegram, mail…) with the report as a text file. */
     fun share(ctx: Context, header: String) {
         val dir = File(ctx.cacheDir, "share").apply { mkdirs() }
-        val f = File(dir, "subaru-dashboard-log.txt")
+        val f = File(dir, "carpulse-log.txt")
         f.writeText(report(ctx, header))
         val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
         val send = Intent(Intent.ACTION_SEND)
             .setType("text/plain")
             .putExtra(Intent.EXTRA_STREAM, uri)
-            .putExtra(Intent.EXTRA_SUBJECT, "Subaru Dashboard: журнал обмена")
+            .putExtra(Intent.EXTRA_SUBJECT, "CarPulse: журнал обмена")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         ctx.startActivity(Intent.createChooser(send, "Отправить журнал").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    /** Copy into Download/SubaruDashboard for head units without a messenger; returns where, or null. */
+    /** Copy into Download/CarPulse for head units without a messenger; returns where, or null. */
     @Suppress("DEPRECATION")
     fun saveToDownloads(ctx: Context, header: String): String? = runCatching {
         val name = "log-" + SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date()) + ".txt"
@@ -108,15 +108,15 @@ object SsmTrace {
             val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, name)
                 put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/SubaruDashboard")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/CarPulse")
             }) ?: return null
             ctx.contentResolver.openOutputStream(uri)?.use { it.write(text) } ?: return null
         } else {
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SubaruDashboard")
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "CarPulse")
             dir.mkdirs()
             File(dir, name).writeBytes(text)
         }
-        "Download/SubaruDashboard/$name"
+        "Download/CarPulse/$name"
     }.getOrNull()
 }
 

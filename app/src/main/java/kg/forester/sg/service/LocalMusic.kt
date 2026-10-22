@@ -22,6 +22,7 @@ import kg.forester.sg.ssm.SsmTrace
  * One ExoPlayer for the app, wrapped in a media session by [PlayerService] (notification, steering wheel keys,
  * other apps pause it). It remembers the folder, the track and the place in it, like a car stereo.
  */
+@androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 object LocalMusic {
     enum class Kind { USB, SD, MEMORY }
 

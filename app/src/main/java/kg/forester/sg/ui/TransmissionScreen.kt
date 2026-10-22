@@ -245,8 +245,27 @@ private fun AwdTile(duty: Float?, front: Int?, rear: Int?, fwd: Boolean, modifie
         (if (vtd) 55f - 5f * e else 50f * e).roundToInt()
     }
     val slip = front != null && rear != null && rear > 5 && front - rear > 3
-    Box(modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
-    Row(
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
+    if (maxHeight > 96.dp) {
+        // a tall tile, laid out like its neighbours (see [Tile]): the name on top, the number as big as the tile allows,
+        // the split beside it (it was the compact one-line layout among three big numbers)
+        Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 22.dp, top = 8.dp, bottom = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Lucide.Waypoints, null, tint = C.Sub, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                T("Муфта полного привода", 12.sp, C.Sub, maxLines = 1)
+            }
+            Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.Bottom) {
+                FitValue(fmtF(duty, 0), "%", 20f, Modifier.weight(1f).fillMaxHeight(), widest = "100")
+                if (rearShare != null) Row(Modifier.padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
+                    T("≈ ${100 - rearShare}:$rearShare", 18.sp, C.Violet, FontWeight.SemiBold, maxLines = 1)
+                    T(" β", 12.sp, C.Sub, modifier = Modifier.padding(bottom = 2.dp))
+                }
+            }
+            if (fwd) T("FWD: вставлен предохранитель, задний мост отключён", 11.sp, C.Orange, maxLines = 1)
+            else if (slip) T("передние буксуют", 11.sp, C.Orange, maxLines = 1)
+        }
+    } else Row(
         Modifier.fillMaxSize().padding(start = 10.dp, end = 22.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

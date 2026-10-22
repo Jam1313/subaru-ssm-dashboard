@@ -80,7 +80,7 @@ object Alerts {
         if (Speech.say(text)) return
         if (ttsReady) {
             val loud = android.os.Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f) }
-            runCatching { tts?.speak(text, TextToSpeech.QUEUE_ADD, loud, id) }
+            runCatching { tts?.speak(SpeechText.prepare(text), TextToSpeech.QUEUE_ADD, loud, id) }
         } else if (level != Level.INFO) {
             runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80).startTone(ToneGenerator.TONE_PROP_BEEP2, 300) }
         }

@@ -1,13 +1,18 @@
 package kg.forester.sg.service
 
+import android.os.SystemClock
 import kg.forester.sg.data.GpsFix
 import kg.forester.sg.data.Repo
+import kg.forester.sg.data.Wideband
+import kg.forester.sg.data.WidebandLinkState
+import kg.forester.sg.data.WidebandState
 import kg.forester.sg.ssm.EcuSnapshot
 import kg.forester.sg.ssm.TcuSnapshot
 import java.util.Locale
 
-/** What one CSV line is made of. */
-class LogRow(val s: EcuSnapshot, val g: GpsFix?, val lh: Double, val t: TcuSnapshot?, val guard: GuardState)
+/** What one CSV line is made of; [elapsedMs] is when, on the clock the wideband's samples carry. */
+class LogRow(val s: EcuSnapshot, val g: GpsFix?, val lh: Double, val t: TcuSnapshot?, val guard: GuardState,
+             val wideband: WidebandState = Wideband.state.value, val elapsedMs: Long = SystemClock.elapsedRealtime())
 
 /** One column of the CSV log; [key] is the header (kept as before, so old scripts still read the files). */
 class LogColumn(val key: String, val title: String, val group: String, val get: (LogRow) -> String)
@@ -19,6 +24,8 @@ class LogColumn(val key: String, val title: String, val group: String, val get: 
 object LogColumns {
     private fun f(x: Float?, d: Int = 2) = x?.let { "%.${d}f".format(Locale.US, it) } ?: ""
     private fun i(x: Int?) = x?.toString() ?: ""
+
+    const val WIDEBAND = "ШДК USB"
 
     val all: List<LogColumn> = listOf(
         LogColumn("rpm", "Обороты", "Двигатель") { i(it.s.rpm) },
@@ -64,6 +71,21 @@ object LogColumns {
         LogColumn("rear_wheel_kmh", "Скорость задних колёс", "АКПП") { i(it.t?.rearWheelKmh) },
         LogColumn("fuel_sensor_v", "Датчик топлива, В", "Уровень топлива") { f(it.s.fuelSensorV) },
         LogColumn("fuel_sensor_ohm", "Датчик топлива, Ом", "Уровень топлива") { f(it.s.fuelSensorOhm) },
+        // added in 0.9-beta21: after all the old ones, so the columns of everybody's files stay where they were
+        // the EJ has no oil sensor: then the number is the guard's estimate, and the next column says so
+        LogColumn("oil_c", "Темп. масла", "Двигатель") { f(it.guard.oilC, 0) },
+        LogColumn("oil_estimated", "Масло: оценка (1) или датчик (0)", "Двигатель") { r -> r.guard.oilC?.let { if (r.guard.oilEstimated) "1" else "0" } ?: "" },
+        LogColumn("boost_error_kpa", "Ошибка наддува (цель − факт)", "Наддув") { r -> f(r.guard.targetBoostKpa?.let { t -> r.s.gaugeKpa?.let { t - it } }) },
+        LogColumn("lat_g", "Перегрузка боковая", "Перегрузки") { f(Repo.motion.value.latG) },
+        LogColumn("lon_g", "Перегрузка продольная", "Перегрузки") { f(Repo.motion.value.lonG) },
+    ) + listOf(
+        // the USB wideband (Innovate LC-2): last, and only while it is switched on (see [offered]), so everybody
+        // else's files keep the columns they always had
+        LogColumn("wideband_afr", "AFR ШДК USB", WIDEBAND) { f(it.wideband.afr(it.elapsedMs)) },
+        LogColumn("wideband_lambda", "λ ШДК USB", WIDEBAND) { f(it.wideband.lambda(it.elapsedMs), 3) },
+        LogColumn("wideband_status", "Статус ШДК USB", WIDEBAND) { it.wideband.status(it.elapsedMs) },
+        LogColumn("wideband_age_ms", "Возраст данных ШДК, мс", WIDEBAND) { r -> r.wideband.sample?.let { (r.elapsedMs - it.elapsedMs).coerceAtLeast(0).toString() } ?: "" },
+        LogColumn("wideband_demo", "ШДК: тестовые данные", WIDEBAND) { if (it.wideband.link == WidebandLinkState.DEMO) "1" else "0" },
     )
 
     /** Standard SSM addresses (RomRaider "P" parameters) that a regular column already logs, by column key. */
@@ -108,8 +130,27 @@ object LogColumns {
         (if (p.kind == kg.forester.sg.ssm.RrParam.Kind.STD && p.bit < 0) (if (p.target == 2) tcuAddr[p.addr] else ecuAddr[p.addr]) else null)
             ?: roleIdsKnown.entries.firstOrNull { p.id in it.value }?.key
 
+    /** The columns there can be: the wideband's only while it is switched on. */
+    fun offered(widebandOn: Boolean = Wideband.config.value.enabled): List<LogColumn> =
+        if (widebandOn) all else all.filter { it.group != WIDEBAND }
+
     fun enabled(): List<LogColumn> {
         val off = Repo.settings.logOff
-        return all.filter { it.key !in off }
+        return offered().filter { it.key !in off }
+    }
+
+    /** The first column, as it always was: the sample's wall clock in epoch ms (people's scripts read it so). */
+    const val TIME = "time"
+    /** The last one (0.9-beta21): ms from the start of the file, for programs that choke on epoch ms. */
+    const val T_MS = "t_ms"
+
+    /** A log's first line: [TIME], the [names] in between, [T_MS]. */
+    fun header(names: List<String>): String = (listOf(TIME) + names + T_MS).joinToString(",")
+
+    /** One line under [header]: [values] already joined by commas, the file started at [t0]. */
+    fun line(timeMs: Long, t0: Long, values: String): String = buildString {
+        append(timeMs)
+        if (values.isNotEmpty()) append(',').append(values)
+        append(',').append((timeMs - t0).coerceAtLeast(0))
     }
 }

@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -102,12 +106,18 @@ class MainActivity : ComponentActivity() {
         // adb: … --ez linkdemo true: a made-up Link G4X on a CANable (what a sports-ECU car would see)
         if (intent?.hasExtra("linkdemo") == true) Repo.linkDemo.value = intent.getBooleanExtra("linkdemo", false)
         if (intent?.getBooleanExtra("skipSetup", false) == true) Repo.settings.setupDone = true
+        testVin(intent)
         testAlert(intent)
         voiceTest(intent)
         kg.forester.sg.data.Shortcuts.load(this)
         // once a day: is there a newer release on GitHub?
         Thread { runCatching { kg.forester.sg.data.Updater.checkDaily(applicationContext) } }.start()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // a phone on its side: the background goes under the camera cutout too (it was a black strip there); the
+        // content keeps out of it by the cutout's inset (see App)
+        if (android.os.Build.VERSION.SDK_INT >= 28) window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
         hideSystemBars()
         // Phones get the full head-unit layout too, sideways (either way round) and scaled to fit.
         if (resources.configuration.smallestScreenWidthDp < 600) {
@@ -138,7 +148,7 @@ class MainActivity : ComponentActivity() {
                         App()
                         var setup by remember { mutableStateOf(!Repo.settings.setupDone) }
                         if (setup) kg.forester.sg.ui.FirstRunSetup { setup = false }
-                        Splash()
+                        kg.forester.sg.ui.StartSplash()
                     }
                 }
             }
@@ -150,8 +160,21 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         if (intent.hasExtra("demo")) Repo.settings.demo = intent.getBooleanExtra("demo", false)
         if (intent.hasExtra("linkdemo")) Repo.linkDemo.value = intent.getBooleanExtra("linkdemo", false)
+        testVin(intent)
         testAlert(intent)
         voiceTest(intent)
+    }
+
+    /**
+     * adb: am start -n kg.forester.sg/.MainActivity --ez demo true --es vin JTDKB20U093123456: the car as if its ECU
+     * gave this VIN (another make: the header, the logo, «другая машина»); --es vin "" forgets it.
+     */
+    private fun testVin(i: android.content.Intent?) {
+        // adb: … --es obdEcu "ECM-EngineControl · CALID 89663-12345": what OBD mode 09 would tell (Настройки → Основные)
+        i?.getStringExtra("obdEcu")?.let { Repo.obdEcu.value = it }
+        val vin = i?.getStringExtra("vin") ?: return
+        Repo.vin.value = vin.trim().uppercase()
+        if (vin.isBlank()) Repo.settings.lastVin = ""
     }
 
     /**
@@ -163,6 +186,11 @@ class MainActivity : ComponentActivity() {
     private fun voiceTest(i: android.content.Intent?) {
         i?.getStringExtra("voiceText")?.let { kg.forester.sg.service.Voice.runText(this, it) }
         i?.getStringExtra("orbDemo")?.let { kg.forester.sg.service.Voice.rehearse(this, it) }
+        // adb: … --es navHint "300 м|Поверните направо на Киевскую": a navigator's turn hint («Приборка с картой»); "" clears it
+        i?.getStringExtra("navHint")?.let { h ->
+            kg.forester.sg.service.NavGuidance.hint.value = if (h.isEmpty()) null
+            else kg.forester.sg.service.NavHint("adb", h.substringBefore('|'), h.substringAfter('|', ""), "", null)
+        }
     }
 
     private fun testAlert(i: android.content.Intent?) {
@@ -208,43 +236,35 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Start-up picture over everything for a moment, then fades out (the 3D frames load meanwhile). */
-@Composable
-private fun Splash() {
-    var show by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { delay(1800); show = false }
-    androidx.compose.animation.AnimatedVisibility(
-        show,
-        enter = androidx.compose.animation.EnterTransition.None,
-        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(600)),
-    ) {
-        // drawable-port has an upright version for phones, so cropping never cuts the emblem
-        androidx.compose.foundation.Image(
-            androidx.compose.ui.res.painterResource(R.drawable.splash), null,
-            Modifier.fillMaxSize().background(Color.Black),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-        )
-    }
-}
-
 /**
  * The layout is drawn for a 1280×720 screen at ~160 dpi. Head units that report a higher dpi get fewer dp
  * and the numbers get clipped, so by default shrink the density until a 1180×660 dp layout fits.
  * A fixed scale can be chosen in the settings.
+ *
+ * A phone is that shrink by nature (the whole layout on a 6" screen), so there the scale goes up from it: 100 % =
+ * everything on the screen, more = bigger at the cost of room, never so big that the wide layout gives way to the
+ * compact one. The text follows the system font size there too (within reason: the cards have fixed room).
  */
 @Composable
 private fun ScaledDensity(content: @Composable () -> Unit) {
     val scale by Repo.uiScale.collectAsState()
     val base = androidx.compose.ui.platform.LocalDensity.current
     val cfg = androidx.compose.ui.platform.LocalConfiguration.current
-    val density = remember(scale, base, cfg.screenWidthDp, cfg.screenHeightDp) {
-        if (scale > 0) {
-            androidx.compose.ui.unit.Density(base.density * scale / 100f, base.fontScale)
-        } else {
-            val fit = minOf(cfg.screenWidthDp * base.density / 1180f, cfg.screenHeightDp * base.density / 660f)
-            // only in landscape: an upright phone gets the compact panel instead
-            val landscape = cfg.screenWidthDp > cfg.screenHeightDp
-            if (landscape && fit < base.density && fit >= base.density * 0.5f) androidx.compose.ui.unit.Density(fit, 1f) else base
+    val density = remember(scale, base, cfg.screenWidthDp, cfg.screenHeightDp, cfg.smallestScreenWidthDp) {
+        val fit = minOf(cfg.screenWidthDp * base.density / 1180f, cfg.screenHeightDp * base.density / 660f)
+        // only in landscape: an upright phone gets the compact panel instead
+        val landscape = cfg.screenWidthDp > cfg.screenHeightDp
+        val fits = landscape && fit < base.density && fit >= base.density * 0.5f
+        when {
+            cfg.smallestScreenWidthDp < 600 -> {
+                val auto = if (fits) fit else base.density
+                val d = auto * scale.coerceAtLeast(100) / 100f
+                val widest = if (landscape) cfg.screenWidthDp * base.density / 920f else d
+                androidx.compose.ui.unit.Density(minOf(d, widest).coerceAtLeast(auto), base.fontScale.coerceIn(0.85f, 1.3f))
+            }
+            scale > 0 -> androidx.compose.ui.unit.Density(base.density * scale / 100f, base.fontScale)
+            fits -> androidx.compose.ui.unit.Density(fit, 1f)
+            else -> base
         }
     }
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides density) {
@@ -306,7 +326,8 @@ fun App() {
                 kg.forester.sg.service.VoiceTarget.HOME -> Screen.Home
                 kg.forester.sg.service.VoiceTarget.DRIVE -> Screen.Drive
                 kg.forester.sg.service.VoiceTarget.FUEL -> Screen.Fuel
-                kg.forester.sg.service.VoiceTarget.GEARBOX -> if (Repo.settings.gearbox == "mt") screen else Screen.Gearbox
+                kg.forester.sg.service.VoiceTarget.GEARBOX ->
+                    if (Repo.settings.gearbox == "mt" || kg.forester.sg.data.CarKind.other.value) screen else Screen.Gearbox
                 kg.forester.sg.service.VoiceTarget.BATTERY -> Screen.Battery
                 kg.forester.sg.service.VoiceTarget.DTC -> Screen.Dtc
                 kg.forester.sg.service.VoiceTarget.MEDIA -> Screen.Media
@@ -316,7 +337,7 @@ fun App() {
     androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier.fillMaxSize().background(
             Brush.verticalGradient(listOf(Color(0xFF0E1222), C.Bg))
-        )
+        ).windowInsetsPadding(WindowInsets.displayCutout) // the background under the cutout, the content beside it
     ) {
         // Split screen next to the navigator: switch to the compact driver layout instead of squeezing.
         // Narrow: split screen next to the navigator on the head unit, or a phone held upright.
@@ -391,7 +412,9 @@ fun App() {
 @Composable
 private fun Modifier.carouselSwipe(screen: Screen, go: (Screen) -> Unit): Modifier {
     val names by Repo.carousel.collectAsState()
-    val round = names.mapNotNull { n -> Screen.entries.firstOrNull { it.name == n } }
+    // only the screens the menu shows: no АКПП on a manual or on another make, no switched-off ones
+    val visible = visibleScreens()
+    val round = names.mapNotNull { n -> Screen.entries.firstOrNull { it.name == n } }.filter { it in visible }
     if (round.size < 2 || screen !in round) return this
     val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { 110.dp.toPx() }
     val i = round.indexOf(screen)
@@ -437,12 +460,15 @@ private fun visibleScreens(): List<Screen> {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var list = Screen.entries.toList()
     if (Repo.settings.gearbox == "mt") list = list - Screen.Gearbox
+    // another make: the АКПП screen reads Subaru's transmission unit (SSM), which it doesn't have
+    if (kg.forester.sg.data.CarKind.other.collectAsState().value) list = list - Screen.Gearbox
     // Media drives any player (Yandex Music, VK…) through its media session, radio only on FYT head units
     if (isPhone(ctx)) list = list - Screen.Apps // the app launcher is for head units
     val s = Repo.settings
     if (!s.feature("sensors")) list = list - Screen.Sensors
     if (!s.feature("perf")) list = list - Screen.Perf
     if (!s.feature("health")) list = list - Screen.Health
+    if (!s.feature("mine")) list = list - Screen.Mine
     return list
 }
 
@@ -454,7 +480,7 @@ private fun NavRail(current: Screen, onSelect: (Screen) -> Unit) {
     // The logo in the corner, the scrolling area below it; fades hint that more buttons are above/below.
     Column(Modifier.width(92.dp).fillMaxHeight()) {
     Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
-        SubaruLogo(Modifier.size(width = 86.dp, height = 46.dp))
+        kg.forester.sg.ui.BrandLogo(Modifier.size(width = 86.dp, height = 46.dp))
     }
     Spacer(Modifier.height(10.dp))
     Box(Modifier.fillMaxWidth().weight(1f)) {
@@ -503,13 +529,13 @@ private fun NavBar(current: Screen, onSelect: (Screen) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             visibleScreens().forEach { s ->
-                Box(Modifier.width(96.dp)) { RailItem(s.icon, s.title, s == current) { onSelect(s) } }
+                Box(Modifier.width(96.dp)) { RailItem(s.icon, s.title, s == current, minHeight = 56.dp) { onSelect(s) } }
             }
             if (shortcuts.isNotEmpty()) {
                 Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(34.dp).background(C.Border))
                 shortcuts.forEach { sc ->
                     Box(Modifier.width(96.dp)) {
-                        RailItem(kg.forester.sg.data.Shortcuts.icon(sc.icon), sc.label, false, accent = true) {
+                        RailItem(kg.forester.sg.data.Shortcuts.icon(sc.icon), sc.label, false, accent = true, minHeight = 56.dp) {
                             kg.forester.sg.data.Shortcuts.launch(ctx, sc)
                         }
                     }
@@ -527,15 +553,23 @@ private fun NavBar(current: Screen, onSelect: (Screen) -> Unit) {
     }
 }
 
+/**
+ * A screen's button: icon over its name, [minHeight] tall (64 dp in the side rail, about the size of a fingertip
+ * pressed on a moving car; it was ~50, a list taller than the screen scrolls).
+ */
 @Composable
-private fun RailItem(icon: ImageVector, title: String, selected: Boolean, accent: Boolean = false, onClick: () -> Unit) {
+private fun RailItem(
+    icon: ImageVector, title: String, selected: Boolean, accent: Boolean = false,
+    minHeight: androidx.compose.ui.unit.Dp = 64.dp, onClick: () -> Unit,
+) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+        Modifier.fillMaxWidth().heightIn(min = minHeight).clip(RoundedCornerShape(14.dp))
             .background(if (selected) C.Purple.copy(alpha = 0.3f) else Color.Transparent)
             .then(if (selected) Modifier.border(1.dp, C.Purple, RoundedCornerShape(14.dp)) else Modifier)
             .clickable(onClick = onClick)
             .padding(vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(icon, null, tint = if (selected) C.Violet else if (accent) C.Blue else C.Sub, modifier = Modifier.size(24.dp))
         Spacer(Modifier.height(2.dp))
@@ -545,15 +579,14 @@ private fun RailItem(icon: ImageVector, title: String, selected: Boolean, accent
 
 @Composable
 private fun TopBar(screen: Screen, logo: Boolean) {
-    val e by Repo.live.collectAsState()
     val link by Repo.link.collectAsState()
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) { while (true) { now = Date(); delay(5000) } }
 
     Row(Modifier.fillMaxWidth().height(60.dp), verticalAlignment = Alignment.CenterVertically) {
         // with the side rail on the left the logo sits in the corner above it (see NavRail)
-        if (logo) {
-            SubaruLogo(Modifier.size(width = 96.dp, height = 50.dp))
+        if (logo && kg.forester.sg.ui.logoShown()) {
+            kg.forester.sg.ui.BrandLogo(Modifier.size(width = 96.dp, height = 50.dp))
             Spacer(Modifier.width(16.dp))
         } else Spacer(Modifier.width(4.dp))
         // a long model from the ECU ("IMPREZA STI SPEC C") must not push the values aside: a smaller font, then «…»
@@ -568,12 +601,10 @@ private fun TopBar(screen: Screen, logo: Boolean) {
         kg.forester.sg.ui.StatusPill()
         kg.forester.sg.ui.ThemeButton(22.dp)
         Spacer(Modifier.width(16.dp))
-        Icon(Lucide.BatteryCharging, null, tint = C.Text, modifier = Modifier.size(22.dp))
-        T(" ${fmt(e.batteryV?.toDouble())} V", 18.sp)
-        Spacer(Modifier.width(22.dp))
-        Icon(Lucide.Thermometer, null, tint = C.Text, modifier = Modifier.size(22.dp))
-        T(" ${e.coolantC ?: "—"}°C", 18.sp)
-        Spacer(Modifier.width(22.dp))
+        TopReadings()
+        Spacer(Modifier.width(18.dp))
+        kg.forester.sg.ui.GpsIcon(22.dp)
+        Spacer(Modifier.width(12.dp))
         LinkIcon(24.dp)
         Spacer(Modifier.width(22.dp))
         T(SimpleDateFormat("HH:mm", Locale.US).format(now), 26.sp, weight = FontWeight.SemiBold)
@@ -586,13 +617,21 @@ private fun TopBar(screen: Screen, logo: Boolean) {
     }
 }
 
+/**
+ * Battery voltage and coolant in the header, each read on its own: a reading recomposes these two numbers,
+ * not the whole header with the car's name, the logo and the icons.
+ */
 @Composable
-private fun BottomBar() = kg.forester.sg.ui.BottomStatusBar()
+private fun TopReadings() {
+    val live = Repo.live.collectAsState()
+    val volts by remember { androidx.compose.runtime.derivedStateOf { fmt(live.value.batteryV?.toDouble()) } }
+    val coolant by remember { androidx.compose.runtime.derivedStateOf { live.value.coolantC } }
+    Icon(Lucide.BatteryCharging, null, tint = C.Text, modifier = Modifier.size(22.dp))
+    T(" $volts V", 18.sp)
+    Spacer(Modifier.width(22.dp))
+    Icon(Lucide.Thermometer, null, tint = C.Text, modifier = Modifier.size(22.dp))
+    T(" ${coolant ?: "—"}°C", 18.sp)
+}
 
 @Composable
-private fun SubaruLogo(modifier: Modifier) {
-    androidx.compose.foundation.Image(
-        androidx.compose.ui.res.painterResource(R.drawable.subaru_logo), "Subaru", modifier,
-        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-    )
-}
+private fun BottomBar() = kg.forester.sg.ui.BottomStatusBar()

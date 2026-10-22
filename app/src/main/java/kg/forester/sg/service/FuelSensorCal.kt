@@ -21,6 +21,7 @@ class FuelSensorCal(ctx: Context, name: String = "fuelcal", private val vRange: 
     private val cnt = IntArray(bins)
     private var unit = p.getString("unit", "")!!
     private var smooth: Double? = null
+    private var smoothMs = 0L
     private var lastLearnMs = 0L
     private var lastSaveMs = 0L
 
@@ -62,8 +63,11 @@ class FuelSensorCal(ctx: Context, name: String = "fuelcal", private val vRange: 
             unit = u; sum.fill(0.0); cnt.fill(0); smooth = null
             p.edit().putString("unit", u).remove("bins").apply()
         }
-        // the sender swings with every bump and turn: smooth over ~30 s
-        val sm = smooth?.let { it + (x - it) * 0.03 } ?: x
+        // the sender swings with every bump and turn: smoothed with a time constant of ~8 s (0.12 of the gap a second),
+        // by time (the fast poll samples 3 times as often)
+        val dt = FuelCalc.sampleDt(smoothMs, now)
+        smoothMs = now
+        val sm = smooth?.let { it + (x - it) * (dt * 0.12).coerceAtMost(1.0) } ?: x
         smooth = sm
         if (stopped && knownLitres != null && now - lastLearnMs > 5000) {
             lastLearnMs = now

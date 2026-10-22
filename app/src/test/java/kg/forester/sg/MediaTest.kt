@@ -32,4 +32,11 @@ class MediaTest {
         assertEquals("subaru", kg.forester.sg.service.LocalMusic.otherLayout("ыгифкг"))
         assertEquals("рок", kg.forester.sg.service.LocalMusic.otherLayout("hjr"))
     }
+
+    @Test fun coverSearchLeavesOutEditionNotes() {
+        assertEquals("Queen Bohemian Rhapsody", kg.forester.sg.service.Covers.term("Queen", "Bohemian Rhapsody (Remastered 2011)"))
+        assertEquals("Кино Группа крови", kg.forester.sg.service.Covers.term(" Кино ", "Группа крови [Live]"))
+        assertEquals("Intro", kg.forester.sg.service.Covers.term("", "Intro"))
+        assertEquals("(Untitled)", kg.forester.sg.service.Covers.term("", "(Untitled)")) // nothing but a note: kept
+    }
 }

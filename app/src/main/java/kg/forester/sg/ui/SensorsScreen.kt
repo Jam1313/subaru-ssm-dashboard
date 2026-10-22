@@ -85,7 +85,8 @@ fun SensorsScreen() {
             Spacer(Modifier.height(4.dp))
             T(
                 when {
-                    obd -> "Машина отвечает только по стандартному OBD-II: расширенных параметров Subaru нет."
+                    obd -> "Машина отвечает только по стандартному OBD-II: параметров Subaru нет, а стандартных у неё ${avail.count { it.id.startsWith("OBD_") }}. " +
+                        "Отметьте, что смотреть (каждый отмеченный замедляет опрос, особенно на K-Line)."
                     kg.forester.sg.data.CanEcu.active -> "Спортивный ЭБУ по CAN: ${avail.size} значений из его потока и своих значений из CAN " +
                         "(Настройки, Авто и адаптер). Отметьте, что смотреть."
                     init == null -> "Список зависит от ЭБУ и его прошивки: подключитесь к машине (в демо-режиме его нет)."
@@ -93,6 +94,7 @@ fun SensorsScreen() {
                 },
                 12.sp, C.Sub,
             )
+            if (obd) ObdbPanel()
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 filters.forEach { (k, l) -> Chip(l, filter == k, { filter = k }) }
@@ -100,7 +102,7 @@ fun SensorsScreen() {
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
-                label = { T("Поиск", 12.sp, C.Sub) },
+                label = { FieldLabel("Поиск") },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = C.Text, unfocusedTextColor = C.Text,
                     focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,

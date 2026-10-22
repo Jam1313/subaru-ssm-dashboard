@@ -27,15 +27,18 @@ class BatteryMonitor(private val ctx: Context) {
     private var wasRunning = false
     private var lastStoppedMs = 0L
     private var runningSinceMs = 0L
-    private val restingSamples = ArrayList<Float>()
+    /** Resting voltage over the last [RESTING_MS]: time, volts. */
+    private val restingSamples = ArrayDeque<Pair<Long, Float>>()
     private var restingLogged = false
-    private val chargeSamples = ArrayList<Float>()
+    /** Running voltage over the last [CHARGE_MS]: time, volts. */
+    private val chargeSamples = ArrayDeque<Pair<Long, Float>>()
     private var chargeLogged = false
     private var voltSum = 0.0
     private var voltN = 0
     private var voltSlot = 0L
     private val idleSamples = ArrayList<Float>()
     private val revSamples = ArrayList<Float>()
+    private var idleRevMs = 0L
     private var chargeMin = Float.NaN
     private var chargeMax = Float.NaN
     private var lastAltDuty = 0f
@@ -77,12 +80,12 @@ class BatteryMonitor(private val ctx: Context) {
         if (rpm == 0) {
             lastStoppedMs = now
             if (restingSamples.isEmpty()) restingSinceMs = now
-            restingSamples.add(v)
-            if (restingSamples.size > 40) restingSamples.removeAt(0)
-            // after ~5 s of steady ignition-on readings publish the resting voltage (OBD-II reads the voltage
-            // only every few polls, so count time as well as samples)
-            if (restingSamples.size >= 20 || (restingSamples.size >= 5 && now - restingSinceMs >= 5000)) {
-                val med = restingSamples.sorted()[restingSamples.size / 2]
+            restingSamples.addLast(now to v)
+            while (now - restingSamples.first().first > RESTING_MS) restingSamples.removeFirst()
+            // after ~5 s of steady ignition-on readings publish the resting voltage: by time, not by count (OBD-II
+            // reads the voltage only every few polls, the fast poll 12 times a second)
+            if (restingSamples.size >= 5 && now - restingSinceMs >= 5000) {
+                val med = restingSamples.map { it.second }.sorted()[restingSamples.size / 2]
                 Repo.battery.value = Repo.battery.value.copy(restingV = med, restingTimeMs = now)
                 val off = Repo.settings.lastEngineOffMs
                 val parkedH = if (off > 0 && now > off) (now - off) / 3_600_000f else null
@@ -114,7 +117,7 @@ class BatteryMonitor(private val ctx: Context) {
                 val window = recent.filter { it.rpm < 500 }
                 val minV = window.minOfOrNull { it.v }
                 if (minV != null) {
-                    val crankStart = window.firstOrNull { it.v < (restingSamples.lastOrNull() ?: minV) - 0.3f }?.t
+                    val crankStart = window.firstOrNull { it.v < (restingSamples.lastOrNull()?.second ?: minV) - 0.3f }?.t
                     val dur = if (crankStart != null) now - crankStart else 0L
                     // cranking speed: the ECU's rpm while the starter turns (0 on some ECUs: then unknown)
                     val crankRpm = window.map { it.rpm }.filter { it in 50..499 }.takeIf { it.isNotEmpty() }?.average()?.toInt()
@@ -165,17 +168,21 @@ class BatteryMonitor(private val ctx: Context) {
                         Alerts.Level.WARN, 30 * 60_000L)
                 }
             }
-            if (rpm < 1000) idleSamples.add(v) else if (rpm in 1800..3500) revSamples.add(v)
-            if (idleSamples.size > 3000) idleSamples.removeAt(0)
-            if (revSamples.size > 3000) revSamples.removeAt(0)
+            // a sample per quarter second, as the plain polling gives: 3000 of them are the last ~12 min at that rpm
+            if (now - idleRevMs >= 200) {
+                idleRevMs = now
+                if (rpm < 1000) idleSamples.add(v) else if (rpm in 1800..3500) revSamples.add(v)
+                if (idleSamples.size > 3000) idleSamples.removeAt(0)
+                if (revSamples.size > 3000) revSamples.removeAt(0)
+            }
             chargeMin = if (chargeMin.isNaN()) v else minOf(chargeMin, v)
             chargeMax = if (chargeMax.isNaN()) v else maxOf(chargeMax, v)
             lastAltDuty = s.altDutyPct ?: lastAltDuty
-            chargeSamples.add(v)
-            if (chargeSamples.size > 600) chargeSamples.removeAt(0)
+            chargeSamples.addLast(now to v)
+            while (now - chargeSamples.first().first > CHARGE_MS) chargeSamples.removeFirst()
             val b = Repo.battery.value
             Repo.battery.value = b.copy(
-                chargingV = chargeSamples.average().toFloat(),
+                chargingV = chargeSamples.map { it.second }.average().toFloat(),
                 chargingMinV = minOf(b.chargingMinV ?: v, v),
                 chargingMaxV = maxOf(b.chargingMaxV ?: v, v),
                 chargeIdleV = idleSamples.takeIf { it.size >= 5 }?.average()?.toFloat() ?: b.chargeIdleV,
@@ -200,7 +207,7 @@ class BatteryMonitor(private val ctx: Context) {
         // at least a minute of charging and some readings (OBD-II reads the voltage only every few polls)
         if (chargeLogged || chargeSamples.size < 10 || now - runningSinceMs < 90_000) return
         chargeLogged = true
-        event(now, "charging", chargeSamples.average(), lastAltDuty.toDouble(), info(
+        event(now, "charging", chargeSamples.map { it.second.toDouble() }.average(), lastAltDuty.toDouble(), info(
             "idle_v" to idleSamples.takeIf { it.size >= 5 }?.average(), "rev_v" to revSamples.takeIf { it.size >= 5 }?.average(),
             "min_v" to chargeMin.takeUnless { it.isNaN() }?.toDouble(), "max_v" to chargeMax.takeUnless { it.isNaN() }?.toDouble(),
         ))
@@ -267,6 +274,9 @@ class BatteryMonitor(private val ctx: Context) {
     }
 
     companion object {
+        /** The resting median's window and the charging average's: 40 and 600 samples of the plain polling. */
+        private const val RESTING_MS = 10_000L
+        private const val CHARGE_MS = 150_000L
         /** battery.csv: extra = crank ms / alternator duty %, then the further numbers of each reading. */
         private val CSV_INFO = listOf("parked_h", "soc_pct", "intake_c", "coolant_c", "crank_rpm", "recovery_s", "idle_v", "rev_v", "min_v", "max_v")
         private val CSV_HEAD = "datetime,type,volts,extra," + CSV_INFO.joinToString(",")

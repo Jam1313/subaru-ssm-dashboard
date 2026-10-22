@@ -82,7 +82,7 @@ object Tpms {
         val battery = d[14].toInt() and 0xFF
         val now = System.currentTimeMillis()
         val wheel = wheelOf(id, d[0].toInt() and 0x0F)
-        // slow leak: more than 0.15 bar lost over 10 minutes at a steady temperature
+        // slow leak: more than 0.15 bar lost against the oldest reading of the last 10 minutes, once those span 5 minutes
         val h = history.getOrPut(id) { ArrayDeque() }
         h.addLast(now to bar)
         while (h.isNotEmpty() && now - h.first().first > 10 * 60_000L) h.removeFirst()

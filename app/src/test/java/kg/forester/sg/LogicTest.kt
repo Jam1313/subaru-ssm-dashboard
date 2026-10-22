@@ -31,6 +31,17 @@ class LogicTest {
         assertSame(wot, wot.saneMaf())
     }
 
+    @Test fun mafTopFollowsTheLearnedScale() {
+        // 450 g/s at 6500 rpm: past the stock top, real on a car whose MAF scale has grown to 450
+        val big = EcuSnapshot(rpm = 6500, mafGs = 450f)
+        assertNull(big.saneMaf().mafGs)
+        assertNull(big.saneMaf(150f).mafGs)
+        assertSame(big, big.saneMaf(450f))
+        // 0xFFFF and a per-rpm impossible reading stay junk whatever the scale
+        assertNull(EcuSnapshot(rpm = 7000, mafGs = 655.35f).saneMaf(600f).mafGs)
+        assertNull(EcuSnapshot(rpm = 2000, mafGs = 300f).saneMaf(600f).mafGs)
+    }
+
     @Test fun bottomBarConfig() {
         val l = BottomBarCfg.parse(BottomBarCfg.DEFAULT)
         assertEquals(listOf("range", "coolant", "battery", "intake", "altitude"), l.map { it.id })

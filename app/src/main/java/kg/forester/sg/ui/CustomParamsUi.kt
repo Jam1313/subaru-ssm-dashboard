@@ -73,9 +73,10 @@ fun CustomParamsDialog(onClose: () -> Unit) {
                 Chip("Готово", true, onClose)
             }
             Spacer(Modifier.height(6.dp))
-            T("Для прошивок, которых нет в базе RomRaider: адрес в памяти ЭБУ, как в поле «Custom field» у BtSSM. " +
-                "Параметр появится на «Датчиках», в логе и в выборе виджетов. С ролью FBKC / FLKC / IAM / целевой наддув " +
-                "его использует и экран «Мониторинг» с предупреждениями о детонации.", 12.sp, C.Sub)
+            T("Для прошивок, которых нет в базе RomRaider: адрес в памяти ЭБУ, как в поле «Custom field» у BtSSM, или формула " +
+                "из других значений. Параметр появится на «Датчиках», в логе и в выборе виджетов. С ролью FBKC / FLKC / IAM / целевой наддув " +
+                "его использует и экран «Мониторинг» с предупреждениями о детонации, с ролью MAF, AFR, ОЖ и т. п. он заменит значение ЭБУ везде " +
+                "(старые ЭБУ JECS отдают их не все или не так).", 12.sp, C.Sub)
             Spacer(Modifier.height(10.dp))
             if (list.isEmpty()) T("Пока ничего не добавлено.", 14.sp, C.Sub)
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -88,7 +89,8 @@ fun CustomParamsDialog(onClose: () -> Unit) {
                         Column(Modifier.weight(1f)) {
                             T(p.name.ifBlank { p.id }, 15.sp)
                             T(listOfNotNull(
-                                "0x%06X".format(p.addr), "${p.len} байт", CustomParam.STORAGES.firstOrNull { it.first == p.storage }?.second,
+                                if (p.calculated) "формула" else "0x%06X".format(p.addr), if (p.calculated) null else "${p.len} байт",
+                                if (p.calculated) null else CustomParam.STORAGES.firstOrNull { it.first == p.storage }?.second,
                                 p.formula.takeIf { it != "x" }, p.units.ifBlank { null },
                                 CustomParam.ROLES.firstOrNull { it.first == p.role && p.role.isNotEmpty() }?.let { "роль: ${it.second}" },
                             ).joinToString(" · "), 12.sp, C.Sub, maxLines = 1)
@@ -115,13 +117,20 @@ private fun CustomParamForm(start: CustomParam, onDone: () -> Unit) {
     var units by remember { mutableStateOf(start.units) }
     var dec by remember { mutableStateOf(start.decimals) }
     var role by remember { mutableStateOf(start.role) }
+    var calc by remember { mutableStateOf(start.calculated) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    // what a formula may refer to: the base's parameters and the other own ones (not itself: no loops)
+    val known = remember { kg.forester.sg.ssm.RomRaider.load(ctx).map { it.id }.toSet() + CustomParams.list().map { it.id } - start.id }
     val addrInt = addr.trim().removePrefix("0x").removePrefix("0X").toIntOrNull(16)
-    val exprOk = RrExpr.parse(formula.ifBlank { "x" }) != null
+    val expr = RrExpr.parse(formula.ifBlank { "x" })
+    val unknown = expr?.refs?.firstOrNull { it !in known }
     val error = when {
         name.isBlank() -> "Введите название"
-        addrInt == null || addrInt !in 0..0xFFFFFF -> "Адрес — до 6 шестнадцатеричных цифр, например FFB040"
-        storage == "float" && len != 4 -> "Float занимает 4 байта"
-        !exprOk -> "Формула: x, числа, + − * / и скобки"
+        !calc && (addrInt == null || addrInt !in 0..0xFFFFFF) -> "Адрес — до 6 шестнадцатеричных цифр, например FFB040"
+        !calc && storage == "float" && len != 4 -> "Float занимает 4 байта"
+        expr == null -> "Формула: x, числа, + − * /, скобки и другие значения (P8, [P9:mph], U1)"
+        unknown != null -> "Нет значения $unknown: номера P… как на «Датчиках», свои U1, U2…"
+        calc && expr.refs.isEmpty() -> "Формула без адреса должна использовать другие значения, например P12/P8*60"
         else -> null
     }
     Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -131,26 +140,37 @@ private fun CustomParamForm(start: CustomParam, onDone: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Chip("Сохранить", error == null, {
                 if (error == null) {
-                    CustomParams.put(start.copy(name = name.trim(), addr = addrInt!!, len = len, storage = storage,
+                    CustomParams.put(start.copy(name = name.trim(), addr = if (calc) -1 else addrInt!!, len = len, storage = storage,
                         formula = formula.trim().ifBlank { "x" }, units = units.trim(), decimals = dec, role = role))
                     onDone()
                 }
             })
         }
         Spacer(Modifier.height(10.dp))
+        Labeled("Откуда значение") {
+            Chip("Адрес в ЭБУ", !calc, { calc = false })
+            Chip("Формула из других значений", calc, { calc = true; if (formula.isBlank() || formula == "x") formula = "" })
+        }
+        Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FormField("Название", name, Modifier.weight(1.4f)) { name = it }
-            FormField("Адрес (hex)", addr, Modifier.weight(1f), KeyboardType.Ascii, KeyboardCapitalization.Characters) { addr = it }
-            FormField("Формула", formula, Modifier.weight(1f), KeyboardType.Ascii) { formula = it }
+            if (!calc) FormField("Адрес (hex)", addr, Modifier.weight(1f), KeyboardType.Ascii, KeyboardCapitalization.Characters) { addr = it }
+            FormField("Формула", formula, Modifier.weight(if (calc) 2f else 1f), KeyboardType.Ascii) { formula = it }
             FormField("Единицы", units, Modifier.weight(0.6f)) { units = it }
         }
         Spacer(Modifier.height(10.dp))
-        Labeled("Длина") { listOf(1, 2, 4).forEach { n -> Chip("$n байт", len == n, { len = n }) } }
-        Labeled("Тип") { CustomParam.STORAGES.forEach { (k, l) -> Chip(l, storage == k, { storage = k; if (k == "float") len = 4 }) } }
+        if (!calc) {
+            Labeled("Длина") { listOf(1, 2, 4).forEach { n -> Chip("$n байт", len == n, { len = n }) } }
+            Labeled("Тип") { CustomParam.STORAGES.forEach { (k, l) -> Chip(l, storage == k, { storage = k; if (k == "float") len = 4 }) } }
+        }
         Labeled("Знаков после запятой") { (0..3).forEach { n -> Chip("$n", dec == n, { dec = n }) } }
         Labeled("Роль") { CustomParam.ROLES.forEach { (k, l) -> Chip(l, role == k, { role = k }) } }
         Spacer(Modifier.height(6.dp))
-        T(error ?: "Пример из BtSSM для ЭБУ «572»: FLKC — адрес FFB040, 4 байта, float, формула x; FBKC — FFB01C так же.",
+        T(error ?: if (calc) "В формуле можно брать уже посчитанные значения: P8 — обороты, P12 — MAF г/с, P21 — впрыск мс, " +
+            "P11 — воздух на впуске, свои U1, U2… Например, виртуальный ШДК (AFR по MAF и впрыску, форсунки 380 cc): " +
+            "P12 / (P8 * (P21 - 0.6) * 380 * 0.000002 * 745 / 3600) и роль AFR. Оценка грубая: точность зависит от форсунок и их задержки."
+            else "Пример из BtSSM для ЭБУ «572»: FLKC — адрес FFB040, 4 байта, float, формула x; FBKC — FFB01C так же. " +
+                "В формуле можно использовать и другие значения: x*P8/1000.",
             12.sp, if (error != null) C.Orange else C.Sub)
     }
 }
@@ -171,7 +191,7 @@ internal fun FormField(
 ) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true,
-        label = { T(label, 12.sp, C.Sub) },
+        label = { FieldLabel(label) },
         keyboardOptions = KeyboardOptions(capitalization = caps, keyboardType = type),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = C.Text, unfocusedTextColor = C.Text,

@@ -39,9 +39,10 @@ data class MotionState(
  */
 object Motion : SensorEventListener {
     private var sm: SensorManager? = null
-    @Volatile private var grav: FloatArray? = null
-    @Volatile private var lin = FloatArray(3)
+    private val tracker = GravityTracker()
     private var zero: FloatArray? = null
+    /** The car stood still at the last sample (for the moving-off rewind of [GravityTracker]). */
+    private var wasStill = false
     private val speeds = ArrayDeque<Pair<Long, Float>>()
     private var lastGps: GpsFix? = null
     private var gpsLat: Float? = null
@@ -56,23 +57,21 @@ object Motion : SensorEventListener {
         val acc = m.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return
         m.registerListener(this, acc, SensorManager.SENSOR_DELAY_GAME)
         zero = Repo.settings.tiltZero.split(',').mapNotNull { it.toFloatOrNull() }.takeIf { it.size == 3 }?.toFloatArray()
+        tracker.start(zero)
         Repo.motion.value = Repo.motion.value.copy(hasSensor = true, calibrated = zero != null)
     }
 
     override fun onSensorChanged(ev: SensorEvent) {
-        val g = grav?.copyOf() ?: ev.values.copyOf()
-        // slow low-pass = gravity (tilt), the rest = the car's own acceleration
-        for (i in 0..2) g[i] = g[i] * 0.95f + ev.values[i] * 0.05f
-        grav = g
-        lin = FloatArray(3) { ev.values[it] - g[it] }
+        tracker.sample(ev.values, ev.timestamp)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     /** Car at rest on level ground: remember which way "down" is for this mounting. */
     fun calibrate() {
-        val g = grav ?: return
+        val g = tracker.reading ?: return
         zero = g.copyOf()
+        tracker.start(g)
         Repo.settings.tiltZero = g.joinToString(",")
         Repo.motion.value = Repo.motion.value.copy(calibrated = true)
     }
@@ -124,6 +123,13 @@ object Motion : SensorEventListener {
         val grade = if (climb.size >= 2 && climb.last().first - climb.first().first > 60)
             ((climb.last().second - climb.first().second) / (climb.last().first - climb.first().first) * 100).toFloat()
                 .takeIf { abs(it) < 40 } else null
+        // gravity follows the sensor only standing or at a steady speed, by the ECU's speed or else the GPS's; the
+        // first second of moving off (the ECU shows 0 below 3–4 km/h) is taken back out of it
+        val kmh = e.speedKmh?.toFloat() ?: gps?.takeIf { now - it.timeMs < 3000 }?.speedKmh
+        val still = kmh != null && kmh < 1f
+        if (wasStill && kmh != null && !still) tracker.rewind(GravityTracker.MOVE_OFF_SEC)
+        wasStill = still
+        tracker.tauSec = GravityTracker.tau(kmh, lonEcu, gpsLat.takeIf { gps != null })
         // VDC lateral G (m/s²) when the transmission/VDC unit gives it
         val vdc = Repo.rrValues.value.let { rr -> rr["P172"]?.toFloat()?.let { it / 9.81f } }
 
@@ -133,13 +139,13 @@ object Motion : SensorEventListener {
         var roll: Float? = null
         var source: String
         val ax = axes()
-        val gNow = grav
+        val gNow = tracker.gravity
         if (ax != null && gNow != null) {
             val (up, fwd, right) = ax
             val gu = dot(gNow, up); val gf = dot(gNow, fwd); val gr = dot(gNow, right)
             pitch = Math.toDegrees(atan2(gf.toDouble(), gu.toDouble())).toFloat() // nose up: "up" leans forward
             roll = Math.toDegrees(atan2(-gr.toDouble(), gu.toDouble())).toFloat() // right side down: "up" leans left
-            val l = lin
+            val l = tracker.linear
             lat = dot(l, right) / 9.81f
             lon = dot(l, fwd) / 9.81f
             source = "датчик магнитолы"
@@ -179,4 +185,97 @@ object Motion : SensorEventListener {
     private fun dot(a: FloatArray, b: FloatArray) = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
     private fun cross(a: FloatArray, b: FloatArray) = floatArrayOf(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
     private fun norm(a: FloatArray): FloatArray { val l = sqrt(dot(a, a)).takeIf { it > 1e-6f } ?: 1f; return FloatArray(3) { a[it] / l } }
+}
+
+/**
+ * Gravity in the sensor's frame, kept apart from the car's own acceleration. A plain low-pass filter (the Android
+ * SensorEvent example: alpha 0.8 at ~50 Hz) takes any acceleration held for a second or two for gravity and washes it
+ * out (the 0.95/0.05 one here before: a steady 0.6 g pull read ~8 % of itself after a second). Here gravity starts at
+ * the calibrated "down" (or the first reading) and follows the sensor only while the car is known to stand or to
+ * keep its speed ([tauSec], set from the ECU or GPS speed), and slowly: a slope or a parked tilt is taken in, a pull,
+ * a stop or a long bend never is.
+ */
+class GravityTracker {
+    /** Gravity, m/s² in the sensor's frame; null before the first reading. */
+    @Volatile var gravity: FloatArray? = null
+        private set
+    /** The reading with the sensor's noise smoothed (gravity and the car's acceleration together). */
+    @Volatile private var acc: FloatArray? = null
+    private var lastNs = 0L
+    /** Gravity over the last couple of seconds, to take back what moving off fed into it. */
+    private val past = ArrayDeque<Pair<Long, FloatArray>>()
+
+    /** Seconds gravity follows the sensor over; 0 = held as it is (speeding up, braking, cornering). */
+    @Volatile var tauSec = NO_SPEED_SEC
+
+    /** Start from [g] (the calibrated "down"), or from the next reading when null. */
+    fun start(g: FloatArray?) {
+        gravity = g?.copyOf()
+        synchronized(past) { past.clear() }
+    }
+
+    /** One reading [v] (m/s²) at [tNs] (the sensor's clock, ns). */
+    fun sample(v: FloatArray, tNs: Long) {
+        val dt = if (lastNs == 0L) 0f else ((tNs - lastNs) / 1e9f).coerceIn(0f, 0.5f)
+        lastNs = tNs
+        val a = acc?.let { p -> FloatArray(3) { p[it] + (v[it] - p[it]) * (dt / (NOISE_SEC + dt)) } } ?: v.copyOf()
+        acc = a
+        val g = gravity
+        val tau = tauSec
+        val next = when {
+            g == null -> a.copyOf()
+            tau > 0f -> FloatArray(3) { g[it] + (a[it] - g[it]) * (dt / (tau + dt)) }
+            else -> g
+        }
+        gravity = next
+        synchronized(past) {
+            if (past.isEmpty() || tNs - past.last().first >= 100_000_000L) past.addLast(tNs to next)
+            while (past.size > 2 && tNs - past.first().first > 3_000_000_000L) past.removeFirst()
+        }
+    }
+
+    /** Gravity back to what it was [sec] ago: the car turned out to be moving already. */
+    fun rewind(sec: Float) {
+        val t = lastNs - (sec * 1e9f).toLong()
+        synchronized(past) { past.lastOrNull { it.first <= t } ?: past.firstOrNull() }?.let { gravity = it.second.copyOf() }
+    }
+
+    /** The car's own acceleration, m/s² in the sensor's frame. */
+    val linear: FloatArray
+        get() {
+            val a = acc ?: return FloatArray(3)
+            val g = gravity ?: return FloatArray(3)
+            return FloatArray(3) { a[it] - g[it] }
+        }
+
+    /** The smoothed reading, gravity included: "down" with the car at rest. */
+    val reading: FloatArray? get() = acc?.copyOf()
+
+    companion object {
+        /** The sensor's noise smoothed over this, s. */
+        const val NOISE_SEC = 0.1f
+        /** Gravity follows the sensor over this standing, s: a parked slope is taken in within a few seconds. */
+        const val STILL_SEC = 2f
+        /** At a steady speed on a straight (GPS), s: a hill is taken in, an overtake is not. */
+        const val STEADY_SEC = 10f
+        /** At a steady speed with no GPS to say it is a straight, s: a long bend must not wash out. */
+        const val STEADY_BLIND_SEC = 20f
+        /** With no speed at all (no ECU, no GPS), s: slow enough to leave a pull or a stop alone. */
+        const val NO_SPEED_SEC = 30f
+        /** What is taken back when moving off: the ECU shows 0 for the first fraction of a second of moving. */
+        const val MOVE_OFF_SEC = 1f
+
+        /**
+         * How fast gravity may follow the sensor, s (0 = not at all): by the speed [kmh] (null = none known), the
+         * acceleration along the car from the speed [lonG], and the GPS's sideways G [latG] (null = no GPS).
+         */
+        fun tau(kmh: Float?, lonG: Float?, latG: Float?): Float = when {
+            kmh == null -> NO_SPEED_SEC
+            kmh < 1f -> STILL_SEC
+            lonG == null || abs(lonG) >= 0.04f -> 0f
+            latG == null -> STEADY_BLIND_SEC
+            abs(latG) < 0.05f -> STEADY_SEC
+            else -> 0f
+        }
+    }
 }

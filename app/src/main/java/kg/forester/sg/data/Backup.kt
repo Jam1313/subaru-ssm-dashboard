@@ -20,17 +20,19 @@ import java.util.zip.ZipOutputStream
 /**
  * Backup of everything the user built up: the database (trips, refills, charts, battery), all settings
  * (calibration, layouts, own gauge designs…) and the user's pictures. A zip with the app's own folder layout:
- * databases/, shared_prefs/, files/. Daily copies go to Download/SubaruDashboard, which outlives the app,
+ * databases/, shared_prefs/, files/. Daily copies go to Download/CarPulse, which outlives the app,
  * so data survives a reinstall (e.g. a release signed with another key).
  */
 object Backup {
     private const val DB = "forester.db"
-    private const val FOLDER = "SubaruDashboard"
+    // until the rename to CarPulse (0.9-beta21) the copies went to Download/SubaruDashboard as subaru-dashboard-*.zip:
+    // those stay where they are and still restore (the check is the database inside, not the name)
+    private const val FOLDER = "CarPulse"
     private const val KEEP = 7
     /** Prefs files worth keeping; "gauge_images" only holds a pending gallery request. */
     private val PREFS = listOf("settings", "shortcuts", "custom_gauges", "plate", "voice")
     /** Files under files/ (pictures); logs and caches are left out. */
-    private val FILES = listOf("gauges", "plate.png")
+    private val FILES = listOf("gauges", "plate.png", "defs")
 
     private fun dataDir(ctx: Context) = File(ctx.applicationInfo.dataDir)
 
@@ -72,7 +74,7 @@ object Backup {
         }
         if (!File(tmp, "databases/$DB").isFile) {
             tmp.deleteRecursively()
-            return "Это не резервная копия Subaru Dashboard"
+            return "Это не резервная копия CarPulse"
         }
         // stop everything that writes, then swap the files and start over
         ctx.stopService(Intent(ctx, kg.forester.sg.service.EcuService::class.java))
@@ -90,9 +92,9 @@ object Backup {
         return null
     }
 
-    fun suggestedName() = "subaru-dashboard-" + SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US).format(Date()) + ".zip"
+    fun suggestedName() = "carpulse-" + SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US).format(Date()) + ".zip"
 
-    /** Daily copy into Download/SubaruDashboard (kept: the last [KEEP]); called from the hourly housekeeping. */
+    /** Daily copy into Download/CarPulse (kept: the last [KEEP]); called from the hourly housekeeping. */
     fun autoBackupIfDue(ctx: Context) {
         val s = Repo.settings
         if (!s.autoBackup) return
@@ -105,6 +107,7 @@ object Backup {
         if (ok) s.lastAutoBackupMs = now
     }
 
+    @androidx.annotation.RequiresApi(29)
     private fun writeToDownloads(ctx: Context): Boolean {
         val cr = ctx.contentResolver
         val coll = MediaStore.Downloads.EXTERNAL_CONTENT_URI
@@ -117,7 +120,7 @@ object Backup {
         // older copies made by this install; the user's other files in the folder are not visible to the app anyway
         cr.query(
             coll, arrayOf(MediaStore.Downloads._ID, MediaStore.Downloads.DISPLAY_NAME),
-            "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME} LIKE 'subaru-dashboard-%'",
+            "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME} LIKE 'carpulse-%'",
             arrayOf("%$FOLDER%"), "${MediaStore.Downloads.DATE_ADDED} DESC",
         )?.use { c ->
             var n = 0
@@ -131,7 +134,7 @@ object Backup {
         val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER)
         if (!dir.isDirectory && !dir.mkdirs()) return false
         File(dir, suggestedName()).outputStream().use { write(ctx, it) }
-        dir.listFiles { f -> f.name.startsWith("subaru-dashboard-") }?.sortedByDescending { it.name }?.drop(KEEP)?.forEach { it.delete() }
+        dir.listFiles { f -> f.name.startsWith("carpulse-") }?.sortedByDescending { it.name }?.drop(KEEP)?.forEach { it.delete() }
         return true
     }
 

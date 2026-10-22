@@ -180,8 +180,15 @@ object BoxRoles {
         "egt" to "Температура выхлопа",
         "fuelP" to "Давление топлива",
         "emap" to "Давление в выхлопе",
+        "iatIn" to "Воздух до интеркулера",
+        "iatOut" to "Воздух после интеркулера",
+        "eth" to "Этанол, %",
+        "pumpV" to "Напряжение на бензонасосе",
         "fuelLevel" to "Уровень топлива (провод бака)",
     )
+
+    /** Roles in bar whatever the sensor's unit (see [SensorBox.roleBar]). */
+    val PRESSURE = setOf("oilP", "fuelP", "emap")
 
     fun title(r: String) = all.firstOrNull { it.first == r }?.second ?: "Просто показывать"
 
@@ -189,11 +196,15 @@ object BoxRoles {
     fun meaning(r: String) = when (r) {
         "oil" -> "Заменит расчётную температуру масла везде: прогрев, турботаймер, 3D мотор, карточка масла"
         "oilP" -> "Предупредит голосом, если давление ниже заводской нормы для этих оборотов, и сразу, если оно упало почти до нуля"
-        "afr" -> "Будет в логах и на плитках рядом с AFR от ЭБУ"
+        "afr" -> "Будет в логах и на плитках рядом с AFR от ЭБУ. Если у ЭБУ своего ШДК нет, заменит его везде: плитка AFR, расход, предупреждения о смеси"
         "egt" -> "Предупредит, если выхлоп горячее порога. Термопар можно до четырёх, по одной на цилиндр: тревога по самой горячей"
         "fuelP" -> "Посчитает перепад относительно давления в коллекторе (сколько держит регулятор) и предупредит, если под наддувом он проваливается"
         "fuelLevel" -> "Остаток в баке по датчику, а не только счётом от заправки. Тарировка сама: на стоянках по литрам, известным от заправок. Если уровень отдаёт ЭБУ, берётся он"
         "emap" -> "В лог рядом с наддувом: насколько турбина душит мотор (давление в выхлопе обычно в 1,5–2 раза выше наддува)"
+        "iatIn" -> "С датчиком после интеркулера покажет, сколько он снимает, и его КПД (вход в турбину по датчику впуска ЭБУ в MAF)"
+        "iatOut" -> "Температура воздуха, который идёт в мотор. С датчиком до интеркулера покажет его перепад и КПД"
+        "eth" -> "Доля этанола в баке: на плитке и в логе"
+        "pumpV" -> "Если давление топлива проседает, подскажет, не в проводке ли насоса дело (ниже 12 В)"
         else -> "Значение появится в списке индикаторов: на главном экране, в нижней панели"
     }
 }
@@ -538,13 +549,28 @@ object SensorBox {
 
     /**
      * The value of the input with [role], for the engine guard; with several (an EGT per cylinder), the highest.
-     * Without one on the box, a sports ECU's on the CAN bus (CanEcu) stands in.
+     * Without one on the box, an own CAN channel with that role stands in (a third-party CAN sensor board, an EGT in
+     * a Link's own stream), then a sports ECU's stream (CanEcu).
      */
-    fun role(role: String): Float? {
-        val box = if (!enabled.value && !Repo.demoOn.value) null
-            else slots.value.filter { it.role == role }.mapNotNull { readings.value[it.input]?.value }.maxOrNull()
-        return box ?: CanEcu.role(role)
+    fun role(role: String): Float? = roleWithUnit(role)?.first
+
+    /** A pressure role ([BoxRoles.PRESSURE]) in bar, whatever unit its sensor or CAN channel gives. */
+    fun roleBar(role: String): Float? = roleWithUnit(role)?.let { Derived.bar(it.first, it.second) }
+
+    /** [role]'s value and the unit it is in, from the first source that has it (see [role]). */
+    fun roleWithUnit(role: String): Pair<Float, String>? {
+        val box = if (!enabled.value && !Repo.demoOn.value) emptyList()
+            else slots.value.filter { it.role == role }.mapNotNull { s -> readings.value[s.input]?.value?.let { it to s.unit } }
+        return pickRole(box, CanChannels.roleValues(role)) ?: CanEcu.role(role)?.let { it to CanEcu.roleUnit(role) }
     }
+
+    /** Some input or CAN channel is set to [role] (it may have no value right now). */
+    fun hasRole(role: String): Boolean =
+        ((enabled.value || Repo.demoOn.value) && slots.value.any { it.role == role }) || CanChannels.list().any { it.role == role }
+
+    /** The first source that has a value: the box before the CAN channels; of several in one (an EGT per cylinder), the highest. */
+    fun pickRole(vararg sources: List<Pair<Float, String>>): Pair<Float, String>? =
+        sources.firstNotNullOfOrNull { l -> l.filter { !it.first.isNaN() }.maxByOrNull { it.first } }
 
     /** Values by indicator id ("box_A0"), for the home cards and the bottom bar. */
     fun values(): Map<String, Double> = readings.value.mapNotNull { (k, r) -> r.value?.let { "box_$k" to it.toDouble() } }.toMap()

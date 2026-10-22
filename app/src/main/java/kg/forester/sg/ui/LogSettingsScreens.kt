@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kg.forester.sg.data.Repo
+import kg.forester.sg.data.EcuCaps
 import kotlinx.coroutines.delay
 import java.io.File
 
@@ -210,7 +212,8 @@ private fun LiveGroup(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
 fun SettingsScreen() {
     var tab by remember { mutableStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // scrolls: with a bigger system font (110–120 %) the last tabs went off the screen
+        Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Основные", tab == 0, { tab = 0 }, Lucide.SlidersHorizontal)
             Chip("Авто и адаптер", tab == 3, { tab = 3 }, Lucide.Car)
             Chip("Кнопки быстрого запуска", tab == 1, { tab = 1 }, Lucide.LayoutGrid)
@@ -226,7 +229,7 @@ fun SettingsScreen() {
                 1 -> ShortcutSettings()
                 3 -> CarAdapterSettings()
                 4 -> FeatureSettings()
-                5 -> SensorBoxSettings()
+                5 -> ExtraSensorSettings()
                 6 -> UsbScreenSettings()
                 else -> VoiceSettings()
             }
@@ -234,6 +237,7 @@ fun SettingsScreen() {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun GeneralSettings() {
     val s = Repo.settings
@@ -243,6 +247,9 @@ private fun GeneralSettings() {
     var price by remember { mutableStateOf(fmt(s.pricePerL, 1)) }
     var currency by remember { mutableStateOf(s.currency) }
     var k by remember { mutableStateOf(fmt(s.fuelK, 3)) }
+    var cc by remember { mutableStateOf(s.injectorCc.takeIf { it > 0 }?.toString() ?: "") }
+    var dead by remember { mutableStateOf(s.injectorDeadMs.takeIf { it > 0f }?.let { fmt(it.toDouble(), 2) } ?: "") }
+    var caps by remember { mutableStateOf(false) }
     var left by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf("") }
 
@@ -257,7 +264,7 @@ private fun GeneralSettings() {
                     Box(Modifier.width(120.dp)) {
                         OutlinedTextField(
                             value = currency, onValueChange = { currency = it.take(6) }, singleLine = true,
-                            label = { T("Валюта", 12.sp, C.Sub) },
+                            label = { FieldLabel("Валюта") },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = C.Text, unfocusedTextColor = C.Text,
                                 focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
@@ -266,6 +273,14 @@ private fun GeneralSettings() {
                     }
                 }
                 Field("Коэффициент расхода (калибровка)", k) { k = it }
+                // the fuel count without a MAF (an old ECU that doesn't give it) goes by the injection time
+                Field(
+                    // 380/260 are the Subaru's own; another car's size the driver has to know
+                    if (kg.forester.sg.data.CarKind.other.collectAsState().value) "Форсунки, cc/мин (для расхода без MAF; впишите свои)"
+                    else "Форсунки, cc/мин (пусто — штатные 380 у турбо, 260 у атмо)", cc,
+                ) { t -> cc = t.filter { it.isDigit() }.take(4) }
+                // as in the Link's injector setup: the time at 14 V, the app follows the battery voltage by itself
+                Field("Время открытия форсунок, мс (пусто — 0,6 при 14 В)", dead) { t -> dead = t.filter { it.isDigit() || it == '.' || it == ',' }.take(5) }
                 Field("Сейчас в баке, л (если знаете точно)", left) { left = it }
             }
             Spacer(Modifier.height(14.dp))
@@ -274,6 +289,8 @@ private fun GeneralSettings() {
                 price.toD()?.let { s.pricePerL = it }
                 s.currency = currency
                 k.toD()?.let { if (it in 0.7..1.4) s.fuelK = it }
+                s.injectorCc = cc.toIntOrNull()?.takeIf { it in 100..3000 } ?: 0
+                s.injectorDeadMs = dead.toD()?.toFloat()?.takeIf { it in kg.forester.sg.service.FuelCalc.DEAD_RANGE } ?: 0f
                 left.toD()?.let { s.fuelAtRefillL = it; s.usedSinceRefillL = 0.0; left = "" }
                 Repo.touch()
                 saved = "Сохранено"
@@ -281,12 +298,15 @@ private fun GeneralSettings() {
             Spacer(Modifier.height(8.dp))
             T(saved, 13.sp, C.Green)
             Spacer(Modifier.height(14.dp))
-            PlateSettings()
-            Spacer(Modifier.height(14.dp))
+            // the plate goes on the 3D Subaru: another car has only a silhouette
+            if (!kg.forester.sg.data.CarKind.other.collectAsState().value) {
+                PlateSettings()
+                Spacer(Modifier.height(14.dp))
+            }
             val navPos by Repo.navPosition.collectAsState()
             T("Панель навигации", 15.sp)
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("left" to "Слева", "right" to "Справа", "top" to "Сверху", "bottom" to "Снизу").forEach { (k, l) ->
                     Chip(l, navPos == k, { Repo.settings.navPosition = k })
                 }
@@ -299,7 +319,7 @@ private fun GeneralSettings() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     T("Главный экран магнитолы", 15.sp)
-                    T("Открывать Subaru Dashboard кнопкой «Домой» вместо штатного лаунчера", 11.sp, C.Sub)
+                    T("Открывать CarPulse кнопкой «Домой» вместо штатного лаунчера", 11.sp, C.Sub)
                 }
                 Switch(home, {
                     setDefaultHome(ctx, it); home = isDefaultHome(ctx)
@@ -307,6 +327,8 @@ private fun GeneralSettings() {
             }
             Spacer(Modifier.height(14.dp))
             BackgroundSettings()
+            Spacer(Modifier.height(14.dp))
+            BrandSettings()
             Spacer(Modifier.height(14.dp))
             T("Мини-карта открывает", 15.sp)
             T("Приложение, которое запускается по нажатию на мини-карту", 11.sp, C.Sub)
@@ -316,13 +338,24 @@ private fun GeneralSettings() {
             BackupSettings()
         }
         Spacer(Modifier.width(12.dp))
-        Panel(Modifier.weight(1f).fillMaxHeight()) {
+        // scrolls like the left one: at a large UI scale «Проверить обновления» is below the edge
+        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
             T("Автомобиль и ЭБУ", 16.sp)
             Spacer(Modifier.height(10.dp))
             val (carT, carS) = rememberCarHeader()
             InfoRow("Автомобиль", "$carT · $carS")
-            InfoRow("SSM ID", init?.ssmId ?: "—")
-            InfoRow("ROM ID", init?.romId ?: "—")
+            if (kg.forester.sg.data.CarKind.other.collectAsState().value && init == null) {
+                // another car has no SSM ids: what OBD-II mode 09 told instead
+                InfoRow("VIN", Repo.vin.collectAsState().value.ifEmpty { "—" })
+                InfoRow("Блок двигателя (OBD)", Repo.obdEcu.collectAsState().value.ifEmpty { "—" })
+            } else {
+                InfoRow("SSM ID", init?.ssmId ?: "—")
+                InfoRow("ROM ID", init?.romId ?: "—")
+            }
+            if (init != null && EcuCaps.hidden(LocalContext.current).isNotEmpty()) {
+                Chip("ЭБУ скрывает датчики? (старые JECS)", false, { caps = true }, Lucide.EyeOff)
+                if (caps) EcuCapsDialog { caps = false }
+            }
             InfoRow("Связь", msg)
             InfoRow("Коррекция спидометра (GPS)", fmt(s.speedK, 3))
             InfoRow("Коэффициент расхода", fmt(s.fuelK, 3))
@@ -339,6 +372,7 @@ private fun GeneralSettings() {
 }
 
 /** Check GitHub for a newer release, show what changed, download and install it over this one. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun UpdateSettings() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -352,7 +386,8 @@ private fun UpdateSettings() {
     Spacer(Modifier.height(6.dp))
     InfoRow("Установлена версия", current)
     Spacer(Modifier.height(6.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // wraps: side by side they didn't fit the panel with a bigger system font, and the button was cut off
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Chip("Проверить обновления", false, {
             status = "Проверяю…"; release = null; apk = null
             scope.launch {
@@ -434,7 +469,7 @@ private fun BackupSettings() {
         Chip("Восстановить из файла…", false, { open.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) })
     }
     if (msg.isNotEmpty()) T(msg, 12.sp, C.Green)
-    SettingSwitch("Автокопия раз в сутки", "В папку Download/SubaruDashboard, хранятся последние 7. Последняя: ${kg.forester.sg.data.Backup.lastAutoText()}", auto) {
+    SettingSwitch("Автокопия раз в сутки", "В папку Download/CarPulse, хранятся последние 7. Последняя: ${kg.forester.sg.data.Backup.lastAutoText()}", auto) {
         auto = it; s.autoBackup = it
     }
     restoreUri?.let { uri ->
@@ -501,7 +536,7 @@ private fun BackgroundSettings() {
         // FYT firmware (Teyes and others) stops third-party apps when it goes to sleep: nothing wakes them but the
         // driver, the launcher, or the firmware's own autostart list
         T("Если после сна магнитолы приложение не запускается само: в настройках магнитолы «Батарея» → «Управление " +
-            "автозапуском» включите для Subaru Dashboard «автозапуск» и «вторичный запуск», а «Закрыть приложение после " +
+            "автозапуском» включите для CarPulse «автозапуск» и «вторичный запуск», а «Закрыть приложение после " +
             "блокировки экрана» выключите. Самый надёжный вариант — включить выше «Главный экран магнитолы»: " +
             "после сна магнитола всегда открывает главный экран.", 12.sp, C.Sub)
         Spacer(Modifier.height(8.dp))
@@ -526,6 +561,7 @@ private fun SettingSwitch(title: String, sub: String, on: Boolean, onChange: (Bo
             T(title, 14.sp)
             T(sub, 11.sp, C.Sub)
         }
+        Spacer(Modifier.width(12.dp))
         Switch(on, onChange, colors = SwitchDefaults.colors(checkedTrackColor = C.Purple))
     }
 }
@@ -542,7 +578,7 @@ private fun InfoRow(k: String, v: String) {
 private fun Field(label: String, value: String, text: Boolean = false, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true,
-        label = { T(label, 12.sp, C.Sub) },
+        label = { FieldLabel(label) },
         // numbers by default; the plate needs letters (capitals, as on a real plate)
         keyboardOptions = if (text) KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters)
         else KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -619,24 +655,15 @@ private fun FeatureSettings() {
                 F("service", "Напоминания о ТО", "Раз в день при поездке, если подошёл срок по пробегу или дате")
                 val speech by kg.forester.sg.service.Speech.status.collectAsState()
                 SettingSwitch("Голосовые предупреждения",
-                    "Встроенный русский голос: скачивается один раз (~21 МБ) при включении, дальше работает без интернета. " +
+                    "Встроенный русский голос: скачивается один раз при включении (" +
+                        (kg.forester.sg.service.Speech.current.mb.takeIf { it > 0 }?.let { "$it МБ" } ?: "у голоса Android ничего") +
+                        "), дальше работает без интернета. " +
                         "Пока его нет — голос магнитолы или короткий сигнал." + if (speech.isNotEmpty()) " Голос: $speech" else "", voice) {
                     voice = it; s.voiceAlerts = it
                     if (it) kg.forester.sg.service.Speech.prepare(ctx)
                 }
                 if (voice) {
-                    var picked by remember { mutableStateOf(s.ttsVoice) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        kg.forester.sg.service.Speech.VOICES.forEach { (id, name) ->
-                            Chip(name, picked == id, {
-                                if (picked != id) { picked = id; s.ttsVoice = id; kg.forester.sg.service.Speech.switchVoice(ctx) }
-                            })
-                        }
-                        Chip("Прослушать", false, {
-                            if (!kg.forester.sg.service.Speech.say("Голосовые предупреждения включены. Турбина остывает, подождите тридцать секунд"))
-                                kg.forester.sg.service.Speech.prepare(ctx)
-                        })
-                    }
+                    SpeechVoicePicker()
                     var loud by remember { mutableStateOf(s.voiceLoud) }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         T("Громкость:", 13.sp, C.Sub)
@@ -659,7 +686,9 @@ private fun FeatureSettings() {
                 F("motion", "G-метр и крен", "Перегрузки и наклон (акселерометр магнитолы, VDC или GPS)")
                 F("sensors", "Экран «Датчики»", "Все параметры ЭБУ из базы RomRaider")
                 F("health", "Экран «Мониторинг»", "Мотор, ТО, шины и журнал предупреждений (сами предупреждения настраиваются слева)")
-                TcuRateSetting()
+                F("mine", "Экран «Мой экран»", "Свой экран из любых карточек; выключите, если хватает главного")
+                // SSM only (the fast poll, the transmission unit): another make has neither
+                if (!kg.forester.sg.data.CarKind.other.collectAsState().value) TcuRateSetting()
                 F("minmax", "Мин/макс за поездку на виджетах", "Справа от значения на карточках и метками на полосах и шкалах тахометра/спидометра")
                 if (s.feature("minmax")) Box(Modifier.fillMaxWidth().clip(Rounded).background(C.CardHi).padding(10.dp)) { MinMaxLegend() }
                 F("update", "Проверять обновления", "Раз в день смотреть, нет ли новой версии на GitHub, и сообщить")
@@ -681,7 +710,7 @@ private fun FeatureSettings() {
 @Composable
 private fun LogColumnsDialog(onClose: () -> Unit) {
     var off by remember { mutableStateOf(Repo.settings.logOff) }
-    val groups = kg.forester.sg.service.LogColumns.all.groupBy { it.group }
+    val groups = kg.forester.sg.service.LogColumns.offered().groupBy { it.group }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onClose,
         title = {
@@ -735,9 +764,15 @@ private fun TcuRateSetting() {
     val s = Repo.settings
     var every by remember { mutableStateOf(s.tcuEvery) }
     var atf by remember { mutableStateOf(s.tcuAtfOnly) }
+    var fast by remember { mutableStateOf(s.fastPoll) }
     Column {
+        SettingSwitch("Быстрый опрос (K-Line)", "ЭБУ сам шлёт данные без запросов, как fast poll в RomRaider: в 3 раза чаще. " +
+            "Если ЭБУ так не умеет, приложение само вернётся к обычному опросу", fast) {
+            fast = it; s.fastPoll = it
+        }
+        Spacer(Modifier.height(10.dp))
         T("Опрос АКПП", 15.sp)
-        T("Каждый N-й опрос двигателя. Реже — быстрее обновляются данные ЭБУ (K-Line медленная).", 11.sp, C.Sub)
+        T("Каждый N-й опрос двигателя (при быстром опросе: раз в N × 0,25 с). Реже — быстрее обновляются данные ЭБУ (K-Line медленная).", 11.sp, C.Sub)
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(3 to "каждый 3-й", 10 to "10-й", 30 to "30-й").forEach { (n, l) -> Chip(l, every == n, { every = n; s.tcuEvery = n }) }

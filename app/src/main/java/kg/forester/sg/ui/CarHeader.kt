@@ -23,6 +23,17 @@ fun rememberCarHeader(): Pair<String, String> {
     val s = Repo.settings
     val turbo = Repo.guard.collectAsState().value.turboCar
     val engine = remember(init, demo, turbo) { EngineId.detect(ctx) }
+    // another make: what its VIN says (the make, the model year), no Subaru model or engine
+    val other by kg.forester.sg.data.CarKind.other.collectAsState()
+    if (other) {
+        val make by kg.forester.sg.data.CarKind.make.collectAsState()
+        val vin by Repo.vin.collectAsState()
+        val link by Repo.link.collectAsState()
+        return kg.forester.sg.data.CarKind.header(
+            make?.name, vin.ifEmpty { s.lastVin }, link == kg.forester.sg.data.LinkState.CONNECTED,
+            java.util.Calendar.getInstance().get(java.util.Calendar.YEAR), s.carTitle, s.carTitleCustom,
+        )
+    }
     return carHeader(engine, s.carTitle, s.carSub, s.carTitleCustom)
 }
 

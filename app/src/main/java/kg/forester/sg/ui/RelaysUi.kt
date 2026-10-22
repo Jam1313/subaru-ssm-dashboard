@@ -293,6 +293,7 @@ fun OutputDetails(board: BoxBoard, ch: Int, onGone: () -> Unit) {
     val status by Relays.status.collectAsState()
     val info by SensorBox.info.collectAsState()
     Relays.boxStates.collectAsState().value
+    val failsafe by Relays.boxFailsafe.collectAsState()
     val s = status[ch]
     val (txt, col) = lamp(s, info == null || info!!.via == "демо")
     var confirmTest by remember(ch) { mutableStateOf(false) }
@@ -330,7 +331,7 @@ fun OutputDetails(board: BoxBoard, ch: Int, onGone: () -> Unit) {
             T(when {
                 info == null -> "Плата не на связи: правила считаются, но включать нечем"
                 info!!.via == "демо" -> "Демо: плата придумана"
-                Relays.boxFailsafe.value -> "Плата не получает команд от приложения и держит выходы в аварийном состоянии"
+                failsafe -> "Плата не получает команд от приложения и держит выходы в аварийном состоянии"
                 else -> "Плата подтверждает: ${if (s?.box == '1' || s?.box == 'b' || s?.box == 'p') "включено" else "выключено"}"
             }, 12.sp, C.Sub)
         }
@@ -403,7 +404,7 @@ fun OutputDetails(board: BoxBoard, ch: Int, onGone: () -> Unit) {
     var name by remember(ch) { mutableStateOf(c.name) }
     androidx.compose.material3.OutlinedTextField(
         value = name, onValueChange = { name = it; Relays.put(c.copy(name = it.ifBlank { "Выход $ch" })) }, singleLine = true,
-        label = { T("Название", 12.sp, C.Sub) }, modifier = Modifier.fillMaxWidth(),
+        label = { FieldLabel("Название") }, modifier = Modifier.fillMaxWidth(),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedTextColor = C.Text, unfocusedTextColor = C.Text, focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
         ),
@@ -613,6 +614,8 @@ private fun ThresholdRow(lead: String, t: Threshold, showOff: Boolean, onRemove:
     }
 }
 
+// the values are read as they are at each refresh of the relay status (four times a second), not followed one by one
+@android.annotation.SuppressLint("StateFlowValueCalledInComposition")
 @Composable
 private fun liveValue(src: String): Float? {
     Relays.status.collectAsState().value // refreshes four times a second with the engine
@@ -806,7 +809,7 @@ private fun Modifier.screenCap(): Modifier = this.heightIn(max = (androidx.compo
 private fun LookField(label: String, value: String, onChange: (String) -> Unit) {
     androidx.compose.material3.OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true, modifier = Modifier.fillMaxWidth(),
-        label = { T(label, 12.sp, C.Sub, maxLines = 1) },
+        label = { FieldLabel(label) },
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedTextColor = C.Text, unfocusedTextColor = C.Text, focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
         ),

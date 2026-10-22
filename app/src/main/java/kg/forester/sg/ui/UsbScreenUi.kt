@@ -166,7 +166,7 @@ private fun ScreenHeader(id: String) {
     var name by remember(id) { mutableStateOf(cfg.name) }
     androidx.compose.material3.OutlinedTextField(
         value = name, onValueChange = { name = it; UsbScreen.put(id, UsbScreen.cfgOf(id).copy(name = it)) }, singleLine = true,
-        label = { T("Где стоит (стойка, торпедо…)", 12.sp, C.Sub) }, modifier = Modifier.fillMaxWidth(),
+        label = { FieldLabel("Где стоит (стойка, торпедо…)") }, modifier = Modifier.fillMaxWidth(),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedTextColor = C.Text, unfocusedTextColor = C.Text, focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
         ),

@@ -105,7 +105,7 @@ val MORE_VALUES = listOf(
 )
 
 /** Engine guard, performance and sensor cards (see ui/ExtraCards.kt), offered on the home and "Динамика" boards. */
-val EXTRA_CARDS = listOf("gmeter", "incline", "iam", "btarget", "peaks", "run", "turbo", "tyres", "service") + (1..6).map { "s$it" }
+val EXTRA_CARDS = listOf("defi", "navcluster", "gmeter", "incline", "iam", "btarget", "peaks", "run", "turbo", "tyres", "service") + (1..6).map { "s$it" }
 
 object HomeLayout {
     const val COLUMNS = 5
@@ -119,7 +119,8 @@ object HomeLayout {
             "inj", "wgdc", "fuel", "boost", "gps",
         ).map { TileCfg(it, true) } + listOf(
             "pedal", "avcs", "map", "atm", "alt", "atf", "per100", "range", "tach", "speedo", "car3d", "minimap",
-        ).map { TileCfg(it, false) } + EXTRA_CARDS.map { TileCfg(it, false) } + MORE_VALUES.map { TileCfg(it, false) } +
+        ).map { TileCfg(it, false) } + EXTRA_CARDS.map { TileCfg(it, false, when (it) { "defi" -> 2; "navcluster" -> 3; else -> 1 }) } +
+            MORE_VALUES.map { TileCfg(it, false) } +
             OUT_WIDGETS.map { TileCfg(it, false) },
         freeOnly = setOf("car3d"),
     )
@@ -180,7 +181,7 @@ val DriveBoard = Board(
         TileCfg("throttleMotor", true, 2), TileCfg("wgdc", true, 2), TileCfg("pressure", true, 2),
         TileCfg("rpm", false, 2), TileCfg("chartRpm", false, 6), TileCfg("chartTrims", false, 6),
         TileCfg("chartMaf", false, 6),
-    ) + EXTRA_CARDS.map { TileCfg(it, false, if (it == "gmeter" || it == "peaks") 4 else 3) },
+    ) + EXTRA_CARDS.map { TileCfg(it, false, if (it == "navcluster") 12 else if (it == "defi") 6 else if (it == "gmeter" || it == "peaks") 4 else 3) },
 )
 
 /** "АКПП": selector 3 + ATF 4 + torque converter 5 columns, the proportions of the fixed layout. */
@@ -200,6 +201,9 @@ val OUT_WIDGETS = (1..8).map { "outw_$it" }
 /** SensorBox inputs a «Мой экран» card can show (box:A0…), whichever board is fitted. */
 val BOX_VALUES = listOf("A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "TC0", "F0").map { "box_$it" }
 
+/** Places for the own CAN channels (C1…C8, see CanChannels.newId), as for the SensorBox inputs. */
+val CAN_VALUES = (1..8).map { "can_C$it" }
+
 /**
  * «Мой экран»: the driver's own screen next to the author's ones. Any value of the app, the extra cards and the
  * SensorBox inputs; it starts with three dials and four numbers.
@@ -209,8 +213,9 @@ val MyBoard: Board by lazy {
         TileCfg("rpm", true, 4, "neon"), TileCfg("speed", true, 4, "neon"), TileCfg("coolant", true, 4, "neon"),
         TileCfg("oil", true, 3), TileCfg("battery", true, 3), TileCfg("per100", true, 3), TileCfg("range", true, 3),
     )
-    val rest = kg.forester.sg.ui.Metrics.builtIn.map { it.id }.filter { id -> on.none { it.id == id } }.map { TileCfg(it, false, 3) } +
-        EXTRA_CARDS.map { TileCfg(it, false, 4) } + BOX_VALUES.map { TileCfg(it, false, 3) } + OUT_WIDGETS.map { TileCfg(it, false, 3) }
+    val rest = (kg.forester.sg.ui.Metrics.builtIn.map { it.id } + kg.forester.sg.ui.Metrics.derivedIds).filter { id -> on.none { it.id == id } }.map { TileCfg(it, false, 3) } +
+        EXTRA_CARDS.map { TileCfg(it, false, when (it) { "navcluster" -> 12; "defi" -> 6; else -> 4 }) } + BOX_VALUES.map { TileCfg(it, false, 3) } +
+        CAN_VALUES.map { TileCfg(it, false, 3) } + OUT_WIDGETS.map { TileCfg(it, false, 3) }
     Board("myTiles", 12, 12, stretch = true, defaults = on + rest)
 }
 

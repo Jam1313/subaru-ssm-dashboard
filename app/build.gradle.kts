@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "kg.forester.sg"
-        minSdk = 26
+        minSdk = 25
         targetSdk = 34
-        versionCode = 28
-        versionName = "0.9-beta20"
+        versionCode = 29
+        versionName = "0.9-beta21"
         // head units and phones are ARM; the x86 copies of the native speech libraries only made the APK bigger
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -53,6 +53,15 @@ android {
     }
 }
 
+// The APK is named after the app: carpulse-0.9-beta21.apk (release and debug alike); applicationId and the key stay,
+// so it installs over the versions that were called Subaru Dashboard.
+android.applicationVariants.all {
+    val ver = versionName
+    outputs.all {
+        (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = "carpulse-$ver.apk"
+    }
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
     implementation(composeBom)
@@ -79,4 +88,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // the real org.json in unit tests (Android's is a stub there): the SensorBox catalogue is parsed with it
     testImplementation("org.json:json:20240303")
+    // a real XmlPullParser in unit tests (Android's is a stub there): own RomRaider definitions are read with it
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
 }

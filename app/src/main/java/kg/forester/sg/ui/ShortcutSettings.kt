@@ -156,7 +156,7 @@ private fun ShortcutEditor(initial: Shortcut, apps: List<InstalledApp>, onSave: 
         Column(Modifier.width(300.dp).fillMaxHeight()) {
             OutlinedTextField(
                 value = label, onValueChange = { label = it }, singleLine = true,
-                label = { T("Название кнопки", 12.sp, C.Sub) },
+                label = { FieldLabel("Название кнопки") },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = C.Text, unfocusedTextColor = C.Text,
                     focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
@@ -166,7 +166,7 @@ private fun ShortcutEditor(initial: Shortcut, apps: List<InstalledApp>, onSave: 
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 value = phrase, onValueChange = { phrase = it }, singleLine = true,
-                label = { T("Голосовая фраза (необязательно)", 12.sp, C.Sub) },
+                label = { FieldLabel("Голосовая фраза (необязательно)") },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = C.Text, unfocusedTextColor = C.Text,
                     focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
@@ -226,7 +226,7 @@ private fun SplitServiceRow() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             T("«Рядом» без root: " + if (on) "включено" else "выключено", 13.sp, if (on) C.Green else C.Orange)
-            T("Служба специальных возможностей «Subaru Dashboard: разделение экрана» только включает и выключает " +
+            T("Служба специальных возможностей «CarPulse: разделение экрана» только включает и выключает " +
                 "разделение экрана. Приборы встают в одну половину, приложение — в другую.", 11.sp, C.Sub)
         }
         if (!on) {

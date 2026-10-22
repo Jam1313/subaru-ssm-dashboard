@@ -9,7 +9,7 @@ import kotlin.math.sin
 
 /**
  * Made-up but plausible ECU/TCU data for the demo mode (Настройки → «Демо-данные»): a 140-second loop of
- * idle, a flat-out run to ~95 km/h, a sharp lift, cruise, braking to a stop and a minute at a red light (long
+ * idle, a flat-out run to ~120 km/h (0–100 in about 10 s, so «Замеры» shows it), a sharp lift, cruise, braking to a stop and a minute at a red light (long
  * enough for «Мониторинг → Проверка» to take its idle sample, with the values of a healthy warm EJ).
  * Nothing is written to trips.
  */
@@ -21,9 +21,9 @@ object Demo {
 
     private fun speedAt(t: Double): Double = when {
         t < 8 -> 0.0
-        t < 26 -> 95 * (1 - Math.exp(-(t - 8) / 5))
-        t < 60 -> 93 + 3 * sin((t - 26) / 5)
-        t < 75 -> 93 * (1 - (t - 60) / 15)
+        t < 26 -> 125 * (1 - Math.exp(-(t - 8) / 6))
+        t < 60 -> 118 + 3 * sin((t - 26) / 5)
+        t < 75 -> 118 * (1 - (t - 60) / 15)
         else -> 0.0
     }
 
@@ -99,28 +99,56 @@ object Demo {
         return ecu to tcu
     }
 
-    /** Course for the fake GPS: gentle left-right bends while cruising (about ±10°/s). */
-    fun bearing(nowMs: Long): Float {
-        val t = (nowMs / 1000.0) % CYCLE
-        val wiggle = if (t in 26.0..60.0) 40 * sin((t - 26) / 3.5) else 0.0
-        return ((90 + wiggle) % 360).toFloat()
+    // The fake GPS goes round a closed ~1.4 km circuit in the centre of Bishkek, once per cycle, as far along it as
+    // the demo speed has driven, and stops at the same red light every time: the lap timer and the maps of runs and
+    // laps can be tried in the demo (a car heading east for ever never comes back to a start/finish line).
+    private const val LAT0 = 42.8746
+    private const val LON0 = 74.6122
+
+    /** Metres driven since the start of the cycle, every 0.1 s. */
+    private val driven: DoubleArray by lazy {
+        val n = (CYCLE * 10).toInt()
+        DoubleArray(n + 1).also { a -> for (i in 1..n) a[i] = a[i - 1] + speedAt((i - 0.5) / 10) / 3.6 * 0.1 }
     }
 
-    // demo drive starts in the centre of Bishkek and follows the demo speed and course
-    private var lat = 42.8746
-    private var lon = 74.6122
-    private var lastPosMs = 0L
-
-    fun position(nowMs: Long, speedKmh: Float, bearing: Float?): Pair<Double, Double> {
-        val dt = if (lastPosMs == 0L) 0.0 else ((nowMs - lastPosMs) / 1000.0).coerceAtMost(2.0)
-        lastPosMs = nowMs
-        if (bearing != null) {
-            val m = speedKmh / 3.6 * dt
-            val a = Math.toRadians(bearing.toDouble())
-            lat += m * cos(a) / 111_320.0
-            lon += m * sin(a) / (111_320.0 * cos(Math.toRadians(lat)))
+    /** The circuit as x east, y north in metres, every ~1 m of its length (closed: the last point is the first). */
+    private val circuit: List<Pair<Double, Double>> by lazy {
+        // a lumpy oval: a long straight-ish side, a hairpin, a couple of sweepers
+        val raw = (0..720).map { k ->
+            val a = 2 * Math.PI * k / 720
+            val r = 1 + 0.28 * sin(2 * a) + 0.12 * cos(3 * a)
+            r * 1.4 * cos(a) to r * sin(a)
         }
-        return lat to lon
+        val len = raw.zipWithNext { p, q -> Math.hypot(q.first - p.first, q.second - p.second) }.sum()
+        val k = driven.last() / len
+        raw.map { (x, y) -> (x - raw[0].first) * k to (y - raw[0].second) * k }
+    }
+    private val along: DoubleArray by lazy {
+        DoubleArray(circuit.size).also { a ->
+            for (i in 1 until circuit.size) a[i] = a[i - 1] + Math.hypot(circuit[i].first - circuit[i - 1].first, circuit[i].second - circuit[i - 1].second)
+        }
+    }
+
+    /** Index on [circuit] of the point the car is at now. */
+    private fun spot(nowMs: Long): Int {
+        val t = (nowMs / 1000.0) % CYCLE
+        val d = driven[(t * 10).toInt().coerceIn(0, driven.size - 1)]
+        var lo = 0; var hi = along.size - 1
+        while (lo < hi) { val m = (lo + hi) / 2; if (along[m] < d) lo = m + 1 else hi = m }
+        return lo
+    }
+
+    /** Course for the fake GPS: along the circuit. */
+    fun bearing(nowMs: Long): Float {
+        val i = spot(nowMs).coerceAtMost(circuit.size - 2)
+        val (x0, y0) = circuit[i]; val (x1, y1) = circuit[i + 1]
+        return ((Math.toDegrees(Math.atan2(x1 - x0, y1 - y0)) + 360) % 360).toFloat()
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    fun position(nowMs: Long, speedKmh: Float, bearing: Float?): Pair<Double, Double> {
+        val (x, y) = circuit[spot(nowMs)]
+        return (LAT0 + y / 111_320.0) to (LON0 + x / (111_320.0 * cos(Math.toRadians(LAT0))))
     }
 
     /** Instant consumption for the demo, same formula as the real one. */

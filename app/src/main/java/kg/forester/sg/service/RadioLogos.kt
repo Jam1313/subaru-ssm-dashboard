@@ -86,7 +86,7 @@ object RadioLogos {
         var u = url
         repeat(5) {
             val c = URL(u).openConnection() as HttpURLConnection
-            c.setRequestProperty("User-Agent", "SubaruDashboard/0.9 (github.com/surtaeff/subaru-ssm-dashboard)")
+            c.setRequestProperty("User-Agent", "CarPulse/0.9 (github.com/surtaeff/subaru-ssm-dashboard)")
             c.connectTimeout = 6000; c.readTimeout = 10_000
             c.instanceFollowRedirects = false
             val code = c.responseCode

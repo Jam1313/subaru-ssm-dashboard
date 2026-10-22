@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,10 +70,15 @@ private fun ShiftLight() {
     val on by Repo.shift.collectAsState()
     if (!on) return
     val t = rememberInfiniteTransition(label = "shift")
-    val a by t.animateFloat(0.25f, 0.9f, infiniteRepeatable(tween(120), RepeatMode.Reverse), label = "shiftA")
+    val a = t.animateFloat(0.25f, 0.9f, infiniteRepeatable(tween(120), RepeatMode.Reverse), label = "shiftA")
+    // the flash fades the frame in its layer (alpha on the draw itself, no full-screen offscreen buffer):
+    // no recomposition of the border on every frame
     Box(
-        Modifier.fillMaxSize().border(
-            14.dp, Brush.horizontalGradient(listOf(C.Red.copy(alpha = a), C.Blue.copy(alpha = a), C.Red.copy(alpha = a))),
+        Modifier.fillMaxSize().graphicsLayer {
+            alpha = a.value
+            compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+        }.border(
+            14.dp, Brush.horizontalGradient(listOf(C.Red, C.Blue, C.Red)),
             RoundedCornerShape(18.dp),
         ),
     )

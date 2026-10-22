@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -129,21 +130,26 @@ fun TopValues(modifier: Modifier) {
     val avail by Repo.rrAvailable.collectAsState()
     val ctx = rememberMetricCtx()
     var editing by remember { mutableStateOf(false) }
+    // squeezed (the turbo countdown, the demo pill, a bigger scale): the values that fit whole, not each cut to «16.…»
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxHeight()) {
+    val shown = slots.take((maxWidth / 112.dp).toInt())
     Row(
-        modifier.fillMaxHeight().clip(RoundedCornerShape(12.dp))
+        Modifier.fillMaxHeight().clip(RoundedCornerShape(12.dp))
             .pointerInput(Unit) { detectTapGestures(onLongPress = { editing = true }) }
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        if (slots.isEmpty()) T("удерживайте, чтобы вывести показатели", 12.sp, C.Border, maxLines = 1)
-        slots.forEach { s ->
+        // readable (about 4.9:1 on the header) but quieter than the values it stands in for (C.Border was ~1.3:1)
+        if (slots.isEmpty()) T("удерживайте, чтобы вывести показатели", 13.sp, C.Sub.copy(alpha = 0.85f), maxLines = 1)
+        shown.forEach { s ->
             val m = Metrics.of(s.id, avail)
             val v = m?.read(ctx)
             val text = if (m == null) "—" else m.text(v) + if (m.unit.isEmpty() || v == null) "" else if (m.unit.startsWith("°")) m.unit else " ${m.unit}"
             BottomItem(m?.icon ?: Lucide.ListChecks, m?.short ?: s.id.removePrefix("rr:"), text, null, null,
                 Modifier.weight(1f, fill = false), m?.warn(v) == true)
         }
+    }
     }
     if (editing) BarEditor("Верхняя панель", BottomBarCfg.TOP_MAX, false, Repo.topBar, BottomBarCfg.TOP_DEFAULT, { Repo.settings.topBar = it }) { editing = false }
 }
@@ -156,11 +162,13 @@ private fun BottomItem(
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = if (warn) C.Orange else C.Sub, modifier = Modifier.size(26.dp))
         Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f, fill = false)) {
+        // with a bar the text keeps a steady width, so the bar doesn't hop sideways when the value gets a digit longer
+        val bar = frac != null && brush != null && !frac.isNaN()
+        Column(Modifier.weight(1f, fill = false).then(if (bar) Modifier.widthIn(min = 84.dp) else Modifier)) {
             T(label, 12.sp, C.Sub, maxLines = 1)
             T(value, 16.sp, if (warn) C.Orange else C.Text, FontWeight.SemiBold, maxLines = 1)
         }
-        if (frac != null && brush != null && !frac.isNaN()) {
+        if (frac != null && brush != null && bar) {
             Spacer(Modifier.width(10.dp))
             ProgressBar(frac, brush, Modifier.width(90.dp), 6.dp)
         }

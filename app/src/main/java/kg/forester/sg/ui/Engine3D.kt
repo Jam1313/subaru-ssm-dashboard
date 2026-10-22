@@ -458,6 +458,22 @@ internal fun engineSource(e: kg.forester.sg.ssm.EngineInfo): String = when (e.so
 private fun valueText(m: Indicator, v: Float?): String =
     m.text(v) + if (m.unit.isEmpty() || v == null) "" else if (m.unit.startsWith("°")) m.unit else " ${m.unit}"
 
+/** [main] and, bottom-aligned after it, [aside] if the rest of the width takes it whole; otherwise [aside] is left out. */
+@Composable
+private fun MainAndAside(main: @Composable () -> Unit, aside: (@Composable () -> Unit)?) {
+    androidx.compose.ui.layout.Layout({ main(); aside?.invoke() }) { ms, c ->
+        val m = ms[0].measure(c.copy(minWidth = 0))
+        val left = c.maxWidth - m.width
+        val a = ms.getOrNull(1)?.takeIf { it.maxIntrinsicWidth(c.maxHeight) <= left }
+            ?.measure(androidx.compose.ui.unit.Constraints(maxWidth = left.coerceAtLeast(0), maxHeight = c.maxHeight))
+        val h = maxOf(m.height, a?.height ?: 0)
+        layout(m.width + (a?.width ?: 0), h) {
+            m.place(0, h - m.height)
+            a?.place(m.width, h - a.height)
+        }
+    }
+}
+
 /** A callout card: the part, its main value large in the colour of its state, a second value small. */
 @Composable
 private fun Callout(
@@ -476,7 +492,8 @@ private fun Callout(
     Row(
         modifier.width(184.dp).height(58.dp).clip(RoundedCornerShape(14.dp))
             .background(C.Card.copy(alpha = if (selected) 0.98f else 0.86f))
-            .border(1.dp, if (selected) Color.White else state.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+            // «all fine» stays quiet (the icon says it), so an orange or red frame stands out among a dozen cards
+            .border(1.dp, if (selected) Color.White else state.copy(alpha = if (state == C.Green) 0.3f else 0.7f), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -486,12 +503,15 @@ private fun Callout(
         Spacer(Modifier.width(9.dp))
         Column {
             T(s.title, 11.sp, C.Sub, maxLines = 1)
-            Row(verticalAlignment = Alignment.Bottom) {
+            // the small second value only when it fits whole beside the main one (it was cut to «0.1…» in the card's
+            // fixed width); the main value always stays
+            MainAndAside(
+                { T(if (v == null && note != null) note.first else main?.let { valueText(it, v) } ?: "—", 17.sp, C.Text, FontWeight.Bold, maxLines = 1) },
                 // no reading of its own: the guard's value takes its place
-                T(if (v == null && note != null) note.first else main?.let { valueText(it, v) } ?: "—", 17.sp, C.Text, FontWeight.Bold, maxLines = 1)
-                if (note != null && v != null) T("  " + note.first, 11.sp, note.second, maxLines = 1)
-                else if (second != null) T("  " + valueText(second.first, second.second), 11.sp, C.Sub, maxLines = 1)
-            }
+                if (note != null && v != null) ({ T("  " + note.first, 11.sp, note.second, maxLines = 1) })
+                else if (second != null) ({ T("  " + valueText(second.first, second.second), 11.sp, C.Sub, maxLines = 1) })
+                else null,
+            )
         }
     }
 }

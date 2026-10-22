@@ -95,6 +95,7 @@ internal fun offerUndo(text: String, back: () -> Unit) { undoState.value = Undo(
 
 @Composable
 fun SensorBoxSettings() {
+    val displays by kg.forester.sg.data.Displays.list.collectAsState()
     val slots by SensorBox.slots.collectAsState()
     val outs by kg.forester.sg.data.Relays.channels.collectAsState()
     val board by SensorBox.board.collectAsState()
@@ -132,8 +133,8 @@ fun SensorBoxSettings() {
                                 else -> OutputDetails(board, sel.removePrefix("out:").toInt()) { go(BoxStep.OUTPUTS) }
                             }
                             BoxStep.DISPLAYS -> when {
-                                sel == null || sel == "disp:new" -> if (sel == null && kg.forester.sg.data.Displays.list.value.isNotEmpty())
-                                    DisplayDetails(board, kg.forester.sg.data.Displays.list.value.first().id) { go(BoxStep.DISPLAYS, "disp:new") }
+                                sel == null || sel == "disp:new" -> if (sel == null && displays.isNotEmpty())
+                                    DisplayDetails(board, displays.first().id) { go(BoxStep.DISPLAYS, "disp:new") }
                                     else DisplayNew(board) { go(BoxStep.DISPLAYS, "disp:$it") }
                                 else -> DisplayDetails(board, sel.removePrefix("disp:").toInt()) { go(BoxStep.DISPLAYS) }
                             }
@@ -1211,7 +1212,7 @@ private fun String.toF() = replace(',', '.').trim().toFloatOrNull()
 private fun BoxField(label: String, value: String, modifier: Modifier, text: Boolean = false, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true, modifier = modifier,
-        label = { T(label, 12.sp, C.Sub, maxLines = 1) },
+        label = { FieldLabel(label) },
         keyboardOptions = if (text) KeyboardOptions.Default else KeyboardOptions(keyboardType = KeyboardType.Decimal),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = C.Text, unfocusedTextColor = C.Text,

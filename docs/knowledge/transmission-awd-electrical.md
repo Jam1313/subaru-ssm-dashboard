@@ -315,6 +315,21 @@ Format per rule: id, title (RU), params, condition, severity, driver text (RU), 
 * Sources: S5 (ratios), S6 (P0731 to P0734 detect "incorrect ratio"), S13.
 * Confidence: medium (uses learned constant; tyre slip on ice can fake it, require GPS speed agreement within 3 %).
 
+#### `gear_ratio_slip_wot`
+* Title: Пробуксовка сцепления или гидротрансформатора на полном газу
+* Params: rpm, speedKmh, gear (TCU, the ECU's calculated gear E25/E59, or learned ratio clusters on a manual), throttlePct
+* Condition: full throttle ≥ 1 s, speed ≥ 50 km/h, not within 1.5 s of a shift, rpm 3500 to 6500 (automatic) or 2500 to 6500 (manual). Ratio r = rpm / speed against the learned one for the gear: manual = the gear's cruise cluster (steady driving, clutch in, clusters within 5 %, ≥ 30 samples); automatic = the full-throttle ratio by TCU gear (its normal converter slip included; learned only within 3 % of itself after 20 samples). Mean excess over 2 s ≥ 4 % (manual) or ≥ 6 % (automatic), held 1.5 s.
+* Severity: warn
+* Driver text (AT): На полном газу на {gear}-й передаче обороты выше обычного на N %. Похоже на проскальзывание гидротрансформатора или фрикционов: проверьте уровень и состояние ATF и ошибки коробки.
+* Driver text (MT): На полном газу обороты растут быстрее скорости. Так пробуксовывает сцепление: изношен диск или нет свободного хода педали.
+* Causes: AT: tired ATF, worn clutch packs, converter; MT: worn clutch disc, no pedal free play, oil on the disc.
+* Applicability: all; the ECU speed comes from the gearbox (VSS), so wheelspin does not fake it. Whole km/h steps are 2 % at 50 km/h, hence the 2 s mean.
+* Sources: owners' Telegram chat (messages 289513 to 289598: 200 km/h in 4th at 6300 against 5800 in an older log, a jerk at 130 km/h), 258600, 258611 (gear from the rpm/speed ratio).
+* Confidence: low to medium.
+
+#### `knock_at_shift` (engine side, see engine-ej K16)
+* Pulls of the knock correction within ±0.7 s of a gear change (TCU gear, the ECU's gear or a ≥ 12 % jump of rpm/speed between samples) are counted apart on the knock map and treated as a transient: the valve body's solenoids click at 2000 to 2400 rpm and the "AT retard" signal makes the ECU cut torque with timing during the shift (chat messages 265249, 272630).
+
 #### `shift_flare_2_3`
 * Title: Перегазовка при переключении со второй на третью
 * Params: gear, turbineRpm, rpm, frontWheelKmh, throttlePct

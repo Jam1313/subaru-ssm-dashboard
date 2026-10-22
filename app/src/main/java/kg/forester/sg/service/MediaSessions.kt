@@ -11,8 +11,21 @@ import android.os.Bundle
  * Only a notification listener may see other apps' media sessions: it gives the voice shuffle, repeat, rewind,
  * likes and "what's playing" for Yandex Music, VK, Spotify… The driver allows it once in the Android settings
  * («Доступ к уведомлениям»); without it these commands fall back to the media keys or say they can't.
+ * The same permission gives the navigators' turn hints (see [NavGuidance]).
  */
-class MediaListener : android.service.notification.NotificationListenerService()
+class MediaListener : android.service.notification.NotificationListenerService() {
+    override fun onListenerConnected() {
+        runCatching { activeNotifications?.forEach { NavGuidance.posted(this, it) } }
+    }
+
+    override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification) {
+        NavGuidance.posted(this, sbn)
+    }
+
+    override fun onNotificationRemoved(sbn: android.service.notification.StatusBarNotification) {
+        NavGuidance.removed(sbn)
+    }
+}
 
 object MediaSessions {
     fun allowed(ctx: Context): Boolean =

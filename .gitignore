@@ -16,3 +16,6 @@ research/
 render/*
 !render/render_turntable.py
 !render/plate_sg5.png
+
+# Kotlin compiler caches
+.kotlin/

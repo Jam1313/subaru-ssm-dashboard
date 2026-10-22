@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.*
+import kg.forester.sg.service.Speech
 import kg.forester.sg.service.Voice
 import kotlinx.coroutines.delay
 
@@ -92,7 +93,7 @@ fun VoiceSettings() {
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = wake, onValueChange = { wake = it }, singleLine = true,
-                label = { T("Имя ассистента (на что он откликается)", 12.sp, C.Sub) },
+                label = { FieldLabel("Имя ассистента (на что он откликается)") },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = C.Text, unfocusedTextColor = C.Text,
                     focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,
@@ -196,5 +197,51 @@ private fun MediaAccessRow() {
                 }
             })
         }
+    }
+}
+
+/**
+ * The voice of the spoken warnings: a Piper voice in usual or high quality, a Supertonic voice, or the head unit's
+ * own Android TTS. A voice not downloaded yet shows its size; picking it downloads it (the old one is deleted).
+ */
+@Composable
+fun SpeechVoicePicker() {
+    val ctx = LocalContext.current
+    val s = kg.forester.sg.data.Repo.settings
+    var picked by remember { mutableStateOf(Speech.voice(s.ttsVoice).id) }
+    val v = Speech.voice(picked)
+    fun pick(id: String) { if (picked != id) { picked = id; s.ttsVoice = id; Speech.switchVoice(ctx) } }
+    val hq = picked.endsWith("-hq")
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Speech.PIPER.forEach { (id, name) ->
+            Chip(name, v.engine == Speech.Engine.PIPER && picked.removeSuffix("-hq") == id, { pick(if (hq) "$id-hq" else id) })
+        }
+        Chip("Supertonic", v.engine == Speech.Engine.SUPERTONIC, { if (v.engine != Speech.Engine.SUPERTONIC) pick("st-f1") })
+        Chip("Голос Android", v.engine == Speech.Engine.SYSTEM, { pick("system") })
+        Chip("Прослушать", false, {
+            if (!Speech.say("Голосовые предупреждения включены. Турбина горячая, подождите 30 секунд до выключения")) Speech.prepare(ctx)
+        })
+    }
+    when (v.engine) {
+        Speech.Engine.PIPER -> {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                T("Качество:", 13.sp, C.Sub)
+                val base = picked.removeSuffix("-hq")
+                Chip("Обычное · 20 МБ", !hq, { pick(base) })
+                Chip("Высокое · 64 МБ", hq, { pick("$base-hq") })
+            }
+            T("Высокое: чище звук, без шипения сжатой модели, на ARM обычно и быстрее; скачивается дольше.", 11.sp, C.Sub)
+        }
+        Speech.Engine.SUPERTONIC -> {
+            listOf("Женский" to "st-f", "Мужской" to "st-m").forEach { (label, prefix) ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    T(label, 13.sp, C.Sub, modifier = Modifier.width(76.dp))
+                    (1..5).forEach { n -> Chip("$n", picked == "$prefix$n", { pick("$prefix$n") }) }
+                }
+            }
+            T("Новая модель, звучит естественнее. ~123 МБ один раз на все десять голосов, процессор нагружает как обычная Ирина.", 11.sp, C.Sub)
+        }
+        Speech.Engine.SYSTEM -> T("Синтез речи самой магнитолы (Google, RHVoice и т. п.), если в нём есть русский голос. Ничего не скачивается.", 11.sp, C.Sub)
     }
 }

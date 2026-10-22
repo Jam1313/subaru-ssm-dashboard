@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,14 +25,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.composables.icons.lucide.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -148,6 +153,38 @@ fun T(
     style = TextStyle(fontSize = size, color = color, fontWeight = weight, textAlign = textAlign ?: androidx.compose.ui.text.style.TextAlign.Unspecified),
 )
 
+/**
+ * A small control ([content]) with a tap area at least [minHeight] tall: the control keeps its own size in the layout
+ * (a title row does not grow) and the area that takes the tap reaches past it, up and down into the space around.
+ */
+@Composable
+fun TapTarget(onClick: () -> Unit, minHeight: Dp = 48.dp, content: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Box { content() }
+            Box(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick))
+        },
+    ) { measurables, c ->
+        val main = measurables[0].measure(c)
+        val tapH = maxOf(main.height, minHeight.roundToPx())
+        val tap = measurables[1].measure(androidx.compose.ui.unit.Constraints.fixed(main.width, tapH))
+        layout(main.width, main.height) {
+            main.place(0, 0)
+            tap.place(0, (main.height - tapH) / 2)
+        }
+    }
+}
+
+/**
+ * A text field's label: as large as the field gives it while the field is empty (up to 14 sp, so a long hint
+ * still fits the field; it was a fixed 12 sp), shrinking with it to the small caption above the text.
+ */
+@Composable
+fun FieldLabel(text: String) {
+    val size = androidx.compose.material3.LocalTextStyle.current.fontSize
+    T(text, if (size.isSp && size.value > 14f) 14.sp else if (size.isSp) size else 12.sp, C.Sub, maxLines = 1)
+}
+
 @Composable
 fun PanelTitle(icon: ImageVector, title: String, trailing: @Composable () -> Unit = {}) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -164,6 +201,8 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector
     val shape = RoundedCornerShape(10.dp)
     Row(
         modifier
+            // at least 48 dp tall: a target a finger hits on a moving car (it was ~40)
+            .heightIn(min = 48.dp)
             .clip(shape)
             .background(if (selected) C.Purple.copy(alpha = 0.28f) else C.CardHi)
             .border(1.dp, if (selected) C.Purple else C.Border, shape)
@@ -219,21 +258,18 @@ fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier
 
 @Composable
 fun ProgressBar(fraction: Float, brush: Brush, modifier: Modifier = Modifier, height: Dp = 8.dp) {
-    val anim by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(400), label = "bar")
+    val anim = animateFloatAsState(fraction.coerceIn(0f, 1f), tween(400), label = "bar")
+    // the animated width is read only while drawing: a new value 4–10 times a second redraws the bar,
+    // without recomposing or re-measuring it on every frame of the 400 ms slide
     Box(
         modifier
             .height(height)
-            .clip(RoundedCornerShape(height))
-            .background(C.Border)
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth(anim.coerceIn(0.001f, 1f))
-                .height(height)
-                .clip(RoundedCornerShape(height))
-                .background(brush)
-        )
-    }
+            .drawBehind {
+                val rad = androidx.compose.ui.geometry.CornerRadius(size.height / 2, size.height / 2)
+                drawRoundRect(C.Border, cornerRadius = rad)
+                drawRoundRect(brush, size = Size(size.width * anim.value.coerceIn(0.001f, 1f), size.height), cornerRadius = rad)
+            }
+    )
 }
 
 /** 240° arc gauge with ticks and a knob at the current value. */
@@ -494,13 +530,62 @@ fun DemoPill(short: Boolean = false) {
 }
 
 /**
+ * GPS in the header: a satellite, green with a fresh fix, orange while searching, grey when location is off or not
+ * allowed; in brackets the satellites used in the fix (seen ones while there is none yet). A tap tells why.
+ */
+@Composable
+fun GpsIcon(size: Dp) {
+    val fix by kg.forester.sg.data.Repo.gps.collectAsState()
+    val sats by kg.forester.sg.data.Repo.gnssSats.collectAsState()
+    val status by kg.forester.sg.data.Repo.gpsStatus.collectAsState()
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2000); now = System.currentTimeMillis() } }
+    var ask by remember { mutableStateOf(false) }
+    val fresh = fix?.let { now - it.timeMs < 5000 } == true
+    val off = !fresh && (status.startsWith("нет разрешения") || status.startsWith("геолокация выключена"))
+    // the count from GnssStatus; a fix from a unit that doesn't report satellites still shows its own number
+    val used = if (sats.first > 0) sats.first else fix?.satellites?.takeIf { fresh } ?: 0
+    val tint = if (off) C.Sub else if (fresh) C.Green else C.Orange
+    Row(
+        Modifier.clip(RoundedCornerShape(8.dp)).clickable { ask = true }.padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Lucide.Satellite, "Спутники GPS", tint = tint, modifier = Modifier.size(size))
+        if (!off) T(" (${if (fresh || sats.second == 0) used else "${used}/${sats.second}"})", (size.value * 0.7f).sp, tint)
+    }
+    if (ask) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { ask = false },
+            containerColor = C.Card, titleContentColor = C.Text, textContentColor = C.Text,
+            icon = { Icon(Lucide.Satellite, null, tint = C.Violet, modifier = Modifier.size(26.dp)) },
+            title = { T("Спутники GPS", 19.sp, weight = FontWeight.SemiBold) },
+            text = {
+                T(
+                    when {
+                        fresh -> "Есть позиция: в решении $used" + (if (sats.second > 0) " из ${sats.second} видимых" else "") +
+                            fix?.accuracyM?.let { ", точность около ${it.toInt()} м" }.orEmpty()
+                        off -> status
+                        else -> "Позиции пока нет: " + (if (sats.second > 0) "видно ${sats.second}, в решении $used. " else "") +
+                            "Нужно 4 спутника и больше. Под крышей и в гараже спутников не видно, антенне нужен открытый кусок неба"
+                    }, 15.sp,
+                )
+            },
+            confirmButton = { androidx.compose.material3.TextButton({ ask = false }) { T("OK", 15.sp, C.Violet) } },
+        )
+    }
+}
+
+/**
  * The connection in the header: how the app talks to the car (USB cable, Wi-Fi or Bluetooth ELM327, demo),
- * green when the ECU answers, orange (struck through) while it does not.
+ * green when the ECU answers, orange (struck through) while it does not, grey when let go for another app. A tap
+ * lets the adapter go for another diagnostic app (BTSSM…) and takes it back.
  */
 @Composable
 fun LinkIcon(size: Dp) {
     val link by kg.forester.sg.data.Repo.link.collectAsState()
     val found by kg.forester.sg.data.Repo.adapterFound.collectAsState()
+    val released by kg.forester.sg.data.Repo.adapterReleased.collectAsState()
+    var ask by remember { mutableStateOf(false) }
     val ok = link == kg.forester.sg.data.LinkState.CONNECTED
     val s = kg.forester.sg.data.Repo.settings
     val via = when {
@@ -518,5 +603,57 @@ fun LinkIcon(size: Dp) {
         "bt" -> if (ok) Lucide.Bluetooth else Lucide.BluetoothOff
         else -> if (ok) Lucide.Usb else Lucide.Unplug
     }
-    Icon(icon, null, tint = if (via == "demo") C.Violet else if (ok) C.Green else C.Orange, modifier = Modifier.size(size))
+    Icon(
+        if (released) Lucide.Unplug else icon, "Связь с ЭБУ",
+        tint = if (released) C.Sub else if (via == "demo") C.Violet else if (ok) C.Green else C.Orange,
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = via != "demo") { ask = true }.padding(4.dp).size(size),
+    )
+    if (ask) {
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        val message by kg.forester.sg.data.Repo.linkMessage.collectAsState()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { ask = false },
+            containerColor = C.Card, titleContentColor = C.Text, textContentColor = C.Text,
+            icon = { Icon(if (released) Lucide.Unplug else icon, null, tint = C.Violet, modifier = Modifier.size(26.dp)) },
+            title = { T("Связь с ЭБУ", 19.sp, weight = FontWeight.SemiBold) },
+            text = {
+                T(
+                    if (released) "Адаптер сейчас свободен для другой программы. Закройте её (BTSSM и т. п.) и подключитесь снова."
+                    else (if (ok) "Подключено: $found. " else "$message. ") + "\n\nНужен адаптер для BTSSM или другой программы диагностики? " +
+                        "Отпустите его: приложение перестанет опрашивать ЭБУ и освободит кабель или Bluetooth, пока вы не нажмёте «Подключиться» " +
+                        "(или до следующего запуска приложения). Это же есть в уведомлении.",
+                    14.sp,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton({
+                    ask = false
+                    kg.forester.sg.service.EcuService.start(ctx, if (released) kg.forester.sg.service.EcuService.ACTION_RECONNECT
+                    else kg.forester.sg.service.EcuService.ACTION_RELEASE)
+                }) { androidx.compose.material3.Text(if (released) "Подключиться" else "Отпустить адаптер", color = C.Violet) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton({ ask = false }) { androidx.compose.material3.Text("Закрыть", color = C.Sub) } },
+        )
+    }
+}
+
+/**
+ * [content] as tall as it wants at the width given, shrunk as a whole (never grown) when that is more than the height
+ * there is: a block of big text that a large UI scale would otherwise cut at the bottom. Centred vertically, at the start.
+ */
+@Composable
+fun ShrinkToFit(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(content, modifier.clipToBounds()) { measurables, c ->
+        val p = measurables.firstOrNull()?.measure(c.copy(minWidth = 0, minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
+            ?: return@Layout layout(c.minWidth, c.minHeight) {}
+        val k = if (c.hasBoundedHeight && p.height > c.maxHeight) c.maxHeight.toFloat() / p.height else 1f
+        val h = if (c.hasBoundedHeight) c.maxHeight.coerceAtLeast(c.minHeight) else (p.height * k).toInt()
+        val w = p.width.coerceIn(c.minWidth, c.maxWidth)
+        layout(w, h) {
+            p.placeWithLayer(0, ((h - p.height * k) / 2).toInt()) {
+                scaleX = k; scaleY = k
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+            }
+        }
+    }
 }

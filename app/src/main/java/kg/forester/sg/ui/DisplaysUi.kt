@@ -161,6 +161,7 @@ fun DisplayNew(board: BoxBoard, onCreated: (Int) -> Unit) {
 fun DisplayDetails(board: BoxBoard, id: Int, onGone: () -> Unit) {
     val list by Displays.list.collectAsState()
     val d = list.firstOrNull { it.id == id } ?: run { onGone(); return }
+    val boxInfo by SensorBox.info.collectAsState()
     // the preview follows the values (and the test pattern) three times a second
     val now by androidx.compose.runtime.produceState(System.currentTimeMillis()) {
         while (true) { kotlinx.coroutines.delay(330); value = System.currentTimeMillis() }
@@ -183,7 +184,7 @@ fun DisplayDetails(board: BoxBoard, id: Int, onGone: () -> Unit) {
             onGone()
         }, Lucide.Trash2)
     }
-    if (d.kind.i2c && SensorBox.info.value?.let { it.via.startsWith("USB") && it.fw >= 5 && (if (d.kind.lcd) "lcd" else "oled") !in it.disp } == true) {
+    if (d.kind.i2c && boxInfo?.let { it.via.startsWith("USB") && it.fw >= 5 && (if (d.kind.lcd) "lcd" else "oled") !in it.disp } == true) {
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             T("Подключили только что? Плата ищет экран при включении", 13.sp, C.Sub, modifier = Modifier.weight(1f))

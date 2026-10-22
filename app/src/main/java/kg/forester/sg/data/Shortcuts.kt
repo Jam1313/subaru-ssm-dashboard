@@ -122,7 +122,7 @@ object Shortcuts {
                     return
                 }
                 kg.forester.sg.service.Alerts.raise(
-                    "splitHelp", "Чтобы открывать «рядом» без root, включите службу «Subaru Dashboard: разделение экрана» " +
+                    "splitHelp", "Чтобы открывать «рядом» без root, включите службу «CarPulse: разделение экрана» " +
                         "в Настройки → Кнопки быстрого запуска", kg.forester.sg.service.Alerts.Level.INFO, 24 * 3600_000L, speak = false,
                 )
             }

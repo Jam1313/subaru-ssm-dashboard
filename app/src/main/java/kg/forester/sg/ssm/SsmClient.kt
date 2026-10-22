@@ -71,6 +71,12 @@ abstract class KLineTransport : SsmTransport {
     /** The ECU's init answer to the other tester (its ROM ID), if it asked. */
     @Volatile var sniffedInit: ByteArray? = null
         private set
+    /** The ECU answering one request over and over by itself (see [startStream]): each answer's body goes here. */
+    @Volatile private var streamSink: ((ByteArray) -> Unit)? = null
+    @Volatile private var lastRxMs = 0L
+
+    /** The ECU is sending its answers by itself; any other request stops that (see [exchange]). */
+    val streaming: Boolean get() = streamSink != null
 
     override val passive: Boolean get() = System.currentTimeMillis() - lastForeignMs < QUIET_MS
 
@@ -84,7 +90,9 @@ abstract class KLineTransport : SsmTransport {
     /** Bytes received from the line (with or without the echo of our own request). */
     protected fun onBytes(data: ByteArray) {
         synchronized(lock) {
-            inbox.write(data)
+            lastRxMs = System.currentTimeMillis()
+            // while the ECU streams nobody waits in [exchange]: the answers would only pile up
+            if (streamSink == null) inbox.write(data)
             stream.write(data)
             scan()
         }
@@ -137,8 +145,8 @@ abstract class KLineTransport : SsmTransport {
             when (body[0].toInt() and 0xFF) {
                 0xFF -> if (now - lastForeignMs < QUIET_MS) sniffedInit = body
                 0xE8, 0xE0 -> {
+                    if (now - lastForeignMs >= QUIET_MS) { streamSink?.invoke(body); return }
                     // an answer to the other tester, not to us
-                    if (now - lastForeignMs >= QUIET_MS) return
                     val asked = pending.remove(SsmClient.ECU) ?: return
                     for (k in asked.indices) if (1 + k < body.size) seen[asked[k]] = body[1 + k] to now
                 }
@@ -148,10 +156,7 @@ abstract class KLineTransport : SsmTransport {
 
     private var lastLoggedMs = 0L
 
-    @Synchronized
-    override fun exchange(dest: Int, body: ByteArray): ByteArray? {
-        // someone else has the line: asking now would garble both
-        if (passive) return null
+    private fun packet(dest: Int, body: ByteArray): ByteArray {
         val packet = ByteArray(body.size + 5)
         packet[0] = 0x80.toByte()
         packet[1] = dest.toByte()
@@ -159,6 +164,64 @@ abstract class KLineTransport : SsmTransport {
         packet[3] = body.size.toByte()
         body.copyInto(packet, 4)
         packet[packet.size - 1] = checksum(packet, packet.size - 1)
+        return packet
+    }
+
+    /**
+     * Sends a read request with the continuous flag (A8 01, RomRaider's «fast poll»): the ECU then answers it again
+     * and again without waiting to be asked, about three times as often as request and answer in turn. Each answer's
+     * body (E8 …) goes to [sink] until [stopStream] or any other request.
+     */
+    @Synchronized
+    fun startStream(dest: Int, body: ByteArray, sink: (ByteArray) -> Unit): Boolean {
+        if (passive) return false
+        ioError?.let { throw IOException(it) }
+        val packet = packet(dest, body)
+        synchronized(lock) { inbox.reset() }
+        SsmTrace.log("TX stream", packet)
+        streamSink = sink
+        sending = packet
+        writeRaw(packet)
+        return true
+    }
+
+    /**
+     * Stops the ECU's stream: any request does it. Then waits for the line to go quiet, so an answer still on its way
+     * is not taken for the next request's. The request may collide with an answer on the single wire, so it is sent
+     * again while the ECU keeps talking.
+     */
+    @Synchronized
+    fun stopStream() {
+        if (streamSink == null) return
+        streamSink = null
+        // another tester's request has already stopped it, and ours would garble his
+        if (passive) return
+        ioError?.let { throw IOException(it) }
+        val stop = packet(SsmClient.ECU, byteArrayOf(0xA8.toByte(), 0x00))
+        repeat(3) {
+            sending = stop
+            writeRaw(stop)
+            val deadline = System.currentTimeMillis() + 600
+            while (System.currentTimeMillis() < deadline) {
+                Thread.sleep(15)
+                if (System.currentTimeMillis() - lastRxMs > 120) {
+                    synchronized(lock) { inbox.reset(); stream.reset() }
+                    SsmTrace.log("stream stopped")
+                    return
+                }
+            }
+        }
+        synchronized(lock) { inbox.reset() }
+        SsmTrace.log("stream: the ECU keeps sending")
+    }
+
+    @Synchronized
+    override fun exchange(dest: Int, body: ByteArray): ByteArray? {
+        // someone else has the line: asking now would garble both
+        if (passive) return null
+        // the ECU streams (the trouble codes screen, the transmission asking in between): stop it first
+        stopStream()
+        val packet = packet(dest, body)
 
         ioError?.let { throw IOException(it) }
         synchronized(lock) { inbox.reset() }
@@ -296,18 +359,41 @@ class SsmClient(val transport: SsmTransport) {
     }
 
     private fun readChunk(addresses: IntArray, dest: Int): ByteArray? {
+        val data = transport.exchange(dest, readBody(addresses, 0x00)) ?: return null
+        if (data.isEmpty() || data[0] != 0xE8.toByte() || data.size < 1 + addresses.size) return null
+        return data.copyOfRange(1, 1 + addresses.size)
+    }
+
+    /** A8 <mode> aaa aaa …: mode 0 is one answer, 1 the continuous one. */
+    private fun readBody(addresses: IntArray, mode: Int): ByteArray {
         val body = ByteArray(2 + addresses.size * 3)
         body[0] = 0xA8.toByte()
-        body[1] = 0x00
+        body[1] = mode.toByte()
         addresses.forEachIndexed { i, a ->
             body[2 + i * 3] = (a shr 16).toByte()
             body[3 + i * 3] = (a shr 8).toByte()
             body[4 + i * 3] = a.toByte()
         }
-        val data = transport.exchange(dest, body) ?: return null
-        if (data.isEmpty() || data[0] != 0xE8.toByte() || data.size < 1 + addresses.size) return null
-        return data.copyOfRange(1, 1 + addresses.size)
+        return body
     }
+
+    /**
+     * K-line only: the engine unit answers [addresses] over and over by itself (see [KLineTransport.startStream]),
+     * [onValues] gets the bytes of each answer in their order. False when the cable can't or the list is too long
+     * for one request.
+     */
+    fun startStream(addresses: IntArray, onValues: (ByteArray) -> Unit): Boolean {
+        val kt = transport as? KLineTransport ?: return false
+        if (addresses.isEmpty() || addresses.size > kt.maxReadAddrs) return false
+        return kt.startStream(ECU, readBody(addresses, 0x01)) { b ->
+            if (b.size >= 1 + addresses.size && b[0] == 0xE8.toByte()) onValues(b.copyOfRange(1, 1 + addresses.size))
+        }
+    }
+
+    fun stopStream() = (transport as? KLineTransport)?.stopStream()
+
+    /** The stream still runs: no other request has stopped it. */
+    val streaming: Boolean get() = (transport as? KLineTransport)?.streaming == true
 
     fun write(address: Int, value: Int, dest: Int = ECU): Int? {
         val body = byteArrayOf(

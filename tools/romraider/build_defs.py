@@ -61,14 +61,20 @@ def main():
 
     params = []
     for p in ssm.find('parameters'):
-        a = p.find('address')
-        params.append({
+        addrs = p.findall('address')
+        a = addrs[0] if addrs else None
+        prm = {
             'id': p.get('id'), 't': int(p.get('target', '1')), 'n': p.get('name'), 'ru': ru_p.get(p.get('id'), ''),
             'b': int(p.get('ecubyteindex', '-1')), 'cb': int(p.get('ecubit', '-1')),
             'a': address(a) if a is not None else None,
             'dep': [r.get('parameter') for r in p.iter('ref')],
             'c': conversions(p),
-        })
+        }
+        # several addresses are one value, their bytes in order, as RomRaider's convertor reads them (P148 Steering
+        # Angle Sensor: the high byte at 0x8D, the low one at 0x15A): the further ones as [address, length]
+        if len(addrs) > 1:
+            prm['aa'] = [address(x)[:2] for x in addrs[1:]]
+        params.append(prm)
     switches = [{
         'id': s.get('id'), 't': int(s.get('target', '1')), 'n': s.get('name'), 'ru': ru_s.get(s.get('id'), ''),
         'a': num(s.get('byte')), 'bit': int(s.get('bit')), 'b': int(s.get('ecubyteindex', '-1')),

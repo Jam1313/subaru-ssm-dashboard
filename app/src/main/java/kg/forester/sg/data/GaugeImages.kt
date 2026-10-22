@@ -47,6 +47,8 @@ object GaugeImages {
     fun onPicked(ctx: Context, uri: Uri?) {
         val target = prefs(ctx).getString("target", null) ?: return
         prefs(ctx).edit().remove("target").apply()
+        // the header's logo or the start-up picture: kept whole, not cut square like a gauge face
+        if (target.startsWith("brand:")) { uri?.let { BrandLogos.importCustom(ctx, target.removePrefix("brand:"), it) }; return }
         val name = uri?.let { import(ctx, it) } ?: return
         val style = "photo:$name"
         when {

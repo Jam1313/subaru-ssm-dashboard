@@ -45,6 +45,7 @@ import com.composables.icons.lucide.CircleGauge
 import com.composables.icons.lucide.Crosshair
 import com.composables.icons.lucide.Fan
 import com.composables.icons.lucide.Flame
+import com.composables.icons.lucide.Gauge
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Mountain
 import com.composables.icons.lucide.Timer
@@ -52,6 +53,7 @@ import com.composables.icons.lucide.TrendingUp
 import com.composables.icons.lucide.Wrench
 import com.composables.icons.lucide.Disc3
 import com.composables.icons.lucide.ListChecks
+import com.composables.icons.lucide.Navigation
 import kg.forester.sg.data.Repo
 import kg.forester.sg.service.Maintenance
 import kg.forester.sg.service.Tpms
@@ -60,6 +62,8 @@ import kotlin.math.roundToInt
 
 /** Cards of the engine guard, performance and sensors, usable on the home and "Динамика" boards. */
 val ExtraCards: Map<String, Pair<String, ImageVector>> = linkedMapOf(
+    "defi" to ("Спорт-дисплей" to Lucide.Gauge),
+    "navcluster" to ("Приборка с картой" to Lucide.Navigation),
     "gmeter" to ("G-метр" to Lucide.Crosshair),
     "incline" to ("Крен и уклон" to Lucide.Mountain),
     "iam" to ("IAM и детонация" to Lucide.Flame),
@@ -71,10 +75,12 @@ val ExtraCards: Map<String, Pair<String, ImageVector>> = linkedMapOf(
     "service" to ("Ближайшее ТО" to Lucide.Wrench),
 ) + (1..6).associate { "s$it" to ("Датчик $it" to Lucide.ListChecks) }
 
-/** The card for [id] from [ExtraCards], or false if [id] is not one of them. */
+/** The card for [id] from [ExtraCards], or false if [id] is not one of them. [style]: the card's own settings, if it has any. */
 @Composable
-fun ExtraCard(id: String, info: String, m: Modifier): Boolean {
+fun ExtraCard(id: String, info: String, m: Modifier, style: String = ""): Boolean {
     when (id) {
+        "defi" -> SportDisplayCard(info, m, style)
+        "navcluster" -> NavClusterCard(info, m, style)
         "gmeter" -> GMeterCard(info, m)
         "incline" -> InclineCard(info, m)
         "iam" -> IamCard(info, m)
@@ -158,6 +164,8 @@ private fun Tilt(label: String, deg: Float, rear: Boolean, modifier: Modifier) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val model by Repo.car3d.collectAsState()
     val paint by Repo.carPaint.collectAsState()
+    // another make: a plain outline instead of the Subaru (see CarKind)
+    val other by kg.forester.sg.data.CarKind.other.collectAsState()
     // the chosen 3D car: from behind for the roll, from the side (nose left) for the pitch
     val still by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, model, paint, rear) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { carStill(ctx, model, paint, side = !rear) }.getOrNull() }
@@ -173,7 +181,8 @@ private fun Tilt(label: String, deg: Float, rear: Boolean, modifier: Modifier) {
             drawLine(C.Border, Offset(0f, ground), Offset(size.width, ground), 2f)
             rotate(shown, c) {
                 drawLine(col, Offset(size.width * 0.04f, ground), Offset(size.width * 0.96f, ground), 3f)
-                if (img != null) {
+                if (other) outlineCarOnGround(c.x, ground, rear)
+                else if (img != null) {
                     // room for the corners when tilted: ~86 % of the width, ~90 % of the height above the line
                     val k = minOf(size.width * 0.86f / img.width, ground * 0.9f / img.height)
                     val w = img.width * k; val h = img.height * k

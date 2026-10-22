@@ -29,6 +29,10 @@ data class EcuSnapshot(
     val fuelSensorOhm: Float? = null,
     /** Fuel level in percent of the tank, from OBD-II (PID 2F). */
     val fuelLevelPct: Float? = null,
+    /** OBD-II fuel system status (PID 03, system 1): 2 closed loop, 4 open loop by load or the deceleration cut. */
+    val fuelSystem: Int? = null,
+    /** OBD-II engine fuel rate, L/h (PID 5E), on the units that have it. */
+    val fuelRateLh: Float? = null,
 ) {
     val afr: Float? get() = lambda?.let { it * 14.7f }
 
@@ -54,10 +58,13 @@ data class EcuSnapshot(
      * Drops a MAF reading no engine of these cars can pull: a 2.5 l at 2.5 bar absolute takes ~3.8 g per rev
      * (0.063 g/s per rpm), plus a margin for idle. A garbled answer or an address this ROM keeps elsewhere
      * (0xFFFF = 655 g/s) would otherwise show 200+ l/h at idle and spoil the trip, refills and calibration.
+     * The top follows the MAF scale this car has learned ([learnedTop], g/s: kg.forester.sg.data.Scales.maf): 400 on
+     * a stock one, up to [MAF_CEIL] on a car that really flows more (a big turbo and MAF, 450+ hp), never 0xFFxx.
      */
-    fun saneMaf(): EcuSnapshot {
+    fun saneMaf(learnedTop: Float = 0f): EcuSnapshot {
         val maf = mafGs ?: return this
-        return if (maf > (rpm ?: 0) * 0.07f + 15f || maf > 400f) copy(mafGs = null) else this
+        val top = maxOf(400f, learnedTop + 100f).coerceAtMost(MAF_CEIL)
+        return if (maf > (rpm ?: 0) * 0.07f + 15f || maf > top) copy(mafGs = null) else this
     }
 }
 
@@ -65,6 +72,9 @@ data class EcuSnapshot(
  * Standard SSM2 single-byte addresses (RomRaider logger "STD" set) polled in one request.
  * Order matters: values come back in the same order.
  */
+/** The highest MAF taken as real, g/s: two bytes of 0xFF.. read as 652.8+ are junk on any car. */
+const val MAF_CEIL = 640f
+
 object EcuParams {
     const val COOLANT = 0x08
     const val RPM_H = 0x0E

@@ -65,18 +65,24 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * «Мониторинг»: engine guard (IAM, knock, turbo, oil, thermostat), the ECU's learned values, maintenance planner,
- * tyres, warnings log.
+ * «Мониторинг»: engine guard (IAM, knock, turbo, oil, thermostat), the ECU's learned values, the knock map and
+ * boost trends, maintenance planner, tyres, warnings log.
  */
 @Composable
 fun HealthScreen() {
     var tab by remember { mutableStateOf(0) }
     var engine3d by remember { mutableStateOf(Repo.settings.engine3d) }
+    // another make: no Subaru engine in 3D, no ECU learning, idle references or knock map (all of them SSM)
+    val other by kg.forester.sg.data.CarKind.other.collectAsState()
+    if (other && tab in setOf(4, 5, 6)) tab = 0
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Мотор", tab == 0, { tab = 0 }, Lucide.HeartPulse)
-            Chip("Обучение", tab == 4, { tab = 4 }, Lucide.Wind)
-            Chip("Проверка", tab == 5, { tab = 5 }, Lucide.Stethoscope)
+            if (!other) {
+                Chip("Обучение", tab == 4, { tab = 4 }, Lucide.Wind)
+                Chip("Проверка", tab == 5, { tab = 5 }, Lucide.Stethoscope)
+                Chip("Откаты и наддув", tab == 6, { tab = 6 }, Lucide.Grid3x3)
+            }
             Chip("ТО", tab == 1, { tab = 1 }, Lucide.Wrench)
             Chip("Шины", tab == 2, { tab = 2 }, Lucide.Disc3)
             Chip("Предупреждения", tab == 3, { tab = 3 }, Lucide.Bell)
@@ -86,12 +92,13 @@ fun HealthScreen() {
                 0 -> {
                     // the engine as a 3D model or as a table of panels, whichever one likes
                     val switch: @Composable () -> Unit = { EngineViewSwitch(engine3d) { engine3d = it; Repo.settings.engine3d = it } }
-                    if (engine3d) Engine3DTab(switch) else EngineTable(switch)
+                    if (other) EngineTable {} else if (engine3d) Engine3DTab(switch) else EngineTable(switch)
                 }
                 1 -> ServiceTab()
                 2 -> TyresTab()
                 4 -> LearningTab()
                 5 -> CheckTab()
+                6 -> KnockBoostTab()
                 else -> AlertsTab()
             }
         }
@@ -249,6 +256,217 @@ private fun CheckTab() {
     }
 }
 
+/**
+ * «Откаты и наддув»: the knock map (rpm × load, this trip or all time, pulls at an automatic's shift apart), the
+ * knock sums per cylinder and the beeper; the boost against its target, the last pull and the spool point by gear.
+ */
+@Composable
+private fun KnockBoostTab() {
+    val d by kg.forester.sg.service.RulesHost.diag.collectAsState()
+    val g by Repo.guard.collectAsState()
+    val ctx = LocalContext.current
+    var all by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf<Int?>(null) }
+    val map = if (all) d.allKnock else d.tripKnock
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Panel(Modifier.weight(1.4f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            PanelTitle(Lucide.Grid3x3, "Карта откатов") {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip("Поездка", !all, { all = false; picked = null })
+                    Chip("Всё время", all, { all = true; picked = null })
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            T(when {
+                map.total == 0 && map.shiftTotal == 0 -> "Откатов нет" + if (all) "" else " за эту поездку"
+                else -> "${map.total} откат(ов)" + (map.worstDeg?.let { ", самый глубокий %.1f°".format(it) } ?: "") +
+                    if (map.shiftTotal > 0) " · ещё ${map.shiftTotal} при переключении АКПП" else ""
+            }, 13.sp, C.Sub)
+            Spacer(Modifier.height(6.dp))
+            KnockGrid(map, g.turboCar, picked) { picked = if (picked == it) null else it }
+            Spacer(Modifier.height(6.dp))
+            val cell = picked?.let { map.cells[it] }
+            if (picked != null) {
+                val i = picked!!
+                val col = i % kg.forester.sg.data.KnockMap.COLS
+                val row = i / kg.forester.sg.data.KnockMap.COLS
+                val r = kg.forester.sg.data.KnockMap.RPM
+                val l = kg.forester.sg.data.KnockMap.LOAD
+                val rpm = if (col == r.lastIndex) "от ${r[col]} об/мин" else "${r[col]}–${r[col + 1]} об/мин"
+                val load = if (row == l.lastIndex) "от %.1f г/об".format(l[row]) else "%.1f–%.1f г/об".format(l[row], l[row + 1])
+                NoteBox("$rpm, $load: " + if (cell == null) "откатов не было" else
+                    "${cell.count} откат(ов)" + (if (cell.count > 0) ", до %.1f°".format(cell.worstDeg) else "") +
+                        if (cell.shift > 0) ", при переключении АКПП ${cell.shift}" else "")
+            } else {
+                ColorLegend(listOf(C.Orange to "мало", C.Red to "часто", C.Violet to "при переключении АКПП (вероятно ложные)"))
+                Spacer(Modifier.height(4.dp))
+                T("Считаются откаты от 0,3°. На сбросе газа, на малой нагрузке ниже 3000 об/мин и на холодном моторе не считаются: это шум датчика. Нажмите на клетку, чтобы увидеть подробности.", 12.sp, C.Sub)
+            }
+            d.cylKnock?.let { cyl ->
+                Spacer(Modifier.height(12.dp))
+                SectionLine(Lucide.AudioWaveform, "Детонация по цилиндрам за поездку")
+                val top = cyl.max()
+                Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    cyl.forEachIndexed { i, n ->
+                        StatTile(Lucide.Flame, "Цилиндр ${i + 1}", "$n", "", Modifier.weight(1f),
+                            if (top > 0 && n == top && n >= 0.6f * cyl.sum()) C.Red else C.Text, small = true)
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            KnockOptions(all, ctx)
+        }
+        Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            if (g.turboCar) {
+                PanelTitle(Lucide.Fan, "Наддув")
+                Spacer(Modifier.height(10.dp))
+                BoostCards(d, g)
+                Spacer(Modifier.height(12.dp))
+                SpoolCard(d.spool)
+            } else {
+                PanelTitle(Lucide.Cog, "Передачи и впуск")
+                Spacer(Modifier.height(8.dp))
+                NoteBox("Атмосферный мотор: наддува нет. Здесь передачи, которые приложение выучило по оборотам и скорости: по ним оно замечает пробуксовку сцепления или коробки на полном газу.")
+            }
+            Spacer(Modifier.height(12.dp))
+            SectionLine(Lucide.Cog, "Передачи (обороты на 1 км/ч)")
+            if (d.gears.isEmpty()) T("Выучатся сами за несколько поездок.", 13.sp, C.Sub)
+            else T(d.gears.mapIndexed { i, r -> "${i + 1}-я  %.1f".format(r) }.joinToString("   "), 14.sp)
+            d.ambientC?.let {
+                Spacer(Modifier.height(8.dp))
+                T("Улица сегодня около %.0f° (по впуску после стоянки): от неё считается нагрев впуска".format(it), 12.sp, C.Sub)
+            }
+        }
+    }
+}
+
+/** The knock map's grid: high load on top, a count in each cell, the rpm under it. */
+@Composable
+private fun KnockGrid(map: kg.forester.sg.data.KnockMap, turbo: Boolean, picked: Int?, onPick: (Int) -> Unit) {
+    val km = kg.forester.sg.data.KnockMap
+    // an atmospheric engine never gets near 1.7 g/rev: its grid stops at the «1,4 and up» row
+    val rows = if (turbo) km.ROWS else km.LOAD.indexOfFirst { it >= 1.4f } + 1
+    val most = map.cells.values.maxOfOrNull { it.count }?.coerceAtLeast(1) ?: 1
+    for (row in rows - 1 downTo 0) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+            T(if (!turbo && row == rows - 1) "1,4+" else "%.1f".format(km.LOAD[row]), 10.sp, C.Sub, modifier = Modifier.width(30.dp), maxLines = 1)
+            for (col in 0 until km.COLS) {
+                // the top row of an atmospheric engine gathers every row above it
+                val cells = if (!turbo && row == rows - 1) (row until km.ROWS).mapNotNull { map.cell(it, col) } else listOfNotNull(map.cell(row, col))
+                val n = cells.sumOf { it.count }
+                val shift = cells.sumOf { it.shift }
+                val i = row * km.COLS + col
+                val bg = when {
+                    n > 0 -> androidx.compose.ui.graphics.lerp(C.Orange, C.Red, (n.toFloat() / most).coerceIn(0f, 1f)).copy(alpha = 0.35f + 0.55f * (n.toFloat() / most))
+                    shift > 0 -> C.Violet.copy(alpha = 0.35f)
+                    else -> C.Border.copy(alpha = 0.35f)
+                }
+                Box(
+                    Modifier.weight(1f).height(22.dp).padding(1.dp).clip(RoundedCornerShape(4.dp)).background(bg)
+                        .then(if (picked == i) Modifier.border(1.5.dp, C.Text, RoundedCornerShape(4.dp)) else Modifier)
+                        .clickable { onPick(i) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (n > 0) T("$n", 10.sp, C.Text, FontWeight.SemiBold, maxLines = 1)
+                    else if (shift > 0) T("$shift", 10.sp, C.Text.copy(alpha = 0.8f), maxLines = 1)
+                }
+            }
+        }
+    }
+    Row(Modifier.fillMaxWidth()) {
+        T("г/об", 9.sp, C.Sub, modifier = Modifier.width(30.dp), maxLines = 1)
+        for (col in 0 until km.COLS) {
+            T(if (col % 2 == 0) "${km.RPM[col] / 1000.0}".removeSuffix(".0") + "к" else "", 9.sp, C.Sub, modifier = Modifier.weight(1f), maxLines = 1,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+}
+
+/** The beeper, reading the per-cylinder counters, starting the all-time map over. */
+@Composable
+private fun KnockOptions(all: Boolean, ctx: android.content.Context) {
+    val s = Repo.settings
+    var deg by remember { mutableStateOf(s.knockBeepDeg) }
+    var rpm by remember { mutableStateOf(s.knockBeepRpm) }
+    var sums by remember { mutableStateOf(s.knockSums) }
+    SectionLine(Lucide.BellRing, "Пищалка на откат")
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(0f to "Выкл", -1f to "от −1°", -2f to "от −2°", -3f to "от −3°").forEach { (v, t) ->
+            Chip(t, deg == v, { deg = v; s.knockBeepDeg = v })
+        }
+        if (deg < 0f) listOf(0 to "любые обороты", 2500 to "от 2500", 3500 to "от 3500").forEach { (v, t) ->
+            Chip(t, rpm == v, { rpm = v; s.knockBeepRpm = v })
+        }
+    }
+    T("Короткий сигнал на откат угла. Порог по оборотам, чтобы −1° внизу не пищал постоянно.", 12.sp, C.Sub)
+    // the per-cylinder counters only where this ROM's definition has them
+    val has = Repo.rrAvailable.collectAsState().value.any { it.id == "E165" }
+    if (has) {
+        Spacer(Modifier.height(8.dp))
+        SwitchRow("Детонация по цилиндрам", "Читать счётчики Knock Sum 1–4 из ЭБУ: видно, какой цилиндр звенит. Опрос станет чуть медленнее", sums) {
+            sums = it; s.knockSums = it
+        }
+    }
+    if (all) {
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.clip(RoundedCornerShape(10.dp)).clickable { kg.forester.sg.service.RulesHost.clearKnockMap(ctx) }.padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Lucide.RotateCcw, null, tint = C.Violet, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            T("Начать карту заново (после ремонта, смены бензина или прошивки)", 13.sp, C.Violet)
+        }
+    }
+}
+
+/** Boost now against the target, and the last full-throttle pull. */
+@Composable
+private fun BoostCards(d: kg.forester.sg.service.DiagState, g: kg.forester.sg.service.GuardState) {
+    val e by Repo.live.collectAsState()
+    val gauge = e.gaugeKpa
+    val target = g.targetBoostKpa
+    val err = if (target != null && gauge != null && gauge > 0f) target - gauge else null
+    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatTile(Lucide.Gauge, "Наддув", gauge?.let { "%.2f".format(it / 100f) } ?: "—", "бар сейчас", Modifier.weight(1f))
+        StatTile(Lucide.Target, "Цель ЭБУ", target?.let { "%.2f".format(it / 100f) } ?: "—", if (target == null) "нет в прошивке" else "бар", Modifier.weight(1f))
+        StatTile(Lucide.Crosshair, "Ошибка", err?.let { "%+.2f".format(it / 100f) } ?: "—", "цель − факт", Modifier.weight(1f),
+            if (err != null && (err >= 15f || err <= -20f)) C.Orange else C.Text)
+    }
+    val p = d.lastPull ?: run {
+        Spacer(Modifier.height(8.dp))
+        T("Последний разгон в пол появится здесь.", 13.sp, C.Sub)
+        return
+    }
+    Spacer(Modifier.height(10.dp))
+    SectionLine(Lucide.History, "Последний разгон в пол, " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(p.timeMs)) +
+        (p.gear?.let { ", $it-я передача" } ?: ""))
+    Line("Пик наддува", "%.2f бар".format(p.peakKpa / 100f) + (p.targetKpa?.let { " при цели %.2f".format(it / 100f) } ?: ""))
+    p.maxErrKpa?.let { Line("Самый большой недобор", if (it > 0f) "%.2f бар".format(it / 100f) else "нет, наддув держал цель") }
+    p.wgdcMax?.let { Line("Соленоид наддува", "до %.0f %%".format(it)) }
+    p.spoolRpm?.let { Line("Выход на наддув", "$it об/мин") }
+}
+
+/** Where the turbo comes on boost, per gear, against this car's usual point. */
+@Composable
+private fun SpoolCard(t: kg.forester.sg.service.SpoolTrend) {
+    SectionLine(Lucide.TrendingUp, if (t.levelKpa > 0f) "Выход на %.1f бар по передачам".format(t.levelKpa / 100f) else "Выход на наддув по передачам")
+    val gears = (t.base.keys + t.recent.map { it.gear }).toSortedSet()
+    if (gears.isEmpty()) {
+        T("Разгонитесь в пол со 2-й по 5-ю передачу с низких оборотов: приложение запомнит, на каких оборотах турбина выходит на наддув, и предупредит, если точка уедет вверх на 300 об/мин и больше (износ втулки вестгейта, утечки).", 12.sp, C.Sub)
+        return
+    }
+    gears.forEach { gear ->
+        val base = t.base[gear]
+        val last = t.inGear(gear).takeLast(3)
+        val late = base != null && last.lastOrNull()?.let { it.rpm - base >= kg.forester.sg.service.SpoolTrend.LATE_RPM } == true
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            T("$gear-я", 14.sp, weight = FontWeight.Medium, modifier = Modifier.width(44.dp))
+            T(base?.let { "обычно $it" } ?: "учится", 13.sp, C.Sub, modifier = Modifier.weight(1f), maxLines = 1)
+            T(last.joinToString("  ") { "${it.rpm}" }, 14.sp, if (late) C.Orange else C.Text, FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
 /** The colour legend under the idle table: a dot and a few words each, wrapping on narrow screens. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -383,8 +601,8 @@ internal fun KnockDetails() {
 internal fun OilDetails() {
     val g by Repo.guard.collectAsState()
     Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatTile(Lucide.Droplet, "Масло", g.oilC?.let { "${it.roundToInt()}°" } ?: "—",
-            if (g.oilC == null) "" else if (g.oilEstimated) "оценка по ОЖ и нагрузке" else "датчик ЭБУ", Modifier.weight(1f))
+        StatTile(Lucide.Droplet, if (g.oilC != null && g.oilEstimated) "Масло ≈" else "Масло", g.oilC?.let { "${it.roundToInt()}°" } ?: "—",
+            if (g.oilC == null) "" else if (g.oilEstimated) "оценка по ОЖ и нагрузке" else "датчик", Modifier.weight(1f))
         StatTile(Lucide.Gauge, "Прогрев", if (g.cold) "холодный" else if (g.oilC != null) "прогрет" else "—",
             if (g.cold) "не выше 3000 об/мин" else g.warmupMin?.let { "до 80° за %.0f мин".format(it) } ?: if (g.oilC != null) "можно нагружать" else "", Modifier.weight(1f),
             if (g.cold) C.Orange else if (g.oilC != null) C.Green else C.Text)
@@ -449,16 +667,17 @@ internal fun WatchedDetails() {
 @Composable
 private fun WatchedList() {
     listOf(
-        Triple(Lucide.Flame, "Детонация", "IAM ниже 0,75 или −0,1 за поездку, FLKC −1,4 / −2,8 / −4°, откат FBKC под наддувом и на разгоне. После сброса ЭБУ, на малой нагрузке и холодном моторе не пугает"),
-        Triple(Lucide.Droplets, "Смесь", "ЭБУ долго добавляет или убирает больше 15 % топлива, подсос только на холостых, датчик состава смеси не работает, форсунки на пределе"),
-        Triple(Lucide.Fan, "Наддув", "перенаддув, отсечка топлива, недодув против обычного для вашей машины, бедная смесь под наддувом, турботаймер"),
+        Triple(Lucide.Flame, "Детонация", "IAM ниже 0,75, −0,1 за поездку или после заправки, FLKC −1,4 / −2,8 / −4°, откат FBKC под наддувом и на разгоне, цилиндр по счётчикам, карта откатов. После сброса ЭБУ, на малой нагрузке, холодном моторе и переключениях АКПП не пугает"),
+        Triple(Lucide.Droplets, "Смесь", "ЭБУ долго добавляет или убирает больше 15 % топлива, подсос только на холостых, коррекция качается от упора до упора, датчик расхода завышает, датчик состава смеси не работает или его нет, форсунки на пределе"),
+        Triple(Lucide.Fan, "Наддув", "перенаддув и крип, отсечка топлива, езда на пружине, недобор цели при соленоиде на пределе, плавающий наддув, точка выхода на наддув уехала вверх, бедная смесь под наддувом, турботаймер"),
         Triple(Lucide.Gauge, "Холостой ход", "плавающие, высокие или низкие обороты, AVCS не возвращается, слабое разрежение"),
-        Triple(Lucide.Thermometer, "Охлаждение", "горячо от 102°, перегрев от 105°, выше 100° на скорости, перегрев только в пробке (вентиляторы), рост на 8° за минуту"),
+        Triple(Lucide.Thermometer, "Охлаждение", "горячо от 102°, перегрев от 105°, выше 100° на скорости, перегрев только в пробке (вентиляторы), рост с 90 до 95° за минуту на ходу при работающем вентиляторе, рост в пробке при включённом вентиляторе (реле первой скорости)"),
         Triple(Lucide.Snowflake, "Холодный мотор", "высокие обороты, полный газ или наддув на непрогретом масле"),
         Triple(Lucide.Repeat, "Термостат", "20 минут езды, а ОЖ ниже 72°"),
-        Triple(Lucide.Cog, "АКПП", "ATF от 100°, 110° и 120°, странный датчик, проскальзывание блокировки, аварийный режим на третьей"),
+        Triple(Lucide.Cog, "АКПП", "ATF от 100°, 110° и 120°, странный датчик, проскальзывание блокировки и пробуксовка на полном газу (и сцепления на МКПП), аварийный режим на третьей"),
         Triple(Lucide.Disc3, "Полный привод", "передние и задние колёса крутятся с разной скоростью: разный износ или давление"),
         Triple(Lucide.BatteryCharging, "АКБ и генератор", "разряд на стоянке, слабый пуск, не заряжает ниже 12,6 В, перезаряд выше 15 В, магнитола не выключилась. 12,5–13 В на ходу у Subaru 2001–2008 норма"),
+        Triple(Lucide.Cpu, "Доп датчики", "давление топлива к коллектору (около 3 бар) и его пульсации, масло на 3500 горячим, эффективность интеркулера, горячий впуск на полном газу"),
         Triple(Lucide.ThermometerSnowflake, "Датчики", "после долгой стоянки ОЖ и воздух показывают по-разному, нереальное атмосферное давление"),
         Triple(Lucide.Wrench, "ТО и шины", "сроки по пробегу, времени, моточасам; давление в шинах"),
     ).forEachIndexed { i, (icon, title, sub) ->
@@ -481,7 +700,8 @@ private fun VoiceSwitch() {
     var voice by remember { mutableStateOf(Repo.settings.voiceAlerts) }
     val ctx = LocalContext.current
     val speech by kg.forester.sg.service.Speech.status.collectAsState()
-    SwitchRow("Голосовые предупреждения", "Встроенный русский голос (~21 МБ, один раз)" +
+    SwitchRow("Голосовые предупреждения", "Встроенный русский голос (" +
+        (kg.forester.sg.service.Speech.current.mb.takeIf { it > 0 }?.let { "$it МБ, один раз" } ?: "голос магнитолы") + ")" +
         if (speech.isNotEmpty()) " · $speech" else "", voice) {
         voice = it; Repo.settings.voiceAlerts = it
         if (it) kg.forester.sg.service.Speech.prepare(ctx)

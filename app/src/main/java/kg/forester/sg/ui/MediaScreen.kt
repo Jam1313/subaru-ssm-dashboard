@@ -16,10 +16,12 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -92,7 +94,9 @@ import kg.forester.sg.service.AudioFx
 import kg.forester.sg.service.Fyt
 import kg.forester.sg.service.LocalMusic
 import kg.forester.sg.service.MediaSessions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.sin
@@ -177,7 +181,13 @@ fun MediaScreen() {
                         }
                     }
                 }
-                AnimatedVisibility(panel, enter = expandHorizontally() + fadeIn(), exit = shrinkHorizontally() + fadeOut()) {
+                // the list slides in from the edge and fades in: the hero beside it is laid out once at its new width,
+                // not on every frame of a width animation (cover, picture and texts measured again 20 times over)
+                AnimatedVisibility(
+                    panel,
+                    enter = slideInHorizontally(tween(220)) { it / 3 } + fadeIn(tween(220)),
+                    exit = slideOutHorizontally(tween(180)) { it / 3 } + fadeOut(tween(180)),
+                ) {
                     Row {
                         Spacer(Modifier.width(16.dp))
                         Box(Modifier.fillMaxHeight().width(1.dp).background(Color.White.copy(alpha = 0.08f)))
@@ -273,7 +283,8 @@ internal fun Hero(
                 contentAlignment = Alignment.Center,
             ) { cover(Modifier.fillMaxSize(0.94f)) }
             Spacer(Modifier.width(22.dp))
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center, content = info)
+            // a large UI scale: the big frequency or title shrinks with the rest instead of being cut at the bottom
+            ShrinkToFit(Modifier.weight(1f).fillMaxHeight()) { Column(content = info) }
         }
         Spacer(Modifier.height(10.dp))
         middle()
@@ -284,21 +295,32 @@ internal fun Hero(
 
 /**
  * The music's levels, [AudioFx.BARS] bands, bass first: from the player's own output when the unit lets the app
- * listen to it, else a calm made-up movement while it plays (Bluetooth, other apps), still when paused.
+ * listen to it, else a calm made-up movement while it plays (Bluetooth, other apps), still when paused. A State, to
+ * be read only while drawing: the pictures move with the music without recomposing anything on every frame.
  */
 @Composable
-internal fun rememberLevels(playing: Boolean): FloatArray {
+internal fun rememberLevels(playing: Boolean): androidx.compose.runtime.State<FloatArray> {
     val live by AudioFx.live.collectAsState()
-    val levels by AudioFx.spectrum.collectAsState()
-    val t = rememberInfiniteTransition(label = "wave")
-    val phase by t.animateFloat(0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "phase")
     val n = AudioFx.BARS
     return when {
-        !playing -> FloatArray(n) { 0.04f }
-        live -> levels
-        else -> FloatArray(n) { i ->
-            ((0.38f + 0.22f * sin(phase + i * 0.45f) + 0.14f * sin(phase * 2 - i * 0.8f) + 0.08f * sin(phase * 3 + i * 1.3f))
-                * (1f - i / (n * 1.5f))).coerceIn(0.04f, 1f)
+        !playing -> remember { mutableStateOf(FloatArray(n) { 0.04f }) }
+        live -> AudioFx.spectrum.collectAsState()
+        else -> madeUpLevels(n)
+    }
+}
+
+/** The calm made-up movement; its clock runs only while it is shown, not under a paused or a live picture. */
+@Composable
+private fun madeUpLevels(n: Int): androidx.compose.runtime.State<FloatArray> {
+    val t = rememberInfiniteTransition(label = "wave")
+    val phase = t.animateFloat(0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "phase")
+    return remember {
+        androidx.compose.runtime.derivedStateOf {
+            val p = phase.value
+            FloatArray(n) { i ->
+                ((0.38f + 0.22f * sin(p + i * 0.45f) + 0.14f * sin(p * 2 - i * 0.8f) + 0.08f * sin(p * 3 + i * 1.3f))
+                    * (1f - i / (n * 1.5f))).coerceIn(0.04f, 1f)
+            }
         }
     }
 }
@@ -311,8 +333,14 @@ internal fun rememberLevels(playing: Boolean): FloatArray {
 internal fun GlowCover(art: Bitmap?, placeholder: ImageVector, playing: Boolean, modifier: Modifier, whiteBack: Boolean = false) {
     val cfg by AudioFx.cfg.collectAsState()
     val lv = rememberLevels(playing)
-    val bass = if (playing) lv.take(5).average().toFloat() else 0f
-    val glow by animateFloatAsState(bass, tween(140), label = "glow")
+    // the glow follows the bass, eased over 140 ms as before; the levels and the glow are read only in the drawing
+    // and in the cover's layer, so a playing track redraws the glow and the rays and scales the cover, while the cover
+    // with its picture is not recomposed on every frame
+    val glowAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(lv, playing) {
+        androidx.compose.runtime.snapshotFlow { if (playing) lv.value.let { a -> (a[0] + a[1] + a[2] + a[3] + a[4]) / 5f } else 0f }
+            .collectLatest { glowAnim.animateTo(it, tween(140)) }
+    }
     val main = C.Violet
     val second = C.theme.second
     val ring = cfg.ring
@@ -320,8 +348,10 @@ internal fun GlowCover(art: Bitmap?, placeholder: ImageVector, playing: Boolean,
         Canvas(Modifier.fillMaxSize()) {
             val c = center
             val s = size.minDimension
+            val glow = glowAnim.value
             drawCircle(Brush.radialGradient(listOf(main.copy(alpha = 0.20f + glow * 0.40f), Color.Transparent), c, s * (0.55f + glow * 0.08f)), s * (0.55f + glow * 0.08f), c)
             if (ring) {
+                val lv = lv.value
                 val rays = 96
                 val r0 = s * 0.44f
                 for (k in 0 until rays) {
@@ -340,7 +370,8 @@ internal fun GlowCover(art: Bitmap?, placeholder: ImageVector, playing: Boolean,
         }
         val shape = RoundedCornerShape(20.dp)
         Box(
-            Modifier.fillMaxSize(if (ring) 0.80f else 0.92f).scale(1f + glow * 0.02f).clip(shape)
+            Modifier.fillMaxSize(if (ring) 0.80f else 0.92f)
+                .graphicsLayer { val k = 1f + glowAnim.value * 0.02f; scaleX = k; scaleY = k }.clip(shape)
                 .background(if (whiteBack && art != null) Brush.verticalGradient(listOf(Color.White, Color.White))
                     else Brush.linearGradient(listOf(C.Violet.copy(alpha = 0.6f), C.Purple.copy(alpha = 0.4f), C.CardHi)))
                 .border(1.dp, Color.White.copy(alpha = 0.12f), shape),
@@ -388,11 +419,12 @@ internal fun Spectrum(playing: Boolean, modifier: Modifier) {
 
 /** Bars with a cap that floats at the peak and sinks slowly (the classic stereo look), and their reflection. */
 @Composable
-private fun BarsVis(lv: FloatArray, modifier: Modifier) {
+private fun BarsVis(levels: androidx.compose.runtime.State<FloatArray>, modifier: Modifier) {
     val peaks = remember { FloatArray(AudioFx.BARS) }
     val main = C.Violet
     val second = C.theme.second
     Canvas(modifier) {
+        val lv = levels.value
         val n = lv.size
         val base = size.height * 0.78f
         val gap = size.width / n * 0.28f
@@ -415,10 +447,11 @@ private fun BarsVis(lv: FloatArray, modifier: Modifier) {
 
 /** A smooth curve mirrored over the middle line, filled and glowing. */
 @Composable
-private fun WaveVis(lv: FloatArray, modifier: Modifier) {
+private fun WaveVis(levels: androidx.compose.runtime.State<FloatArray>, modifier: Modifier) {
     val main = C.Violet
     val second = C.theme.second
     Canvas(modifier) {
+        val lv = levels.value
         val n = lv.size
         val mid = size.height / 2
         fun pts(sign: Float) = List(n) { i ->
@@ -511,15 +544,18 @@ internal fun Pill(text: String, icon: ImageVector? = null, selected: Boolean = f
 /** Three bars dancing beside what plays (still while paused). */
 @Composable
 internal fun Bars(playing: Boolean) {
-    val t = rememberInfiniteTransition(label = "eq")
-    val hs = listOf(0, 160, 320).map { d ->
-        t.animateFloat(0.25f, 1f, infiniteRepeatable(tween(420, delayMillis = d), androidx.compose.animation.core.RepeatMode.Reverse), label = "eq$d")
-    }
+    // paused: still bars and no clock ticking under them
+    val hs = if (playing) {
+        val t = rememberInfiniteTransition(label = "eq")
+        listOf(0, 160, 320).map { d ->
+            t.animateFloat(0.25f, 1f, infiniteRepeatable(tween(420, delayMillis = d), androidx.compose.animation.core.RepeatMode.Reverse), label = "eq$d")
+        }
+    } else null
     val violet = C.Violet
     Canvas(Modifier.size(20.dp)) {
         val w = size.width / 5
-        hs.forEachIndexed { i, h ->
-            val f = if (playing) h.value else listOf(0.4f, 0.7f, 0.5f)[i]
+        for (i in 0 until 3) {
+            val f = hs?.get(i)?.value ?: listOf(0.4f, 0.7f, 0.5f)[i]
             drawRoundRect(violet, Offset(w * (i * 2), size.height * (1 - f)), Size(w, size.height * f), CornerRadius(w / 2, w / 2))
         }
     }
@@ -771,27 +807,37 @@ private fun FilesPanel() {
 @Composable
 private fun BluetoothHero(fyt: Boolean) {
     val ctx = LocalContext.current
-    val m by Fyt.music.collectAsState()
-    // other head units: the phone's music arrives as the Bluetooth app's media session
+    // FYT: the BT module's own reports, which the stock player's now-playing pushes don't cover up
+    val m by Fyt.btMusic.collectAsState()
+    // other head units: the phone's music arrives as the Bluetooth app's media session; on FYT the session (when
+    // the unit has one) fills in what the module leaves out: the track, the cover
     var ext by remember { mutableStateOf(PlayerState()) }
-    LaunchedEffect(fyt) { while (!fyt) { ext = btSession(ctx)?.let { playerState(ctx, it) } ?: PlayerState(); delay(1000) } }
-    val bt = m.source == "bt"
-    val title = if (fyt) (if (bt) m.title.ifBlank { "Нет трека" } else "Включите музыку на телефоне") else ext.title.ifBlank { if (ext.session) "Нет трека" else "Включите музыку на телефоне" }
-    val artist = if (fyt) (if (bt) m.artist else "") else ext.artist
-    val playing = if (fyt) bt && m.playing else ext.playing
-    val pos = if (fyt) m.posMs else ext.posMs
-    val dur = if (fyt) m.totalMs else ext.totalMs
-    fun prev() { if (fyt) { Fyt.source(3); Fyt.prev() } else btControl(ctx) { it.skipToPrevious() } }
-    fun next() { if (fyt) { Fyt.source(3); Fyt.next() } else btControl(ctx) { it.skipToNext() } }
+    LaunchedEffect(fyt) { while (true) { ext = btSession(ctx)?.let { playerState(ctx, it) } ?: PlayerState(); delay(1000) } }
+    val known = if (fyt) m.title.isNotBlank() else ext.title.isNotBlank()
+    val title = when {
+        fyt -> m.title.ifBlank { ext.title.ifBlank { "Включите музыку на телефоне" } }
+        else -> ext.title.ifBlank { if (ext.session) "Нет трека" else "Включите музыку на телефоне" }
+    }
+    val artist = if (fyt) (if (known) m.artist else ext.artist) else ext.artist
+    // the module's play state once it has said anything, the session's before that
+    val playing = if (fyt && m.updatedMs > 0) m.playing else ext.playing
+    val pos = if (fyt && m.posMs > 0) m.posMs else ext.posMs
+    val dur = if (fyt && m.totalMs > 0) m.totalMs else ext.totalMs
+    val track = if (fyt) m.title.ifBlank { ext.title } else ext.title
+    val cover = rememberCover((if (fyt) m.art else null) ?: ext.art, artist, track)
+    // straight to the BT module: Fyt.next() / prev() go by the source, which is still the old one right after the switch
+    fun prev() { if (fyt) Fyt.btPrev() else btControl(ctx) { it.skipToPrevious() } }
+    fun next() { if (fyt) Fyt.btNext() else btControl(ctx) { it.skipToNext() } }
     Hero(
-        cover = { GlowCover(if (fyt) null else ext.art, Lucide.Bluetooth, playing, it) },
+        // a track without a cover gets a note, nothing at all the Bluetooth sign
+        cover = { GlowCover(cover, if (track.isNotBlank()) Lucide.Music else Lucide.Bluetooth, playing, it) },
         onNext = ::next, onPrev = ::prev,
         info = { TrackInfo("Bluetooth · телефон", title, artist) },
         middle = { Spectrum(playing, Modifier.fillMaxWidth().height(48.dp).padding(bottom = 4.dp)); SeekBar(pos, dur, null) },
         controls = {
             Control(Lucide.SkipBack, 68.dp) { prev() }
             Control(if (playing) Lucide.Pause else Lucide.Play, 96.dp, primary = true) {
-                if (fyt) { Fyt.source(3); Fyt.playPause() } else btControl(ctx) { if (ext.playing) it.pause() else it.play() }
+                if (fyt) Fyt.btPlay(!playing) else btControl(ctx) { if (ext.playing) it.pause() else it.play() }
             }
             Control(Lucide.SkipForward, 68.dp) { next() }
         },
@@ -824,8 +870,24 @@ private fun Step(icon: ImageVector, title: String, sub: String) {
     }
 }
 
+/**
+ * [art] when the player sends one, else the cover found online by artist and title (once per track, cached;
+ * nothing offline, the placeholder stays).
+ */
+@Composable
+private fun rememberCover(art: Bitmap?, artist: String, title: String): Bitmap? {
+    val ctx = LocalContext.current
+    var found by remember { mutableStateOf<Bitmap?>(null) }
+    val key = if (art == null && title.isNotBlank()) "$artist|$title" else ""
+    LaunchedEffect(key) {
+        found = null
+        if (key.isNotEmpty()) found = withContext(Dispatchers.IO) { runCatching { kg.forester.sg.service.Covers.find(ctx, artist, title) }.getOrNull() }
+    }
+    return art ?: found
+}
+
 private fun btSession(ctx: Context): String? =
-    listOf("com.android.bluetooth", "com.google.android.bluetooth").firstOrNull { MediaSessions.controllerOf(ctx, it) != null }
+    listOf("com.android.bluetooth", "com.google.android.bluetooth", "com.syu.bt").firstOrNull { MediaSessions.controllerOf(ctx, it) != null }
 
 private fun btControl(ctx: Context, block: (android.media.session.MediaController.TransportControls) -> Unit) {
     btSession(ctx)?.let { MediaSessions.controllerOf(ctx, it)?.transportControls?.let(block) }
@@ -883,7 +945,7 @@ private fun AppsHero(fyt: Boolean) {
     fun prev() { if (stock) Fyt.prev() else if (pkg.isNotEmpty()) control { it.skipToPrevious() } }
     fun next() { if (stock) Fyt.next() else if (pkg.isNotEmpty()) control { it.skipToNext() } }
     Hero(
-        cover = { GlowCover(ext.art, Lucide.Music, playing, it) },
+        cover = { GlowCover(rememberCover(ext.art, ext.artist, if (stock) "" else ext.title), Lucide.Music, playing, it) },
         onNext = ::next, onPrev = ::prev,
         info = {
             when {
@@ -927,7 +989,7 @@ private fun AppsPanel(fyt: Boolean) {
             ) {
                 Icon(Lucide.Bell, null, tint = C.Orange, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
-                T("Чтобы видеть трек и управлять $label отсюда, нажмите и разрешите Subaru Dashboard доступ к уведомлениям", 13.sp, C.Text)
+                T("Чтобы видеть трек и управлять $label отсюда, нажмите и разрешите CarPulse доступ к уведомлениям", 13.sp, C.Text)
             }
             Spacer(Modifier.height(10.dp))
         }

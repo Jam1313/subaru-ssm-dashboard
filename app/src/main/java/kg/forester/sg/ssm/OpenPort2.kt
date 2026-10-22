@@ -76,7 +76,7 @@ class OpenPort2(private val port: UsbSerialPort) {
             }
             val parts = r.substring(3).trim().split(' ').filter { it.isNotEmpty() }
             if (parts.lastOrNull()?.toIntOrNull() != my) continue // stale reply of an earlier command
-            if (r[2] == 'e') throw IOException("OpenPort: ошибка ${parts.firstOrNull()} на «$cmd»")
+            if (r[2] == 'e') throw OpenPortError(parts.firstOrNull()?.toIntOrNull() ?: -1, cmd)
             return r
         }
     }
@@ -129,10 +129,15 @@ class OpenPort2(private val port: UsbSerialPort) {
         val PIDS = intArrayOf(0xCC4B, 0xCC4C, 0xCC4D)
         const val ISO9141 = 3
         const val CAN = 5
+        /** J2534 ERR_TIMEOUT: on a CAN transmit, nobody on the bus acknowledged the frame. */
+        const val ERR_TIMEOUT = 9
 
         fun matches(vid: Int, pid: Int) = vid == VID && pid in PIDS
     }
 }
+
+/** An "are <code>" reply: the adapter refused [cmd] with a J2534 error code. */
+class OpenPortError(val code: Int, cmd: String) : IOException("OpenPort: ошибка $code на «$cmd»")
 
 /** SSM over the OpenPort's K-line (ISO9141 channel at 4800 baud), set up like RomRaider does. */
 class Op2KLineTransport(private val op2: OpenPort2) : KLineTransport() {
@@ -174,7 +179,7 @@ class Op2CanTransport(private val op2: OpenPort2) : SsmTransport {
             if (proto == OpenPort2.CAN && data.size >= 5) {
                 val id = ((data[0].toInt() and 0xFF) shl 24) or ((data[1].toInt() and 0xFF) shl 16) or
                     ((data[2].toInt() and 0xFF) shl 8) or (data[3].toInt() and 0xFF)
-                if (id in 0x7E0..0x7EF) rx.offer(data) else if (listen) CanBroadcast.feed(id, data.copyOfRange(4, data.size))
+                if (id in 0x7E0..0x7EF || id in extraRx) rx.offer(data) else if (listen) CanBroadcast.feed(id, data.copyOfRange(4, data.size))
             }
         }
         op2.command("ato${OpenPort2.CAN} 0 500000 0")
@@ -187,10 +192,24 @@ class Op2CanTransport(private val op2: OpenPort2) : SsmTransport {
         }
     }
 
+    /** Answer ids beyond 7E0…7EF asked for by [exchangeId], each with a receive filter of its own. */
+    private val extraRx = java.util.concurrent.CopyOnWriteArraySet<Int>()
+
     @Synchronized
     override fun exchange(dest: Int, body: ByteArray): ByteArray? {
         val txId = if (dest == SsmClient.TCU) 0x7E1 else 0x7E0
-        val rxId = txId + 8
+        return exchangeId(txId, txId + 8, body)
+    }
+
+    /** [body] to any unit on 11-bit CAN ([txId], answering from [rxId]): the manufacturer PIDs of OBDb. */
+    @Synchronized
+    fun exchangeId(txId: Int, rxId: Int, body: ByteArray): ByteArray? {
+        if (rxId !in 0x7E0..0x7EF && rxId !in extraRx) {
+            runCatching {
+                op2.command("atf${OpenPort2.CAN} 1 4 4", byteArrayOf(0, 0, 0x07, 0xFF.toByte(), 0, 0, (rxId shr 8).toByte(), rxId.toByte()))
+            }.onFailure { SsmTrace.log("CAN filter %03X: $it".format(rxId)); return null }
+            extraRx += rxId
+        }
         rx.clear()
         if (!sendIsoTp(txId, rxId, body)) return null
         val deadline = System.currentTimeMillis() + 1500
@@ -203,12 +222,23 @@ class Op2CanTransport(private val op2: OpenPort2) : SsmTransport {
         }
     }
 
-    private fun sendFrame(id: Int, data: ByteArray) {
+    /**
+     * False when the frame went unacknowledged: no CAN on this OBD socket (K-line cars such as the
+     * GD/SG), the same as an ECU that stays silent, so "Авто" goes on with the K-line and OBD-II.
+     */
+    private fun sendFrame(id: Int, data: ByteArray): Boolean {
         val f = ByteArray(12)
         f[2] = (id shr 8).toByte(); f[3] = id.toByte()
         data.copyInto(f, 4, 0, minOf(8, data.size))
         SsmTrace.log("CAN TX %03X".format(id), f.copyOfRange(4, 12))
-        op2.command("att${OpenPort2.CAN} 12 0 100000", f, 1500)
+        try {
+            op2.command("att${OpenPort2.CAN} 12 0 100000", f, 1500)
+        } catch (e: OpenPortError) {
+            if (e.code != OpenPort2.ERR_TIMEOUT) throw e
+            SsmTrace.log("CAN: кадр никто не подтвердил, на разъёме нет CAN")
+            return false
+        }
+        return true
     }
 
     private fun nextFrame(id: Int, deadline: Long): ByteArray? {
@@ -226,11 +256,8 @@ class Op2CanTransport(private val op2: OpenPort2) : SsmTransport {
     }
 
     private fun sendIsoTp(txId: Int, rxId: Int, body: ByteArray): Boolean {
-        if (body.size <= 7) {
-            sendFrame(txId, byteArrayOf(body.size.toByte()) + body)
-            return true
-        }
-        sendFrame(txId, byteArrayOf((0x10 or (body.size shr 8)).toByte(), body.size.toByte()) + body.copyOfRange(0, 6))
+        if (body.size <= 7) return sendFrame(txId, byteArrayOf(body.size.toByte()) + body)
+        if (!sendFrame(txId, byteArrayOf((0x10 or (body.size shr 8)).toByte(), body.size.toByte()) + body.copyOfRange(0, 6))) return false
         var pos = 6
         var sn = 1
         while (pos < body.size) {
@@ -245,7 +272,7 @@ class Op2CanTransport(private val op2: OpenPort2) : SsmTransport {
             var sent = 0
             while (pos < body.size && (blockSize == 0 || sent < blockSize)) {
                 val end = minOf(pos + 7, body.size)
-                sendFrame(txId, byteArrayOf((0x20 or (sn and 0x0F)).toByte()) + body.copyOfRange(pos, end))
+                if (!sendFrame(txId, byteArrayOf((0x20 or (sn and 0x0F)).toByte()) + body.copyOfRange(pos, end))) return false
                 pos = end; sn++; sent++
                 if (stMin > 0) Thread.sleep(stMin)
             }
@@ -264,7 +291,7 @@ class Op2CanTransport(private val op2: OpenPort2) : SsmTransport {
                 val n = ((first[0].toInt() and 0x0F) shl 8) or (first[1].toInt() and 0xFF)
                 val out = java.io.ByteArrayOutputStream(n)
                 out.write(first, 2, first.size - 2)
-                sendFrame(txId, byteArrayOf(0x30, 0, 0)) // send everything, no pauses
+                if (!sendFrame(txId, byteArrayOf(0x30, 0, 0))) return null // send everything, no pauses
                 while (out.size() < n) {
                     val cf = nextFrame(rxId, deadline) ?: return null
                     if ((cf[0].toInt() and 0xF0) != 0x20) continue

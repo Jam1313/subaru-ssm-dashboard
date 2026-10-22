@@ -8,8 +8,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * A value the driver takes off the CAN bus by id and bytes, the way dash makers do it: an EGT the tuner put in a
- * user stream of the Link, a sensor of a Haltech or ECUMaster. Found with the CAN monitor, checked by its live value.
- * [role] lets the engine guard use it (EGT, oil pressure, oil temperature) as it uses a SensorBox input.
+ * user stream of the Link, a sensor of a Haltech or ECUMaster, a third-party CAN sensor board on the car's bus. Found
+ * with the CAN monitor, checked by its live value. [role] makes it stand in for a SensorBox input of that role (EGT,
+ * oil, fuel and exhaust pressure, intercooler air, ethanol): cards, the engine guard and the analyzer read it the same.
  */
 data class CanChannel(
     val id: String,
@@ -29,7 +30,7 @@ data class CanChannel(
     val formula: String,
     val units: String,
     val decimals: Int,
-    /** "", "egt", "oilP" (bar), "oil" (°C), "fault" (the Link's current fault code number). */
+    /** One of [ROLES]: a SensorBox role (°C, pressures in [units] or bar, % ethanol) or "fault" (the Link's fault code number). */
     val role: String,
 ) {
     private val expr by lazy { RrExpr.parse(formula.ifBlank { "x" }) }
@@ -64,8 +65,9 @@ data class CanChannel(
         .put("units", units).put("dec", decimals).put("role", role)
 
     companion object {
-        val ROLES = listOf("" to "нет", "egt" to "ЕГТ, °C", "oilP" to "Давление масла, бар", "oil" to "Темп. масла, °C",
-            "fault" to "Код ошибки Link")
+        /** The SensorBox roles (but the tank wire's volts) and the Link's fault code. */
+        val ROLES = listOf("" to "нет") + BoxRoles.all.filter { it.first.isNotEmpty() && it.first != "fuelLevel" } +
+            ("fault" to "Код ошибки Link")
 
         fun fromJson(o: JSONObject) = CanChannel(
             o.getString("id"), o.optString("name"), o.getInt("can"), o.optBoolean("ext"), o.optInt("mux", -1),
@@ -118,4 +120,23 @@ object CanChannels {
         values.filter { now - it.value.second <= maxAgeMs }.mapValues { it.value.first }
 
     fun clearValues() = values.clear()
+
+    /** Fresh values of the channels set to [role], each with its unit (see [SensorBox.roleWithUnit]). */
+    fun roleValues(role: String, now: Long = System.currentTimeMillis()): List<Pair<Float, String>> =
+        if (role.isEmpty()) emptyList() else roleValues(list(), values(now), role)
+
+    fun roleValues(list: List<CanChannel>, values: Map<String, Double>, role: String): List<Pair<Float, String>> =
+        list.filter { it.role == role }.mapNotNull { c -> values[c.id]?.let { it.toFloat() to c.units } }
+
+    /**
+     * [rr] with the channels' fresh values in place of the old ones: heard while the diagnostics run (an OpenPort
+     * listening to the bus), they are read like the ticked parameters. A channel gone quiet leaves no stale number.
+     */
+    fun withValues(rr: Map<String, Double>, now: Long = System.currentTimeMillis()): Map<String, Double> {
+        val l = list()
+        if (l.isEmpty()) return rr
+        val fresh = values(now)
+        val out = rr - l.map { it.id }.toSet() + fresh
+        return if (out == rr) rr else out
+    }
 }

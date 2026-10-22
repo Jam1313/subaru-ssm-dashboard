@@ -56,16 +56,30 @@ object Updater {
         val arr = JSONArray(c.inputStream.bufferedReader().use { it.readText() })
         val all = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { !it.optBoolean("draft") }
         val withApk = all.mapNotNull { r ->
-            val assets = r.getJSONArray("assets")
-            val apk = (0 until assets.length()).map { assets.getJSONObject(it) }
-                .filter { it.getString("name").endsWith(".apk") }
-                .sortedBy { if (it.getString("name") == "subaru-ssm-dashboard.apk") 0 else 1 }
-                .firstOrNull() ?: return@mapNotNull null
+            val files = r.getJSONArray("assets")
+            val assets = (0 until files.length()).map { files.getJSONObject(it) }
+            val name = pickApk(assets.map { it.getString("name") }, r.getString("tag_name")) ?: return@mapNotNull null
+            val apk = assets.first { it.getString("name") == name }
             Release(r.getString("tag_name"), r.optString("name"), r.optString("body"),
                 apk.getString("browser_download_url"), apk.optLong("size"))
         }
         withApk.maxWithOrNull { a, b -> compare(a.tag, b.tag) }
     }.getOrNull()
+
+    /**
+     * Which APK of a release to download. Since 0.9-beta21 the app is CarPulse: carpulse.apk, then carpulse-<ver>.apk;
+     * the releases before the rename only have subaru-ssm-dashboard.apk / subaru-ssm-dashboard-<ver>.apk, and then
+     * any other APK attached to the release.
+     */
+    fun pickApk(names: List<String>, tag: String): String? {
+        val ver = tag.trim().removePrefix("v")
+        val apks = names.filter { it.endsWith(".apk", ignoreCase = true) }
+        return listOf("carpulse.apk", "carpulse-$ver.apk", "subaru-ssm-dashboard.apk", "subaru-ssm-dashboard-$ver.apk")
+            .firstNotNullOfOrNull { want -> apks.firstOrNull { it.equals(want, ignoreCase = true) } }
+            ?: apks.firstOrNull { it.startsWith("carpulse", ignoreCase = true) }
+            ?: apks.firstOrNull { it.startsWith("subaru-ssm-dashboard", ignoreCase = true) }
+            ?: apks.firstOrNull()
+    }
 
     /** True when [tag] (e.g. "v0.9-beta7") is newer than [installed] (e.g. "0.9-beta6"). */
     fun isNewer(tag: String, installed: String) = compare(tag, installed) > 0
@@ -90,7 +104,7 @@ object Updater {
     /** Downloads the APK into the cache; [progress] gets 0..1. Blocking. */
     fun download(ctx: Context, r: Release, progress: (Float) -> Unit): File {
         val dir = File(ctx.cacheDir, "update").apply { deleteRecursively(); mkdirs() }
-        val f = File(dir, "subaru-dashboard-${r.tag}.apk")
+        val f = File(dir, "carpulse-${r.tag}.apk")
         var url = URL(r.apkUrl)
         var c: HttpURLConnection
         // GitHub answers with a redirect to its file storage

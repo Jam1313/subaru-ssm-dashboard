@@ -82,6 +82,8 @@ fun CarAdapterSettings() {
     val polled by Repo.pollAddresses.collectAsState()
     val obdMode by Repo.obdMode.collectAsState()
     val found by Repo.adapterFound.collectAsState()
+    // another make (see CarKind): the Subaru-only parts below step aside
+    val otherCar by kg.forester.sg.data.CarKind.other.collectAsState()
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var wifiHost by remember { mutableStateOf(s.wifiHost) }
     var saved by remember { mutableStateOf("") }
@@ -93,6 +95,7 @@ fun CarAdapterSettings() {
     var gearbox by remember { mutableStateOf(s.gearbox) }
     var demo by remember { mutableStateOf(s.demo) }
     var awd by remember { mutableStateOf(s.awd) }
+    var loggerProfile by remember { mutableStateOf(s.loggerProfile) }
 
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
@@ -105,6 +108,7 @@ fun CarAdapterSettings() {
             val (hTitle, hSub) = carHeader(engine, s.carTitle, s.carSub, s.carTitleCustom)
             val link = engine.source == "Link"
             T(when {
+                otherCar -> rememberCarHeader().let { (t, sub) -> "$t · $sub" }
                 engine.known -> "$hTitle · $hSub"
                 link -> "ЭБУ Link: модель машины впишите ниже"
                 else -> "Модель определится, когда ответит ЭБУ"
@@ -116,12 +120,14 @@ fun CarAdapterSettings() {
             }
             T(if (link) "Пусто: в шапке SUBARU." else "Пусто: в шапке модель по ЭБУ.", 11.sp, C.Sub)
             Spacer(Modifier.height(14.dp))
+            CarKindSettings()
+            Spacer(Modifier.height(14.dp))
             T("Коробка", 15.sp)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 gearboxes.forEach { (k, l) -> Chip(l, gearbox == k, { gearbox = k; s.gearbox = k }) }
             }
-            if (gearbox == "at") {
+            if (gearbox == "at" && !otherCar) {
                 Spacer(Modifier.height(10.dp))
                 T("Полный привод АКПП (для оценки перед:зад)", 13.sp, C.Sub)
                 Spacer(Modifier.height(6.dp))
@@ -132,60 +138,68 @@ fun CarAdapterSettings() {
                 }
                 T("MP-T: большинство 4EAT (Forester SG, Impreza). VTD: 5EAT турбо Legacy/Outback и др.", 11.sp, C.Sub)
             }
-            Spacer(Modifier.height(16.dp))
-            T("3D-модель на главном экране", 15.sp)
-            Spacer(Modifier.height(6.dp))
-            val car3d by Repo.car3d.collectAsState()
-            val ctx = androidx.compose.ui.platform.LocalContext.current
-            // many models now: wrap onto several lines instead of running off the panel
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CarModels3d.forEach { (k, l) -> Chip(l, car3d == k, { s.car3d = k; s.car3dCustom = true }) }
-            }
-            Spacer(Modifier.height(10.dp))
-            T("Цвет кузова", 13.sp, C.Sub)
-            Spacer(Modifier.height(6.dp))
-            val paintSel by Repo.carPaint.collectAsState()
-            val anyColour = car3dAnyColour(ctx, car3d)
-            var picker by remember { mutableStateOf(false) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CarPaints.forEach { cp ->
-                    val on = paintSel == cp.id
-                    val usable = anyColour || !cp.needsWhite
+            // the 3D cars are Subarus: another make gets a plain outline on the home screen
+            if (!otherCar) {
+                Spacer(Modifier.height(16.dp))
+                T("3D-модель на главном экране", 15.sp)
+                Spacer(Modifier.height(6.dp))
+                val car3d by Repo.car3d.collectAsState()
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                // many models now: wrap onto several lines instead of running off the panel
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CarModels3d.forEach { (k, l) -> Chip(l, car3d == k, { s.car3d = k; s.car3dCustom = true }) }
+                }
+                Spacer(Modifier.height(10.dp))
+                T("Цвет кузова", 13.sp, C.Sub)
+                Spacer(Modifier.height(6.dp))
+                val paintSel by Repo.carPaint.collectAsState()
+                val anyColour = car3dAnyColour(ctx, car3d)
+                var picker by remember { mutableStateOf(false) }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CarPaints.forEach { cp ->
+                        val on = paintSel == cp.id
+                        val usable = anyColour || !cp.needsWhite
+                        Box(
+                            Modifier.size(34.dp).alpha(if (usable) 1f else 0.3f).clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(cp.swatch)
+                                .border(if (on) 3.dp else 1.dp, if (on) C.Violet else C.Border, androidx.compose.foundation.shape.CircleShape)
+                                .clickable(enabled = usable) { s.carPaint = cp.id },
+                        )
+                    }
+                    // any colour: rainbow swatch opens the picker
+                    val custom = paintSel.startsWith("custom:")
                     Box(
-                        Modifier.size(34.dp).alpha(if (usable) 1f else 0.3f).clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(cp.swatch)
-                            .border(if (on) 3.dp else 1.dp, if (on) C.Violet else C.Border, androidx.compose.foundation.shape.CircleShape)
-                            .clickable(enabled = usable) { s.carPaint = cp.id },
+                        Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(androidx.compose.ui.graphics.Brush.sweepGradient(
+                                listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
+                            .border(if (custom) 3.dp else 1.dp, if (custom) C.Violet else C.Border, androidx.compose.foundation.shape.CircleShape)
+                            .clickable { picker = !picker },
                     )
                 }
-                // any colour: rainbow swatch opens the picker
-                val custom = paintSel.startsWith("custom:")
-                Box(
-                    Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(androidx.compose.ui.graphics.Brush.sweepGradient(
-                            listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
-                        .border(if (custom) 3.dp else 1.dp, if (custom) C.Violet else C.Border, androidx.compose.foundation.shape.CircleShape)
-                        .clickable { picker = !picker },
-                )
-            }
-            T(carPaint(paintSel).name + if (!anyColour) " · у этой модели нет белого и серебра — выберите другую 3D-модель" else "", 11.sp, C.Sub)
-            if (picker) {
-                Spacer(Modifier.height(8.dp))
-                ColourPicker(paintSel.removePrefix("custom:").toIntOrNull(16) ?: 0x2563EB) { rgb ->
-                    s.carPaint = "custom:%06X".format(rgb and 0xFFFFFF); picker = false
+                T(carPaint(paintSel).name + if (!anyColour) " · у этой модели нет белого и серебра — выберите другую 3D-модель" else "", 11.sp, C.Sub)
+                if (picker) {
+                    Spacer(Modifier.height(8.dp))
+                    ColourPicker(paintSel.removePrefix("custom:").toIntOrNull(16) ?: 0x2563EB) { rgb ->
+                        s.carPaint = "custom:%06X".format(rgb and 0xFFFFFF); picker = false
+                    }
                 }
-            }
-            if (car3dDir(ctx, car3d) == null) {
-                Spacer(Modifier.height(4.dp))
-                T("Модель $car3d ещё готовится, пока показывается SG5.", 11.sp, C.Orange)
+                if (car3dDir(ctx, car3d) == null) {
+                    Spacer(Modifier.height(4.dp))
+                    T("Модель $car3d ещё готовится, пока показывается SG5.", 11.sp, C.Orange)
+                }
             }
             Spacer(Modifier.height(16.dp))
             T("Масштаб интерфейса", 15.sp)
-            T("Если на вашей магнитоле цифры обрезаются или всё слишком крупное", 11.sp, C.Sub)
+            // a phone: from the whole layout on the screen up (MainActivity's ScaledDensity), text with it
+            val phone = kg.forester.sg.isPhone(ctx)
+            T(if (phone) "На телефоне «Авто» помещает весь экран магнитолы. Мелко: выберите больше, вырастут и шрифты. " +
+                "Размер шрифта Android тоже учитывается"
+                else "Если на вашей магнитоле цифры обрезаются или всё слишком крупное", 11.sp, C.Sub)
             Spacer(Modifier.height(6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(0 to "Авто", 80 to "80%", 90 to "90%", 100 to "100%", 110 to "110%", 120 to "120%").forEach { (v, l) ->
-                    Chip(l, scale == v, { s.uiScale = v })
+                (if (phone) listOf(0 to "Авто", 115 to "115%", 130 to "130%", 145 to "145%")
+                else listOf(0 to "Авто", 80 to "80%", 90 to "90%", 100 to "100%", 110 to "110%", 120 to "120%")).forEach { (v, l) ->
+                    Chip(l, scale == v || (phone && v == 0 && scale in 1..100), { s.uiScale = v })
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -197,6 +211,19 @@ fun CarAdapterSettings() {
         Panel(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
             PanelTitle(Lucide.Usb, "Адаптер")
             Spacer(Modifier.height(10.dp))
+            // the CarBerry 4.2 list is made for one ROM: nobody else gets the choice
+            if (!otherCar && init?.romId.equals(kg.forester.sg.ssm.RomRaider.CARBERRY_ROM, ignoreCase = true)) {
+                T("Профиль логгера SSM", 15.sp)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("stock" to "Штатный", "carberry42" to "CarBerry 4.2").forEach { (key, label) ->
+                        Chip(label, loggerProfile == key, { loggerProfile = key; s.loggerProfile = key })
+                    }
+                }
+                T(if (loggerProfile == "carberry42") "SDlogger rev1.9: к штатным параметрам на экране «Датчики» добавятся каналы CarBerry. Выбор применяется во время опроса SSM."
+                    else "CarBerry 4.2 (SDlogger rev1.9) добавляет к штатным параметрам свои каналы: детонация по цилиндрам, VE, этанол и др.", 12.sp, C.Sub)
+                if (loggerProfile == "carberry42" && obdMode) T("В режиме OBD-II профиль SSM не применяется.", 12.sp, C.Orange)
+                Spacer(Modifier.height(10.dp))
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 adapters.forEach { (k, l) -> Chip(l, adapter == k, { adapter = k; s.adapter = k }) }
             }
@@ -253,13 +280,16 @@ fun CarAdapterSettings() {
             Spacer(Modifier.height(14.dp))
             InfoLine("Связь", msg)
             if (found.isNotEmpty()) InfoLine("Адаптер", found)
-            InfoLine("SSM ID / ROM ID", init?.let { "${it.ssmId} / ${it.romId}" } ?: "—")
+            if (otherCar && init == null) InfoLine("Блок двигателя (OBD)", Repo.obdEcu.collectAsState().value.ifEmpty { "—" })
+            else InfoLine("SSM ID / ROM ID", init?.let { "${it.ssmId} / ${it.romId}" } ?: "—")
             InfoLine("Параметров опрашивается", when {
                 polled <= 0 -> "—"
                 obdMode -> "$polled (OBD-II)"
                 else -> "$polled (SSM)"
             })
             Spacer(Modifier.height(14.dp))
+            // SSM only: a Link on the CANable has no RomRaider parameters
+            if (adapter != "canable" && !otherCar) { EcuDefsBlock(); Spacer(Modifier.height(14.dp)) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     T("Журнал обмена (для тестов)", 15.sp)
@@ -438,7 +468,7 @@ private fun InfoLine(k: String, v: String) {
 private fun TextBox(label: String, value: String, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true,
-        label = { T(label, 12.sp, C.Sub) },
+        label = { FieldLabel(label) },
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = C.Text, unfocusedTextColor = C.Text,
             focusedBorderColor = C.Purple, unfocusedBorderColor = C.Border,

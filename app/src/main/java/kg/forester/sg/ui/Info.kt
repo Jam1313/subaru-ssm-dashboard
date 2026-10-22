@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,11 +39,11 @@ data class InfoText(val what: String, val how: String, val norm: String? = null)
 fun InfoButton(title: String, key: String = title, modifier: Modifier = Modifier) {
     val info = InfoTexts.byKey[key] ?: return
     var open by remember { mutableStateOf(false) }
-    Box(
-        modifier.size(28.dp).clip(CircleShape).clickable { open = true },
-        contentAlignment = Alignment.Center,
-    ) {
+    // the small "i" keeps its place in the 20 dp title rows; the round area that takes the tap is 48 dp, centred on
+    // it and reaching past the row (requiredSize lets it overhang the 28 dp box instead of being squeezed into it)
+    Box(modifier.size(28.dp), contentAlignment = Alignment.Center) {
         Icon(Lucide.Info, "Что это", tint = C.Sub.copy(alpha = 0.6f), modifier = Modifier.size(15.dp))
+        Box(Modifier.requiredSize(48.dp).clip(CircleShape).clickable { open = true })
     }
     if (open) InfoDialog(title, info, key) { open = false }
 }

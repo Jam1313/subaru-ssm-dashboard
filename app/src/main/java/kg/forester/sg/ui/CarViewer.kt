@@ -256,6 +256,9 @@ fun CarViewer(
         var vT = 0L
         val recent = ArrayDeque<Triple<Long, Int, Float>>() // time, rpm, throttle over the last ~0.4 s
         while (true) {
+            // parked with nothing left to play (no flame, the camera settled): no work on every frame, only a look
+            // ten times a second for the car to move off; dt starts again from zero, so nothing jumps
+            if (speed < 3 && flame == 0f && accel == 0f) { delay(100); last = 0L; continue }
             androidx.compose.runtime.withFrameNanos { t ->
                 val dt = if (last == 0L) 0f else (t - last) / 1e9f
                 last = t
@@ -264,14 +267,20 @@ fun CarViewer(
                     // ~2 road dashes per second at 30 km/h, faster with speed
                     road = (road + dt * speed / 14f) % 1f
                 }
-                // speed only changes 4 times a second: measure acceleration between updates
+                // speed only changes 4–12 times a second (plain or fast poll): measure acceleration between updates,
+                // smoothed by time so the fast poll's more frequent steps don't make the camera twitchier
                 if (speed.toFloat() != lastV) {
                     if (vT != 0L) {
-                        val a = (speed - lastV) / ((t - vT) / 1e9f).coerceAtLeast(0.1f)
-                        accel += (a - accel) * 0.35f
+                        val span = ((t - vT) / 1e9f).coerceAtLeast(0.1f)
+                        val a = (speed - lastV) / span
+                        accel += (a - accel) * (span / 0.7f).coerceAtMost(1f)
                     }
                     lastV = speed.toFloat(); vT = t
-                } else if (vT != 0L && t - vT > 1_500_000_000L) accel *= 0.95f
+                } else if (vT != 0L && t - vT > 1_500_000_000L) {
+                    // decays to an exact zero (a leftover 0.01 km/h/s changes nothing on screen but kept every frame busy)
+                    accel *= 0.95f
+                    if (kotlin.math.abs(accel) < 0.05f) accel = 0f
+                }
                 // backfire: throttle snapped shut at high rpm, or an upshift under load
                 val ms = t / 1_000_000L
                 recent.addLast(Triple(ms, rpmNow, throttle))
@@ -407,6 +416,7 @@ fun CarViewer(
             )
         }
         val f = frame
+        val paint = remember { android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG) }
         if (f != null) {
             Canvas(Modifier.fillMaxSize()) {
                 // fit the frame into the box (like ContentScale.Fit)
@@ -419,7 +429,6 @@ fun CarViewer(
                 val oy = (size.height - dh) / 2 + (1f - zoom) * size.height * 0.25f + (1f - carScale) * size.height * 0.32f
                 drawIntoCanvas { cnv ->
                     val nc = cnv.nativeCanvas
-                    val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG)
                     nc.drawBitmap(f, null, android.graphics.RectF(ox, oy, ox + dw, oy + dh), paint)
                     val pb = plate
                     val quads = src.plates.getOrNull(frameIdx)

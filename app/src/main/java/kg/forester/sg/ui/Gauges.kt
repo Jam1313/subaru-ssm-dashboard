@@ -2,6 +2,9 @@ package kg.forester.sg.ui
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -309,18 +312,38 @@ fun Dial(
     /** The trip's lowest and highest value, marked on the scale like the telltale needles of a real gauge. */
     range: Pair<Float, Float>? = null, minMark: Boolean = true,
 ) {
-    val v by animateFloatAsState((value ?: min).coerceIn(min, max), tween(240), label = "dial")
+    // the animated value is read only while drawing: the needle's frames redraw the dial without recomposing it
+    val anim = animateFloatAsState((value ?: min).coerceIn(min, max), tween(240), label = "dial")
     val text = value?.let { format.format(it) } ?: "—"
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val photo = remember(style.image) { style.image?.let { kg.forester.sg.data.GaugeImages.bitmap(ctx, it)?.asImageBitmap() } }
-    val ringFill = if (style.rings.isEmpty()) emptyList() else ringValues()
-    Box(modifier, contentAlignment = Alignment.Center) {
-        val ro = style.readout
-        // a read-out sits below the hub, where the needle passes at the bottom of the scale: the needle goes over it
-        Canvas(Modifier.fillMaxSize()) {
-            drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill, if (ro != null) DialLayer.FACE else DialLayer.ALL)
-            if (range != null) drawPeakMarks(range, min, max, style, minMark)
+    val rings = androidx.compose.runtime.rememberUpdatedState(if (style.rings.isEmpty()) emptyList() else ringValues())
+    val peaks = androidx.compose.runtime.rememberUpdatedState(range)
+    val ro = style.readout
+    // The face and the scale with its numbers stay the same while the needle moves: they are drawn once into two
+    // offscreen layers (again only for a new size or design) and every frame of the needle puts those two pictures
+    // down, drawing anew only the lit arc, the outer bars and the needle. Before, the gradients, the face artwork,
+    // ~30 ticks and the numbers were all drawn again on each of the 15 frames a reading takes.
+    val dial = remember(style, photo, min, max, step, labelDiv, redFrom, minMark) {
+        Modifier.drawWithCache {
+            fun cached(layer: DialLayer) = obtainGraphicsLayer().apply {
+                compositingStrategy = androidx.compose.ui.graphics.layer.CompositingStrategy.Offscreen
+                record { drawDial(min, min, max, step, labelDiv, redFrom, style, photo, layer = layer) }
+            }
+            val face = cached(DialLayer.BASE)
+            val scale = cached(DialLayer.TICKS)
+            onDrawBehind {
+                drawLayer(face)
+                drawDial(anim.value, min, max, step, labelDiv, redFrom, style, photo, rings.value, DialLayer.LIVE)
+                drawLayer(scale)
+                // a read-out sits below the hub, where the needle passes at the bottom of the scale: the needle goes over it
+                if (ro == null) drawDial(anim.value, min, max, step, labelDiv, redFrom, style, photo, layer = DialLayer.NEEDLE)
+                peaks.value?.let { drawPeakMarks(it, min, max, style, minMark) }
+            }
         }
+    }
+    // and the dial in a layer of its own, so the needle's frames re-record only the dial, not the screen around it
+    Box(modifier.graphicsLayer().then(dial), contentAlignment = Alignment.Center) {
         if (ro != null) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val d = minOf(maxWidth, maxHeight)
@@ -328,11 +351,13 @@ fun Dial(
                     Modifier.align(Alignment.Center).padding(top = d * 0.42f),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    if (!style.hideValue) ReadoutBox(text, ro, d * 0.44f, style.value)
+                    // sized by the scale's widest number, so the digits keep their size from «99» to «100»
+                    if (!style.hideValue) ReadoutBox(text, ro, d * 0.44f, style.value, widest = format.format(max).let { hi ->
+                        format.format(min).let { lo -> if (lo.length > hi.length) lo else hi } })
                     T(unit, (d.value * 0.075f).coerceIn(8f, 13f).sp, style.unit, maxLines = 1)
                 }
             }
-            Canvas(Modifier.fillMaxSize()) { drawDial(v, min, max, step, labelDiv, redFrom, style, photo, ringFill, DialLayer.NEEDLE) }
+            Canvas(Modifier.fillMaxSize()) { drawDial(anim.value, min, max, step, labelDiv, redFrom, style, photo, layer = DialLayer.NEEDLE) }
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 4.dp)) {
                 BoxWithConstraints(Modifier.fillMaxWidth(if (style.minimal) 0.62f else 0.5f)) {
@@ -356,9 +381,12 @@ private fun ringValues(): List<Float?> {
     return listOf(e.rpm?.let { it / 7000f }, ts.fuelLeftL?.takeIf { tank > 0 }?.let { (it / tank).toFloat() })
 }
 
-/** LCD / framed digital number of [width]; unlit "8"s sit behind a segment read-out. */
+/**
+ * LCD / framed digital number of [width]; unlit "8"s sit behind a segment read-out. Sized for [widest] (the longest
+ * number of the scale), not for the text now, so the digits keep their size as the number grows or shrinks.
+ */
 @Composable
-private fun ReadoutBox(text: String, ro: Readout, width: androidx.compose.ui.unit.Dp, plainColor: Color) {
+private fun ReadoutBox(text: String, ro: Readout, width: androidx.compose.ui.unit.Dp, plainColor: Color, widest: String = "") {
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(width * 0.08f)
     Box(
         Modifier.size(width, width * 0.38f).clip(shape).background(ro.bg)
@@ -366,7 +394,7 @@ private fun ReadoutBox(text: String, ro: Readout, width: androidx.compose.ui.uni
         contentAlignment = Alignment.CenterEnd,
     ) {
         val d = LocalDensity.current
-        val digits = text.length.coerceAtLeast(3)
+        val digits = maxOf(text.length, widest.length).coerceAtLeast(3)
         val sp = with(d) { minOf(width * 0.26f, (width * 0.86f) / (digits * 0.8f)).toSp() }
         if (ro.segments) {
             // a "1" is as wide as an "8" in DSEG, so the ghost lines up digit for digit
@@ -460,8 +488,11 @@ internal fun DrawScope.drawDial(
         }
     }
     if (layer == DialLayer.NEEDLE) { needle(); return }
+    val whole = layer == DialLayer.ALL || layer == DialLayer.FACE
+    val base = whole || layer == DialLayer.BASE // what stays under the value: the outer ring, face, track, red zone
+    val live = whole || layer == DialLayer.LIVE // what follows the value: the outer bars, the lit arc or LED blocks
     // outer two-tone ring (Most Wanted: nitrous / speedbreaker bars)
-    st.outer?.let { (left, right) ->
+    if (base) st.outer?.let { (left, right) ->
         val or = r * 1.06f
         val w = r * 0.07f
         val tl = Offset(c.x - or, c.y - or)
@@ -470,7 +501,7 @@ internal fun DrawScope.drawDial(
         drawArc(left, start + 4f, mid - start - 6f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
         drawArc(right, mid + 2f, start + sweep - mid - 6f, false, tl, sz, style = Stroke(w, cap = StrokeCap.Round))
     }
-    st.rings.forEachIndexed { i, (a0, sw, col) ->
+    if (live) st.rings.forEachIndexed { i, (a0, sw, col) ->
         val or = r * 1.06f
         val tl = Offset(c.x - or, c.y - or)
         val sz = Size(or * 2, or * 2)
@@ -479,7 +510,7 @@ internal fun DrawScope.drawDial(
         if (f != null && f > 0.005f) drawArc(col, a0, sw * f, false, tl, sz, style = Stroke(r * 0.07f, cap = StrokeCap.Round))
     }
     // face
-    if (!st.minimal) {
+    if (base && !st.minimal) {
         st.glow?.let { drawCircle(Brush.radialGradient(listOf(it.copy(alpha = 0.22f), Color.Transparent), c, r * 1.08f), r * 1.08f, c) }
         if (photo != null) {
             val clip = androidx.compose.ui.graphics.Path().apply { addOval(androidx.compose.ui.geometry.Rect(c, r)) }
@@ -497,20 +528,20 @@ internal fun DrawScope.drawDial(
     }
     val tl = Offset(c.x - arcR, c.y - arcR)
     val sz = Size(arcR * 2, arcR * 2)
-    if (band != null) {
+    if (base && band != null) {
         val bw = r * 0.26f
         drawArc(Brush.sweepGradient(band, c), start, sweep, false, tl, sz, style = Stroke(bw, cap = StrokeCap.Butt))
         if (redFrom != null) drawArc(st.red, ang(redFrom), ang(max) - ang(redFrom), false,
             Offset(c.x - arcR - bw * 0.33f, c.y - arcR - bw * 0.33f), Size((arcR + bw * 0.33f) * 2, (arcR + bw * 0.33f) * 2),
             style = Stroke(bw * 0.3f))
-    } else {
+    } else if (base) {
         if (st.track.alpha > 0f) drawArc(st.track, start, sweep, false, tl, sz, style = Stroke(if (st.readout?.segments == false) 2f else stroke))
         if (redFrom != null) {
             drawArc(st.red.copy(alpha = if (st.minimal) 0.5f else 0.6f), ang(redFrom), ang(max) - ang(redFrom), false, tl, sz, style = Stroke(stroke))
         }
     }
     val arc = st.arc
-    if (st.segments) {
+    if (live && st.segments) {
         // LED bar: 24 blocks, lit up to the value, coloured along the arc colours (green → orange → red etc.)
         val n = 24
         val cols = arc ?: listOf(st.tickMajor, st.tickMajor)
@@ -523,7 +554,7 @@ internal fun DrawScope.drawDial(
             drawArc(if (lit) col else col.copy(alpha = 0.12f), a0, sweep / n - gap, false, tl, sz, style = Stroke(stroke * 2.2f))
             if (lit) st.glow?.let { drawArc(it.copy(alpha = 0.18f), a0, sweep / n - gap, false, tl, sz, style = Stroke(stroke * 3.4f)) }
         }
-    } else if (arc != null && v != from) {
+    } else if (live && !st.segments && arc != null && v != from) {
         val hot = redFrom != null && v >= redFrom
         val brush = if (hot) Brush.sweepGradient(listOf(C.Orange, C.Red), c) else Brush.sweepGradient(arc, c)
         val a0 = ang(minOf(from, v))
@@ -531,12 +562,15 @@ internal fun DrawScope.drawDial(
         st.glow?.let { drawArc(it.copy(alpha = 0.25f), a0, a1 - a0, false, tl, sz, style = Stroke(stroke * 2.4f, cap = StrokeCap.Round)) }
         drawArc(brush, a0, a1 - a0, false, tl, sz, style = Stroke(stroke, cap = StrokeCap.Round))
     }
-    // ticks and numbers
-    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    if (layer == DialLayer.BASE || layer == DialLayer.LIVE) return
+    // ticks and numbers; the paint is reused (the USB display's renderer redraws whole dials on every frame)
+    val paint = DialPaint.get()!!.apply {
+        reset()
+        flags = android.graphics.Paint.ANTI_ALIAS_FLAG
         textAlign = android.graphics.Paint.Align.CENTER
         textSize = r * (if (band != null) 0.15f else 0.13f)
         color = (if (band != null) st.bandText else st.numbers).toArgb()
-        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        typeface = DialFace
         if (st.italic) textSkewX = -0.2f
         st.glow?.let { if (band == null) setShadowLayer(r * 0.05f, 0f, 0f, it.toArgb()) }
     }
@@ -575,8 +609,18 @@ internal fun DrawScope.drawDial(
     if (st.readout?.segments == false) drawCircle(st.tickMajor, r * 0.5f, c, style = Stroke(2.5f))
 }
 
-/** What [drawDial] draws: all of it, or the face and the needle apart, with a read-out laid between them. */
-enum class DialLayer { ALL, FACE, NEEDLE }
+/** The numbers' paint of [drawDial], one per thread: the screen and the USB display's renderer draw dials at once. */
+private val DialPaint = object : ThreadLocal<android.graphics.Paint>() {
+    override fun initialValue() = android.graphics.Paint()
+}
+private val DialFace: android.graphics.Typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+
+/**
+ * What [drawDial] draws: all of it, or the face and the needle apart, with a read-out laid between them. On screen the
+ * face is split further, so its unchanging parts can be kept in layers: [BASE] (outer ring, face, track, red zone),
+ * [LIVE] (the outer bars and the lit arc or LED blocks, which follow the value) and [TICKS] (ticks and numbers over them).
+ */
+enum class DialLayer { ALL, FACE, NEEDLE, BASE, LIVE, TICKS }
 
 /** Face artwork, clipped to the face circle. */
 private fun DrawScope.facePattern(p: FacePattern, col: Color, c: Offset, r: Float) {

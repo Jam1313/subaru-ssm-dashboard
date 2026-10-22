@@ -555,25 +555,30 @@ object Voice {
         val e = kg.forester.sg.data.Repo.live.value
         val trip = kg.forester.sg.data.Repo.trip.value
         val ru = java.util.Locale("ru")
-        fun n(x: Number?, unit: String) = x?.let { "${Math.round(it.toDouble())} $unit".trim() } ?: "нет данных"
+        // the unit agreeing with the number (91 градус, 92 градуса, 95 градусов), so the screen and the voice say it right
+        fun n(x: Number?, vararg forms: String) = x?.let {
+            val v = Math.round(it.toDouble())
+            "$v ${forms.getOrElse(SpeechText.plural(kotlin.math.abs(v))) { forms.lastOrNull() ?: "" }}".trim()
+        } ?: "нет данных"
+        val deg = arrayOf("градус", "градуса", "градусов")
         speak(when (t) {
-            "COOLANT" -> "Двигатель ${n(e.coolantC, "градусов")}"
-            "INTAKE", "OUTSIDE" -> "Воздух на впуске ${n(e.intakeC, "градусов")}"
-            "ATF" -> "Коробка ${n(kg.forester.sg.data.Repo.tcu.value?.atfC, "градусов")}"
+            "COOLANT" -> "Двигатель ${n(e.coolantC, *deg)}"
+            "INTAKE", "OUTSIDE" -> "Воздух на впуске ${n(e.intakeC, *deg)}"
+            "ATF" -> "Коробка ${n(kg.forester.sg.data.Repo.tcu.value?.atfC, *deg)}"
             // most EJs have no oil sensor: the app's estimate, said as one
             "OIL" -> kg.forester.sg.data.Repo.guard.value.let { g ->
-                g.oilC?.let { "Масло ${if (g.oilEstimated) "примерно " else ""}${Math.round(it)} градусов" } ?: "Нет данных о масле"
+                g.oilC?.let { "Масло ${if (g.oilEstimated) "примерно " else ""}${n(it, *deg)}" } ?: "Нет данных о масле"
             }
             "OILP" -> kg.forester.sg.data.SensorBox.role("oilP")?.let { "Давление масла ${String.format(ru, "%.1f", it)} бар" }
                 ?: "Датчика давления масла нет"
             "BATTERY" -> "Напряжение ${e.batteryV?.let { String.format(ru, "%.1f", it) } ?: "нет данных"} вольт"
-            "SPEED" -> "Скорость ${n(e.speedKmh, "километров в час")}"
+            "SPEED" -> "Скорость ${n(e.speedKmh, "километр в час", "километра в час", "километров в час")}"
             "RPM" -> "Обороты ${n(e.rpm, "")}"
             "BOOST" -> "Наддув ${e.boostBar?.let { String.format(ru, "%.2f", it) } ?: "нет данных"} бар"
-            "FUEL" -> trip.fuelLeftL?.let { "В баке ${Math.round(it)} литров" } ?: e.fuelLevelPct?.let { "В баке ${Math.round(it)} процентов" } ?: "Нет данных о топливе: отметьте заправку"
-            "RANGE" -> "Хватит на ${n(trip.rangeKm, "километров")}"
+            "FUEL" -> trip.fuelLeftL?.let { "В баке ${n(it, "литр", "литра", "литров")}" } ?: e.fuelLevelPct?.let { "В баке ${n(it, "процент", "процента", "процентов")}" } ?: "Нет данных о топливе: отметьте заправку"
+            "RANGE" -> "Хватит на ${n(trip.rangeKm, "километр", "километра", "километров")}"
             "CONSUMPTION" -> "Расход ${trip.trip?.per100?.let { String.format(ru, "%.1f", it) } ?: "нет данных"} литров на сотню"
-            "TRIP" -> "Проехали ${n(trip.trip?.distanceKm, "километров")}"
+            "TRIP" -> "Проехали ${n(trip.trip?.distanceKm, "километр", "километра", "километров")}"
             "TIME" -> java.text.SimpleDateFormat("H:mm", ru).format(java.util.Date())
             "VOLUME" -> "Громкость ${Fyt.volume.value.takeIf { it >= 0 } ?: (app.getSystemService(Context.AUDIO_SERVICE) as AudioManager).getStreamVolume(AudioManager.STREAM_MUSIC)}"
             "DTC" -> "Открываю ошибки".also { go(VoiceTarget.DTC, "Ошибки") }

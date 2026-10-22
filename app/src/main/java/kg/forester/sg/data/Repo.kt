@@ -161,6 +161,10 @@ class Settings(ctx: Context) {
     fun slot(k: Int): String = p.getString("slot$k", "")!!
     fun setSlot(k: Int, id: String) { p.edit().putString("slot$k", id).apply(); Repo.slotVersion.value++ }
 
+    /** The page the «Спорт-дисплей» card at [card] ("home.defi", "drive.defi") was left on. */
+    fun sportPage(card: String): Int = p.getInt("sport.$card", 0)
+    fun setSportPage(card: String, page: Int) = p.edit().putInt("sport.$card", page).apply()
+
     /** The one-time tip on the home screen (how to customise it) was closed. */
     var homeTipSeen: Boolean
         get() = p.getBoolean("homeTipSeen", false)
@@ -193,11 +197,31 @@ class Settings(ctx: Context) {
         get() = p.getString("btName", "")!!
         set(v) = p.edit().putString("btName", v).apply()
 
+    /** The SSM logger profile: "stock", or "carberry42" (CarBerry 4.2 channels on top of the stock ones, ROM 3D04EA4605 only). */
+    var loggerProfile: String
+        get() = p.getString("loggerProfile", "stock")!!
+        set(v) = p.edit().putString("loggerProfile", v).apply()
+
     /** Parameters from the RomRaider list the user ticked on the «Датчики» screen, comma-separated ids. */
     /** The driver's own ECU addresses (JSON, see CustomParams). */
     var customParams: String
         get() = p.getString("customParams", "[]")!!
         set(v) = p.edit().putString("customParams", v).apply()
+
+    /** Capability bits turned on by hand per ROM, for sensors the ECU has but doesn't list (JSON, see EcuCaps). */
+    var capsForced: String
+        get() = p.getString("capsForced", "{}")!!
+        set(v) = p.edit().putString("capsForced", v).apply()
+
+    /** The driver's own RomRaider definition files in files/defs, in the order they apply (JSON, see EcuDefs). */
+    var ecuDefs: String
+        get() = p.getString("ecuDefs", "[]")!!
+        set(v) = p.edit().putString("ecuDefs", v).apply()
+
+    /** Roles given to parameters of those files: role → id (JSON, see EcuDefs). */
+    var ecuDefRoles: String
+        get() = p.getString("ecuDefRoles", "{}")!!
+        set(v) = p.edit().putString("ecuDefRoles", v).apply()
 
     /** Values the driver reads off a CAN stream by id and bytes (see CanChannels), JSON. */
     var canChannels: String
@@ -229,6 +253,11 @@ class Settings(ctx: Context) {
         get() = p.getString("relays", "[]")!!
         set(v) = p.edit().putString("relays", v).apply()
 
+    /** The USB wideband (Innovate LC-2): on or off, its adapter (JSON, see Wideband). */
+    var wideband: String
+        get() = p.getString("wideband", "{}")!!
+        set(v) = p.edit().putString("wideband", v).apply()
+
     /** The SensorBox: on or off, the board, what is wired to which input (JSON, see SensorBox). */
     var sensorBox: String
         get() = p.getString("sensorBox", "{}")!!
@@ -250,6 +279,11 @@ class Settings(ctx: Context) {
     fun feature(id: String) = p.getBoolean("f_$id", true)
     fun setFeature(id: String, on: Boolean) { p.edit().putBoolean("f_$id", on).apply(); Repo.featureVersion.value++ }
 
+    /** K-line: the ECU sends the values by itself (SSM continuous mode, RomRaider's «fast poll»), where it can. */
+    var fastPoll: Boolean
+        get() = p.getBoolean("fastPoll", true)
+        set(v) = p.edit().putBoolean("fastPoll", v).apply()
+
     /** The transmission unit is read every N-th engine poll (3 = as before; more = faster engine data). */
     var tcuEvery: Int
         get() = p.getInt("tcuEvery", 3)
@@ -265,9 +299,9 @@ class Settings(ctx: Context) {
         get() = p.getString("logOff", "")!!.split(',').filter { it.isNotBlank() }.toSet()
         set(v) = p.edit().putString("logOff", v.joinToString(",")).apply()
 
-    /** Built-in voice for the spoken warnings: "irina" (female, default), "dmitri", "denis". */
+    /** Built-in voice for the spoken warnings: "irina-hq" (female, full-precision Piper, default), "irina", "dmitri", "denis", "ruslan" (+"-hq"), "st-f1"… (Supertonic), "system". */
     var ttsVoice: String
-        get() = p.getString("ttsVoice", "irina")!!
+        get() = p.getString("ttsVoice", "irina-hq")!!
         set(v) = p.edit().putString("ttsVoice", v).apply()
 
     /** Loudness of the spoken warnings: 0 normal, 1 louder (compressed), 2 loudest (the music pauses for it). */
@@ -300,6 +334,19 @@ class Settings(ctx: Context) {
     var engine3d: Boolean
         get() = p.getBoolean("engine3d", true)
         set(v) = p.edit().putBoolean("engine3d", v).apply()
+
+    /** Read the ROM's Knock Sum 1–4 (16 bytes more per poll, so off until asked for in «Откаты и наддув»). */
+    var knockSums: Boolean
+        get() = p.getBoolean("knockSums", false)
+        set(v) { p.edit().putBoolean("knockSums", v).apply(); Repo.featureVersion.value++ }
+
+    /** Beep on a timing pull from this many degrees (0 = off), and only from [knockBeepRpm]: −1° low down beeps all the time. */
+    var knockBeepDeg: Float
+        get() = p.getFloat("knockBeepDeg", 0f)
+        set(v) = p.edit().putFloat("knockBeepDeg", v).apply()
+    var knockBeepRpm: Int
+        get() = p.getInt("knockBeepRpm", 3000)
+        set(v) = p.edit().putInt("knockBeepRpm", v).apply()
     var voiceAlerts: Boolean
         get() = p.getBoolean("voiceAlerts", true)
         set(v) = p.edit().putBoolean("voiceAlerts", v).apply()
@@ -350,6 +397,29 @@ class Settings(ctx: Context) {
         get() = str("perfRuns", "[]")
         set(v) = putStr("perfRuns", v)
 
+    /** Laps of the lap timer, JSON list (oldest first). */
+    var perfLaps: String
+        get() = str("perfLaps", "[]")
+        set(v) = putStr("perfLaps", v)
+
+    /** Intervals the acceleration runs are timed on, "0-100,100-150,…" (km/h; 0 = from a standstill). */
+    var perfIntervals: String
+        get() = str("perfIntervals", "0-60,0-100,0-150,0-200,60-100,80-120,100-150,100-200")
+        set(v) = putStr("perfIntervals", v)
+
+    /** What new runs are marked with for the series: the fuel or the mod ("98", "присадка"), and a free note (passengers). */
+    var perfLabel: String
+        get() = str("perfLabel", "")
+        set(v) = putStr("perfLabel", v)
+    var perfNote: String
+        get() = str("perfNote", "")
+        set(v) = putStr("perfNote", v)
+
+    /** Spool tests, JSON list (newest first). */
+    var perfSpool: String
+        get() = str("perfSpool", "[]")
+        set(v) = putStr("perfSpool", v)
+
     /** Lap timer start/finish line "lat,lon", "" = not set. */
     var lapLine: String
         get() = str("lapLine", "")
@@ -391,6 +461,16 @@ class Settings(ctx: Context) {
         get() = p.getBoolean("canListen", false)
         set(v) = p.edit().putBoolean("canListen", v).apply()
 
+    /** OBD-II on CAN: the make's own parameters from a downloaded OBDb set (ssm/Obdb), shown on «Датчики». */
+    var obdbOn: Boolean
+        get() = p.getBoolean("obdbOn", false)
+        set(v) = p.edit().putBoolean("obdbOn", v).apply()
+
+    /** The OBDb set picked for this car ("Toyota-RAV4"); "" = the only one downloaded for the VIN's make. */
+    var obdbRepo: String
+        get() = p.getString("obdbRepo", "")!!
+        set(v) = p.edit().putString("obdbRepo", v).apply()
+
     /** The header text when the ECU has not said which car it is (or the driver's own name). */
     var carTitle: String
         get() = p.getString("carTitle", "FORESTER SG5")!!
@@ -423,6 +503,37 @@ class Settings(ctx: Context) {
     var car3dCustom: Boolean
         get() = p.getBoolean("car3dCustom", false)
         set(v) = p.edit().putBoolean("car3dCustom", v).apply()
+
+    /** «Тип машины»: "auto" (by the ECU and the VIN), "subaru", "other" (any car on plain OBD-II, see CarKind). */
+    var carKind: String
+        get() = p.getString("carKind", "auto")!!
+        set(v) { p.edit().putString("carKind", v).apply(); Repo.carVersion.value++ }
+    /** What "auto" decided at the last connection ("subaru" / "other"), for the start before the car answers. */
+    var carKindLast: String
+        get() = p.getString("carKindLast", "subaru")!!
+        set(v) = p.edit().putString("carKindLast", v).apply()
+    /** The VIN of the last car that gave one: its make for the header, the logo and the start-up screen. */
+    var lastVin: String
+        get() = p.getString("lastVin", "")!!
+        set(v) = p.edit().putString("lastVin", v).apply()
+    /** «Логотип в шапке»: "auto" (by the car), "subaru", "custom" (own picture, [logoImage]), "none". */
+    var logoMode: String
+        get() = p.getString("logoMode", "auto")!!
+        set(v) { p.edit().putString("logoMode", v).apply(); Repo.carVersion.value++ }
+    var logoImage: String
+        get() = p.getString("logoImage", "")!!
+        set(v) { p.edit().putString("logoImage", v).apply(); Repo.carVersion.value++ }
+    /**
+     * «Экран загрузки»: "route" (the neon road picture, the default since 0.9-beta21), "subaru" (the Subaru picture of
+     * earlier versions), "car" (the car's logo), "custom" (own picture, [splashImage]), "name".
+     */
+    var splashMode: String
+        get() = p.getString("splashMode", "route")!!
+        set(v) { p.edit().putString("splashMode", v).apply(); Repo.carVersion.value++ }
+    var splashImage: String
+        get() = p.getString("splashImage", "")!!
+        set(v) { p.edit().putString("splashImage", v).apply(); Repo.carVersion.value++ }
+
     /** The ROM ID of the last ECU: another one = another car (its own boost, MAF and load scales). */
     var lastRomId: String
         get() = p.getString("lastRomId", "")!!
@@ -437,6 +548,11 @@ class Settings(ctx: Context) {
     var injectorCc: Int
         get() = p.getInt("injectorCc", 0)
         set(v) = p.edit().putInt("injectorCc", v).apply()
+
+    /** Injector opening time (dead time) at 14 V, ms, for the same count; 0 = the usual 0.6 (see FuelCalc.deadTimeMs). */
+    var injectorDeadMs: Float
+        get() = p.getFloat("injectorDeadMs", 0f)
+        set(v) = p.edit().putFloat("injectorDeadMs", v).apply()
 
     /** Body colour of the 3D car (see CarPaints). */
     var carPaint: String
@@ -468,7 +584,7 @@ class Settings(ctx: Context) {
         get() = p.getString("mapApp", "")!!
         set(v) { p.edit().putString("mapApp", v).apply() }
 
-    /** Daily backup into Download/SubaruDashboard (see Backup). */
+    /** Daily backup into Download/CarPulse (see Backup). */
     var autoBackup: Boolean
         get() = p.getBoolean("autoBackup", true)
         set(v) { p.edit().putBoolean("autoBackup", v).apply() }
@@ -480,6 +596,26 @@ class Settings(ctx: Context) {
     /** Layout of any editable screen (see Board), by its settings key. */
     fun board(key: String) = p.getString(key, "")!!
     fun setBoard(key: String, v: String) { p.edit().putString(key, v).apply(); Repo.boardFlow(key).value = v }
+
+    /** «Мой экран» as the driver had set it before a ready-made layout replaced it ("" = none), for «Вернуть мой экран». */
+    var myTilesPrev: String
+        get() = p.getString("myTilesPrev", "")!!
+        set(v) { p.edit().putString("myTilesPrev", v).apply() }
+
+    /** The cluster route's destination (Place.format, "" = none), kept so the route comes back after a restart. */
+    var navDest: String
+        get() = p.getString("navDest", "")!!
+        set(v) { p.edit().putString("navDest", v).apply() }
+
+    /** The last places driven to, newest first, one Place.format per line. */
+    var navRecent: String
+        get() = p.getString("navRecent", "")!!
+        set(v) { p.edit().putString("navRecent", v).apply() }
+
+    /** Also send the destination to the navigator, so it guides along the same way. */
+    var navHandoff: Boolean
+        get() = p.getBoolean("navHandoff", true)
+        set(v) { p.edit().putBoolean("navHandoff", v).apply() }
 
     /** 3D car + dials block: 0 hidden, 1 normal, 2 large, 3 huge. */
     var clusterSize: Int
@@ -538,10 +674,16 @@ object Repo {
     val link = MutableStateFlow(LinkState.NO_CABLE)
     val linkMessage = MutableStateFlow("")
     val ecuInit = MutableStateFlow<EcuInit?>(null)
+    /** The init as the ECU sent it, before the bits turned on by hand (EcuCaps). */
+    val ecuInitRaw = MutableStateFlow<EcuInit?>(null)
+    /** Bumped when those bits change: the connection starts over with them. */
+    val capsVersion = MutableStateFlow(0)
     val live = MutableStateFlow(EcuSnapshot())
     val gps = MutableStateFlow<GpsFix?>(null)
     /** Why there is no GPS position ("" = there is one), for the GPS card and the mini-map. */
     val gpsStatus = MutableStateFlow("")
+    /** Satellites used in the fix and seen, from GnssStatus (the header's satellite icon); 0 to 0 before the first report. */
+    val gnssSats = MutableStateFlow(0 to 0)
     val trip = MutableStateFlow(TripState())
     val dataVersion = MutableStateFlow(0L) // bump to make screens re-query the DB
     val logFile = MutableStateFlow<String?>(null)
@@ -561,8 +703,12 @@ object Repo {
     val topBar = MutableStateFlow("")
     val slotVersion = MutableStateFlow(0)
     val customVersion = MutableStateFlow(0)
+    /** Bumped when the driver's own RomRaider files or their roles change: the polled parameters are chosen again. */
+    val defsVersion = MutableStateFlow(0)
     /** VIN read from the ECU at connect ("" = not available). */
     val vin = MutableStateFlow("")
+    /** Another car's engine unit by OBD mode 09: its name and calibration id ("ECM-EngineControl · CALID …"), "" = unknown. */
+    val obdEcu = MutableStateFlow("")
     val uiScale = MutableStateFlow(0)
     val car3d = MutableStateFlow("SG")
     val carPaint = MutableStateFlow("chameleon")
@@ -612,17 +758,30 @@ object Repo {
     /** A free layout is being edited: the bottom bar steps aside for it (see FreeFrame). */
     val freeEditing = MutableStateFlow(false)
 
+    /**
+     * The adapter was let go for another app (BTSSM and the like): no polling, the cable or socket closed, until
+     * «Подключиться» or the next start of the app.
+     */
+    val adapterReleased = MutableStateFlow(false)
+
     /** «Демо Link» (adb only, till the app restarts): a made-up Link G4X on a CANable, see LinkDemo. */
     val linkDemo = MutableStateFlow(false)
 
+    /** Logs of the acceleration runs and laps; the demo's own go to the cache and are gone with the next start. */
+    lateinit var perfFiles: java.io.File
+    lateinit var perfDemoFiles: java.io.File
+
     fun init(ctx: Context) {
         if (!::db.isInitialized) {
+            perfFiles = java.io.File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "perf")
+            perfDemoFiles = java.io.File(ctx.cacheDir, "perf-demo").also { it.deleteRecursively() }
             db = Db(ctx.applicationContext)
             settings = Settings(ctx.applicationContext)
             // older versions saved it: a leftover "on" must not start the demo by itself
             ctx.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove("demo").apply()
             BoxPresets.load(ctx.applicationContext)
             SensorBox.load()
+            Wideband.load()
             Relays.load()
             Displays.load()
             UsbScreen.load()
@@ -645,6 +804,7 @@ object Repo {
             kg.forester.sg.ssm.SsmTrace.enabled = settings.traceEnabled
             CustomGauges.init(ctx)
             Scales.init(ctx)
+            CarKind.start(ctx)
         }
     }
 

@@ -71,7 +71,7 @@ private class LogData(val t: DoubleArray, val startMs: Long?, val series: List<L
 
 private val UNITS = listOf(
     "_kmh" to "км/ч", "_c" to "°C", "_v" to "В", "_pct" to "%", "_kpa" to "кПа", "_deg" to "°", "_gs" to "г/с",
-    "_ms" to "мс", "_lh" to "л/ч", "_m" to "м", "_grev" to "г/об", "_ohm" to "Ом", "_rpm" to "об/мин",
+    "_ms" to "мс", "_lh" to "л/ч", "_m" to "м", "_g" to "g", "_grev" to "г/об", "_ohm" to "Ом", "_rpm" to "об/мин",
 )
 
 private val COLORS = listOf(C.Blue, C.Orange, C.Green, C.Violet)
@@ -87,7 +87,12 @@ private fun readLog(f: File, rr: Map<String, kg.forester.sg.ssm.RrParam> = empty
         val c = r[0]
         c.toLongOrNull() ?: runCatching { dateFmt.parse(c)?.time }.getOrNull() ?: (i * 1000L)
     }
-    val wall = ms.firstOrNull()?.takeIf { it > 1_000_000_000_000L }
+    // the wall clock: epoch ms in the first column, else (ms from the start there) the start in the file name
+    val wall = ms.firstOrNull()?.takeIf { it > 1_000_000_000_000L } ?: ms.firstOrNull()?.let { first ->
+        Regex("\\d{4}-\\d{2}-\\d{2}[_ ]\\d{2}-\\d{2}-\\d{2}").find(f.name)?.value
+            ?.let { runCatching { SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).parse(it.replace(' ', '_'))?.time }.getOrNull() }
+            ?.let { it + first }
+    }
     val t0 = ms.firstOrNull() ?: 0L
     val t = DoubleArray(ms.size) { (ms[it] - t0) / 1000.0 }
     // battery.csv: a type per line (resting / crank / charging) — the voltage and the further numbers of each type
@@ -123,6 +128,8 @@ private fun readLog(f: File, rr: Map<String, kg.forester.sg.ssm.RrParam> = empty
         // a RomRaider parameter that repeats a regular column (older logs wrote both): shown once, under the regular name
         val param = Regex("^([PE]\\d+) ").find(head[c].trim())?.groupValues?.get(1)?.let { rr[it] }
         if (param != null && LogColumns.twinOf(param) in keys) return@mapNotNull null
+        // the second clock at the end (ms from the start) is no chart
+        if (head[c].trim() == LogColumns.T_MS) return@mapNotNull null
         val v = FloatArray(rows.size) { rows[it].getOrNull(c)?.toFloatOrNull() ?: Float.NaN }
         if (v.all { it.isNaN() }) return@mapNotNull null
         val key = head[c].trim()
@@ -148,6 +155,7 @@ private fun groupIcon(g: String): ImageVector = when (g) {
     "Зажигание и детонация" -> Lucide.Zap
     "Наддув" -> Lucide.Fan
     "GPS" -> Lucide.Satellite
+    "Перегрузки" -> Lucide.Crosshair
     "АКПП" -> Lucide.Cog
     "Уровень топлива" -> Lucide.Droplets
     "Датчики ЭБУ" -> Lucide.ListChecks
@@ -189,7 +197,7 @@ private fun shareLog(ctx: Context, f: File) {
 }
 
 /**
- * Saves the file to «Загрузки/Subaru Dashboard», shares it, and (with [onDeleted]) deletes it after a confirmation;
+ * Saves the file to «Загрузки/CarPulse», shares it, and (with [onDeleted]) deletes it after a confirmation;
  * the log being written right now cannot be deleted.
  */
 @Composable
@@ -238,7 +246,7 @@ private fun saveLog(ctx: Context, f: File) {
             val values = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.Downloads.DISPLAY_NAME, f.name)
                 put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/csv")
-                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Subaru Dashboard")
+                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/CarPulse")
             }
             val uri = ctx.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: error("нет доступа")
             ctx.contentResolver.openOutputStream(uri)!!.use { out -> f.inputStream().use { it.copyTo(out) } }
@@ -249,10 +257,10 @@ private fun saveLog(ctx: Context, f: File) {
                 error("разрешите доступ к памяти и нажмите ещё раз")
             }
             @Suppress("DEPRECATION")
-            val dir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Subaru Dashboard").apply { mkdirs() }
+            val dir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "CarPulse").apply { mkdirs() }
             f.copyTo(File(dir, f.name), overwrite = true)
         }
-        "Сохранено: Загрузки/Subaru Dashboard/${f.name}"
+        "Сохранено: Загрузки/CarPulse/${f.name}"
     }.getOrElse { "Не удалось сохранить: ${it.message ?: it.javaClass.simpleName}" }
     android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
 }
@@ -313,27 +321,75 @@ fun LogViewer(file: File, onClose: () -> Unit) {
         if (d == null) return@Column
         if (d.series.isEmpty()) { T("В файле нет данных.", 14.sp, C.Sub); return@Column }
 
+        // the window shown and the moment under the cursor, for the charts and the map
+        val n = d.t.size
+        val total = d.duration.coerceAtLeast(1.0)
+        val half = 0.5f / zoom
+        val c = centre.coerceIn(half, 1f - half)
+        val w0 = d.t.first() + (c - half) * total
+        val w1 = d.t.first() + (c + half) * total
+        val i0 = lowerBound(d.t, w0).coerceIn(0, n - 1)
+        val i1 = (lowerBound(d.t, w1) + 1).coerceIn(i0 + 1, n)
+        val at = w0 + cursor * (w1 - w0)
+        val ic = lowerBound(d.t, at).coerceIn(0, n - 1)
+        // a log with GPS: where the car was, the dot follows the cursor
+        val track = remember(d) {
+            val la = d.series.firstOrNull { it.key == "gps_lat" }
+            val lo = d.series.firstOrNull { it.key == "gps_lon" }
+            if (la == null || lo == null) null
+            else Track(DoubleArray(n) { la.v[it].toDouble() }, DoubleArray(n) { lo.v[it].toDouble() }).takeIf { it.any }
+        }
+
         Row(Modifier.fillMaxSize()) {
-            // parameters to show
-            Panel(Modifier.width(300.dp).fillMaxHeight(), padding = 12.dp) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    T("Параметры", 15.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    T("на графике ${picked.size} из 4", 12.sp, if (picked.size >= 4) C.Orange else C.Sub)
+            Column(Modifier.width(300.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (track != null) Panel(Modifier.fillMaxWidth().height(250.dp), padding = 8.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Lucide.Map, null, tint = C.Violet, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        T("Траектория", 13.sp, C.Sub, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        T("нажмите на точку", 11.sp, C.Sub)
+                    }
+                    // a tap (or a finger moved) on the track puts the charts' cursor at that moment
+                    fun seek(size: androidx.compose.ui.unit.IntSize, p: Offset) {
+                        val fit = TrackFit.of(listOf(track), null, size.width.toFloat(), size.height.toFloat()) ?: return
+                        val i = fit.nearest(track, p) ?: return
+                        val t = d.t[i]
+                        // a moment outside the zoomed window: the window moves to it
+                        val cc = ((t - d.t.first()) / total).toFloat().coerceIn(half, 1f - half)
+                        if (t < w0 || t > w1) centre = cc
+                        val a = if (t < w0 || t > w1) d.t.first() + (cc - half) * total else w0
+                        val b = if (t < w0 || t > w1) d.t.first() + (cc + half) * total else w1
+                        cursor = ((t - a) / (b - a)).toFloat().coerceIn(0f, 1f)
+                    }
+                    Canvas(
+                        Modifier.fillMaxWidth().weight(1f)
+                            .pointerInput(track, zoom, centre) { detectTapGestures { p -> seek(size, p) } }
+                            .pointerInput(track, zoom, centre) { detectDragGestures { ch, _ -> seek(size, ch.position) } },
+                    ) {
+                        drawTracks(listOf(TrackLine(track, C.Violet, 3.5f, hi = if (zoom > 1f) i0 until i1 else null, mark = ic, start = true, finish = true)))
+                    }
                 }
-                T("Нажмите, чтобы показать или убрать. Сразу видно до четырёх графиков; пятый заменит первый.", 11.sp, C.Sub)
-                Spacer(Modifier.height(6.dp))
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    d.series.groupBy { it.group }.forEach { (g, list) ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(groupIcon(g), null, tint = C.Violet, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            T(g, 13.sp, C.Sub, weight = FontWeight.Medium)
-                        }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            list.forEach { s ->
-                                val i = picked.indexOf(s.key)
-                                SeriesChip(s.title, if (i >= 0) COLORS[i] else null) {
-                                    picked = if (i >= 0) picked - s.key else (picked + s.key).takeLast(4)
+                // parameters to show
+                Panel(Modifier.fillMaxWidth().weight(1f), padding = 12.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        T("Параметры", 15.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        T("на графике ${picked.size} из 4", 12.sp, if (picked.size >= 4) C.Orange else C.Sub)
+                    }
+                    T("Нажмите, чтобы показать или убрать. Сразу видно до четырёх графиков; пятый заменит первый.", 11.sp, C.Sub)
+                    Spacer(Modifier.height(6.dp))
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        d.series.groupBy { it.group }.forEach { (g, list) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(groupIcon(g), null, tint = C.Violet, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                T(g, 13.sp, C.Sub, weight = FontWeight.Medium)
+                            }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                list.forEach { s ->
+                                    val i = picked.indexOf(s.key)
+                                    SeriesChip(s.title, if (i >= 0) COLORS[i] else null) {
+                                        picked = if (i >= 0) picked - s.key else (picked + s.key).takeLast(4)
+                                    }
                                 }
                             }
                         }
@@ -342,16 +398,6 @@ fun LogViewer(file: File, onClose: () -> Unit) {
             }
             Spacer(Modifier.width(12.dp))
             Panel(Modifier.weight(1f).fillMaxHeight(), padding = 12.dp) {
-                val n = d.t.size
-                val total = d.duration.coerceAtLeast(1.0)
-                val half = 0.5f / zoom
-                val c = centre.coerceIn(half, 1f - half)
-                val w0 = d.t.first() + (c - half) * total
-                val w1 = d.t.first() + (c + half) * total
-                val i0 = lowerBound(d.t, w0).coerceIn(0, n - 1)
-                val i1 = (lowerBound(d.t, w1) + 1).coerceIn(i0 + 1, n)
-                val at = w0 + cursor * (w1 - w0)
-                val ic = lowerBound(d.t, at).coerceIn(0, n - 1)
                 val shown = picked.mapNotNull { k -> d.series.firstOrNull { it.key == k } }
 
                 // the moment under the cursor

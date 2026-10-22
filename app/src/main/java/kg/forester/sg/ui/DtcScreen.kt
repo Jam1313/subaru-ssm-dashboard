@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -151,17 +153,60 @@ object DtcRepo {
         return known + unknown
     }
 
+    @Volatile private var generic: kg.forester.sg.ssm.GenericDtc? = null
+
+    /** The standard codes' descriptions (assets/obd_dtc_ru.json), read once. */
+    fun generic(ctx: Context): kg.forester.sg.ssm.GenericDtc = generic ?: synchronized(this) {
+        generic ?: kg.forester.sg.ssm.GenericDtc(
+            runCatching { ctx.assets.open("obd_dtc_ru.json").bufferedReader().use { it.readText() } }.getOrDefault("{}"),
+        ).also { generic = it }
+    }
+
+    /** The make by the VIN the ECU gave (null when there is none or the tables don't know it). */
+    fun make(ctx: Context): kg.forester.sg.data.Brand? = Repo.vin.value?.takeIf { it.isNotEmpty() }
+        ?.let { runCatching { kg.forester.sg.data.Brands.get(ctx).makeFromVin(it) }.getOrNull() }
+
+    /**
+     * A description for a standard OBD-II code: Subaru's table first for a Subaru, then the standard (SAE J2012) one;
+     * a make's own code (P1xxx…) says whose it is instead of a guess. Subaru's table also fills a standard code the
+     * standard table lacks: the standard codes mean the same on every make.
+     */
+    fun obdDef(ctx: Context, code: String, make: kg.forester.sg.data.Brand?): DtcDef {
+        val ssm = ecuDefs(ctx).associate { it.code to (it.desc to it.descRu) }
+        val subaru = make?.slug == kg.forester.sg.data.Brands.SUBARU
+        val t = generic(ctx).describe(code, if (subaru) ssm else null, make?.name)
+        if (!t.known && !kg.forester.sg.ssm.GenericDtc.isManufacturer(code)) ssm[code]?.let { (en, ru) -> return DtcDef(code, en, 0, 0, 0, ru) }
+        return DtcDef(code, t.en, 0, 0, 0, t.ru)
+    }
+
     /**
      * Standard OBD-II codes (when the car is read without SSM): stored ones count as current and memorized,
-     * pending ones as current only. Descriptions come from the SSM table where the code is the same.
+     * pending ones as current only.
      */
     suspend fun readObd(ctx: Context): List<DtcHit>? {
         val (stored, pending) = withObd { it.readDtcs() } ?: return null
-        val known = ecuDefs(ctx).associateBy { it.code }
-        fun def(code: String) = known[code] ?: DtcDef(code, "", 0, 0, 0)
-        return stored.map { DtcHit(def(it), current = true, memorized = true) } +
-            (pending - stored.toSet()).map { DtcHit(def(it), current = true, memorized = false) }
+        val make = make(ctx)
+        return stored.map { DtcHit(obdDef(ctx, it, make), current = true, memorized = true) } +
+            (pending - stored.toSet()).map { DtcHit(obdDef(ctx, it, make), current = true, memorized = false) }
     }
+
+    /** What else OBD-II tells about the codes: readiness, the freeze frame of the first stored code, the unit's ids. */
+    data class ObdDiag(
+        val readiness: kg.forester.sg.ssm.ObdPids.Readiness?,
+        val freeze: kg.forester.sg.ssm.Obd2.FreezeFrame?,
+        val info: kg.forester.sg.ssm.Obd2.VehicleInfo?,
+    )
+
+    suspend fun readObdDiag(): ObdDiag? {
+        val r = withObd { it.readiness() }
+        val f = withObd { it.freezeFrame() }
+        val i = withObd { it.vehicleInfo() }
+        i?.let { kg.forester.sg.ssm.Obd2.ecuLine(it.ecuName, it.calIds.firstOrNull()) }?.let { Repo.obdEcu.value = it }
+        return if (r == null && f == null && i == null) null else ObdDiag(r, f, i)
+    }
+
+    /** Mode 06: slow on the K-line (a request per test), so only on a tap. */
+    suspend fun readObdTests(): List<kg.forester.sg.ssm.ObdPids.TestResult>? = withObd { it.testResults() }
 
     suspend fun clearObd(): Boolean = withObd { it.clearDtcs() } == true
 
@@ -186,7 +231,9 @@ fun DtcScreen() {
     val tcuInit by Repo.tcuInit.collectAsState()
     val obdMode by Repo.obdMode.collectAsState()
     var unitTcu by remember { mutableStateOf(false) }
-    if (obdMode && unitTcu) unitTcu = false
+    // another make: no Subaru transmission unit to ask, no SSM ids to show
+    val other by kg.forester.sg.data.CarKind.other.collectAsState()
+    if ((obdMode || other) && unitTcu) unitTcu = false
     val init = if (unitTcu) tcuInit else ecuInit
     val dest = if (unitTcu) SsmClient.TCU else SsmClient.ECU
     val defs = remember(init, unitTcu) { init?.let { DtcRepo.defs(ctx, it) } ?: emptyList() }
@@ -194,6 +241,9 @@ fun DtcScreen() {
     var status by remember { mutableStateOf("Нажмите «Прочитать ошибки»") }
     var busy by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var diag by remember { mutableStateOf<DtcRepo.ObdDiag?>(null) }
+    var tests by remember { mutableStateOf<List<kg.forester.sg.ssm.ObdPids.TestResult>?>(null) }
+    var testsStatus by remember { mutableStateOf("") }
 
     fun readNow() {
         // a sports ECU keeps its codes to its own software: say how many it reports, nothing to read here
@@ -215,6 +265,8 @@ fun DtcScreen() {
         scope.launch {
             val r = withContext(Dispatchers.IO) { if (obdMode) DtcRepo.readObd(ctx) else DtcRepo.read(defs, dest) }
             hits = r
+            // readiness, freeze frame and the unit's ids come along on OBD-II
+            if (obdMode && r != null) diag = withContext(Dispatchers.IO) { DtcRepo.readObdDiag() }
             status = when {
                 r == null -> "Не удалось прочитать (нет связи с ЭБУ)"
                 !obdMode && init == null -> if (unitTcu) "Блок АКПП не ответил" else "Нет связи с ЭБУ"
@@ -237,7 +289,7 @@ fun DtcScreen() {
             }
             if (manual) InfoTexts.byKey["dtc.manual"]?.let { InfoDialog("Коды без сканера", it) { manual = false } }
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!obdMode && !other) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("Двигатель", !unitTcu, { unitTcu = false; hits = null; status = "Нажмите «Прочитать ошибки»" }, modifier = Modifier.weight(1f))
                 Chip("АКПП", unitTcu, {
                     if (!obdMode) { unitTcu = true; hits = null; status = "Нажмите «Прочитать ошибки»" }
@@ -245,11 +297,14 @@ fun DtcScreen() {
             }
             Spacer(Modifier.height(12.dp))
             T("Связь: " + if (link == LinkState.CONNECTED) "есть" else "нет", 14.sp, if (link == LinkState.CONNECTED) C.Green else C.Orange)
-            T("SSM ID: ${init?.ssmId ?: "—"}", 13.sp, C.Sub)
-            T("ROM ID: ${init?.romId ?: "—"}", 13.sp, C.Sub)
+            if (!other || init != null) {
+                T("SSM ID: ${init?.ssmId ?: "—"}", 13.sp, C.Sub)
+                T("ROM ID: ${init?.romId ?: "—"}", 13.sp, C.Sub)
+            }
             init?.let { i -> kg.forester.sg.ssm.EcuIds.car(ctx, i.romId)?.let { T(it, 13.sp, C.Sub) } }
             val vin by Repo.vin.collectAsState()
             if (!unitTcu && vin.isNotEmpty()) T("VIN: $vin", 13.sp, C.Sub)
+            if (obdMode) remember(vin) { DtcRepo.make(ctx)?.name }?.let { T("Марка по VIN: $it", 13.sp, C.Sub) }
             if (obdMode) T("Режим OBD-II: стандартные коды, АКПП недоступна", 13.sp, C.Sub)
             else if (init != null) T(
                 (if (init!!.supports(37, 7)) "Коды Subaru (2-значные)" else "Коды OBD-II") + ", в таблице: ${defs.size}", 13.sp, C.Sub,
@@ -284,8 +339,16 @@ fun DtcScreen() {
         }
         Spacer(Modifier.width(12.dp))
         Panel(Modifier.weight(1f).fillMaxHeight()) {
-            HeaderRow(listOf("Код", "Описание", "Текущая", "В памяти"))
+            // no codes (not read yet, or none found): a plain message in the middle instead of a table header over
+            // an empty panel
+            val none = hits.isNullOrEmpty()
+            if (none && !obdMode) {
+                DtcEmpty(read = hits != null, busy = busy, status = status, modifier = Modifier.fillMaxSize())
+                return@Panel
+            }
+            if (!none) HeaderRow(listOf("Код", "Описание", "Текущая", "В памяти"))
             LazyColumn {
+                if (none) item { DtcEmpty(read = hits != null, busy = busy, status = status, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) }
                 items(hits ?: emptyList()) { h ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         T(h.def.code, 15.sp, C.Orange, FontWeight.Bold, Modifier.weight(0.6f))
@@ -297,6 +360,33 @@ fun DtcScreen() {
                         }
                         T(if (h.current) "да" else "—", 14.sp, if (h.current) C.Red else C.Sub, modifier = Modifier.weight(0.5f))
                         T(if (h.memorized) "да" else "—", 14.sp, modifier = Modifier.weight(0.5f))
+                    }
+                }
+                if (obdMode) {
+                    diag?.let { d -> item { ObdDiagView(d) } }
+                    item {
+                        Spacer(Modifier.height(14.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            T("Результаты бортовых тестов (режим 06)", 15.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Chip("Прочитать", false, {
+                                testsStatus = "Чтение…"
+                                scope.launch {
+                                    val t = withContext(Dispatchers.IO) { DtcRepo.readObdTests() }
+                                    tests = t
+                                    testsStatus = if (t == null) "Блок не отдаёт результаты тестов" else ""
+                                }
+                            })
+                        }
+                        if (testsStatus.isNotEmpty()) T(testsStatus, 12.sp, C.Sub)
+                    }
+                    items(tests ?: emptyList()) { t ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            T(t.name, 12.sp, modifier = Modifier.weight(2.2f), maxLines = 2)
+                            T(t.value, 12.sp, C.Text, FontWeight.SemiBold, Modifier.weight(0.9f), maxLines = 1)
+                            T("${t.min} … ${t.max}", 11.sp, C.Sub, modifier = Modifier.weight(1.3f), maxLines = 1)
+                            T(when (t.pass) { true -> "норма"; false -> "не прошёл"; null -> "—" }, 12.sp,
+                                if (t.pass == false) C.Red else C.Green, modifier = Modifier.weight(0.7f))
+                        }
                     }
                 }
             }
@@ -327,6 +417,82 @@ fun DtcScreen() {
             },
             dismissButton = { TextButton({ confirmClear = false }) { Text("Отмена") } },
         )
+    }
+}
+
+/** The code table's place while it has no codes: not read yet ([read] false), reading, or read and clean. */
+@Composable
+private fun DtcEmpty(read: Boolean, busy: Boolean, status: String, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        // green only for a unit that answered and has no codes; no link or a Link ECU says why in the line below
+        val clean = read && !busy && status.endsWith("ошибок нет", ignoreCase = true)
+        androidx.compose.material3.Icon(
+            if (clean) Lucide.CircleCheck else Lucide.ScanSearch, null,
+            tint = if (clean) C.Green else C.Sub, modifier = Modifier.size(48.dp),
+        )
+        Spacer(Modifier.height(14.dp))
+        T(
+            when {
+                busy -> "Чтение…"
+                clean -> "Ошибок нет"
+                read -> "Коды не получены"
+                else -> "Коды ещё не прочитаны"
+            },
+            20.sp, weight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(6.dp))
+        T(
+            when {
+                busy -> "Спрашиваем блок, это несколько секунд"
+                clean -> "Блок не хранит ни одного кода ошибки"
+                read || !status.startsWith("Нажмите") -> status
+                else -> "Нажмите «Прочитать ошибки» слева: найденные коды появятся здесь, с описанием и подсказкой, что проверить"
+            },
+            15.sp, C.Sub, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.widthIn(max = 460.dp),
+        )
+    }
+}
+
+/** OBD-II readiness (MIL, monitors), the freeze frame of the first stored code and what the engine unit says about itself. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ObdDiagView(d: DtcRepo.ObdDiag) {
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        d.readiness?.let { r ->
+            T("Готовность систем самодиагностики", 15.sp, weight = FontWeight.SemiBold)
+            T((if (r.mil) "«Чек» горит" else "«Чек» не горит") + ", кодов в памяти: ${r.dtcCount}" +
+                if (r.notReady == 0) ", все тесты пройдены" else ", не готово: ${r.notReady}", 13.sp, if (r.mil) C.Orange else C.Sub)
+            if (r.notReady > 0) T("Не готово бывает после сброса ошибок или отключения аккумулятора: тесты проходят сами за несколько " +
+                "поездок разного характера (холодный пуск, трасса, холостой ход). Техосмотр с неготовыми системами могут не принять", 11.sp, C.Sub)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                r.monitors.forEach { m ->
+                    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(C.CardHi).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        T((if (m.ready) "✓ " else "… ") + m.name, 12.sp, if (m.ready) C.Green else C.Orange)
+                    }
+                }
+            }
+        }
+        d.freeze?.let { f ->
+            Spacer(Modifier.height(12.dp))
+            T("Стоп-кадр" + (f.dtc?.let { " (код $it)" } ?: ""), 15.sp, weight = FontWeight.SemiBold)
+            if (f.dtc == null) T("ЭБУ не сохранил стоп-кадр", 12.sp, C.Sub)
+            else T("Что показывали датчики в момент, когда записался код", 11.sp, C.Sub)
+            f.values.forEach { (n, v) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    T(n, 12.sp, C.Sub, modifier = Modifier.weight(2f), maxLines = 1)
+                    T(v, 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                }
+            }
+        }
+        d.info?.let { i ->
+            if (i.calIds.isEmpty() && i.cvns.isEmpty() && i.ecuName == null) return@let
+            Spacer(Modifier.height(12.dp))
+            T("Блок управления двигателем", 15.sp, weight = FontWeight.SemiBold)
+            i.ecuName?.let { T("Название: $it", 12.sp, C.Sub) }
+            if (i.calIds.isNotEmpty()) T("Калибровка (CALID): ${i.calIds.joinToString(", ")}", 12.sp, C.Sub)
+            if (i.cvns.isNotEmpty()) T("Контрольная сумма (CVN): ${i.cvns.joinToString(", ")}", 12.sp, C.Sub)
+        }
     }
 }
 

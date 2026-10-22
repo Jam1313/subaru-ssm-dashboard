@@ -71,14 +71,21 @@ fun CanablePanel() {
         "Dash2Pro и Generic Dash приложение находит само; другие данные, например ЕГТ в своём потоке, добавляются в «Свои значения»", 11.sp, C.Sub)
     Spacer(Modifier.height(10.dp))
     var cc by remember { mutableStateOf(s.injectorCc.takeIf { it > 0 }?.toString() ?: "") }
+    var dead by remember { mutableStateOf(s.injectorDeadMs.takeIf { it > 0f }?.let { "%.2f".format(it) } ?: "") }
     Row(verticalAlignment = Alignment.CenterVertically) {
         FormField("Форсунки, cc/мин", cc, Modifier.width(170.dp), KeyboardType.Number) { t ->
             cc = t.filter { it.isDigit() }.take(4)
             s.injectorCc = cc.toIntOrNull()?.takeIf { it in 100..3000 } ?: 0
         }
         Spacer(Modifier.width(10.dp))
-        T("Без MAF расход считается по времени впрыска: впишите производительность своих форсунок (как в настройке Link). " +
-            "Пусто: штатные 380 у турбо, 260 у атмо. Точнее станет после заправок до полного", 11.sp, C.Sub, modifier = Modifier.weight(1f))
+        FormField("Открытие при 14 В, мс", dead, Modifier.width(170.dp), KeyboardType.Decimal) { t ->
+            dead = t.filter { it.isDigit() || it == '.' || it == ',' }.take(5)
+            s.injectorDeadMs = dead.replace(',', '.').toFloatOrNull()?.takeIf { it in kg.forester.sg.service.FuelCalc.DEAD_RANGE } ?: 0f
+        }
+        Spacer(Modifier.width(10.dp))
+        T("Без MAF расход считается по времени впрыска: впишите производительность своих форсунок и время открытия при 14 В " +
+            "(как в настройке Link, от напряжения приложение пересчитает само). Пусто: штатные 380 у турбо, 260 у атмо, 0,6 мс. " +
+            "Точнее станет после заправок до полного", 11.sp, C.Sub, modifier = Modifier.weight(1f))
     }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -158,8 +165,9 @@ fun CanChannelsDialog(start: CanChannel?, onClose: () -> Unit) {
             Chip("Готово", true, onClose)
         }
         Spacer(Modifier.height(6.dp))
-        T("Значение из потока ЭБУ по ID и байтам, как в настройках дашборда: например ЕГТ, которую добавили в свой поток Link. " +
-            "Появится на «Датчиках», в логе и в выборе виджетов; с ролью ЕГТ или давление масла по нему работают предупреждения", 12.sp, C.Sub)
+        T("Значение из CAN по ID и байтам, как в настройках дашборда: например ЕГТ, которую добавили в свой поток Link, или датчик " +
+            "с отдельной CAN-платы. Появится на «Датчиках», в логе и в выборе виджетов; с ролью (ЕГТ, давление масла или топлива, " +
+            "воздух до и после интеркулера…) работает как такой же датчик на SensorBox: предупреждения, анализ, расчётные значения", 12.sp, C.Sub)
         Spacer(Modifier.height(10.dp))
         if (list.isEmpty()) T("Пока ничего не добавлено.", 14.sp, C.Sub)
         val live = CanChannels.values()
@@ -240,6 +248,15 @@ private fun CanChannelForm(start: CanChannel, onDone: () -> Unit) {
         Labeled("Знак") { Chip("без знака", !signed, { signed = false }); Chip("со знаком", signed, { signed = true }) }
         Labeled("Знаков после запятой") { (0..3).forEach { n -> Chip("$n", dec == n, { dec = n }) } }
         Labeled("Роль") { CanChannel.ROLES.forEach { (k, l) -> Chip(l, role == k, { role = k }) } }
+        // the same roles as a SensorBox input: a CAN sensor board's value works as if wired to the box
+        if (role.isNotEmpty() && role != "fault") T(kg.forester.sg.data.BoxRoles.meaning(role) +
+            when {
+                role in kg.forester.sg.data.BoxRoles.PRESSURE -> ". Давление по манометру (0 = атмосфера), в единицах из поля «Единицы»: бар, кПа или psi"
+                role == "eth" -> ". Формула должна давать проценты"
+                role == "pumpV" -> ". Формула должна давать вольты"
+                role != "afr" -> ". Формула должна давать °C"
+                else -> ""
+            } + ". Если тот же датчик есть и на SensorBox, берётся он", 12.sp, C.Sub)
         Spacer(Modifier.height(6.dp))
         T(when {
             error != null -> error

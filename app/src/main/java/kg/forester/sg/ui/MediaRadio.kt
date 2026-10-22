@@ -135,19 +135,60 @@ internal class RadioUi(val fyt: Boolean, internet: Boolean, cc: String, named: M
         if (tuning) return
         tuning = true
         scope.launch {
-            Fyt.ensureRadio()
+            radioOn()
             for (i in 0 until 12) {
                 val cur = Fyt.radio.value.freq
                 val fm = Fyt.radio.value.isFm || Fyt.radio.value.band == -1
                 val tol = if (fm) 15 else 9
                 if (abs(cur - target) <= tol) break
                 val up = target > cur
-                Fyt.radioSeek(up)
-                val now = withTimeoutOrNull(8000) { Fyt.radio.first { it.freq != cur } }?.freq ?: break
+                Fyt.radioSeek(up, ensure = false)
+                val first = withTimeoutOrNull(8000) { Fyt.radio.first { it.freq != cur } }?.freq ?: break
+                // the tuner reports the frequencies it passes while seeking; the next seek sent before it stops
+                // cancelled this one, and the tuner went back to where it started
+                val now = settled(first, 900)
                 // past the target, or round the end of the band: stop at this station
                 if ((up && (now >= target - tol || now < cur)) || (!up && (now <= target + tol || now > cur))) break
             }
         }.invokeOnCompletion { tuning = false }
+    }
+
+    /** To the tuner's preset [p] (1..6): it only steps a preset up or down, one step at a time once it settles. */
+    fun toPreset(p: Int) {
+        if (!fyt) { DemoRadio.set(DemoRadio.presets[p - 1]); return }
+        if (tuning) return
+        tuning = true
+        scope.launch {
+            radioOn()
+            val cur = Fyt.radio.value.preset.takeIf { it in 1..6 } ?: 1
+            val fwd = (p - cur + 6) % 6
+            repeat(if (fwd <= 3) fwd else 6 - fwd) {
+                val f = Fyt.radio.value.freq
+                Fyt.radioPreset(fwd <= 3, ensure = false)
+                withTimeoutOrNull(3000) { Fyt.radio.first { it.freq != f } }?.let { settled(it.freq, 400) }
+            }
+        }.invokeOnCompletion { tuning = false }
+    }
+
+    /**
+     * Makes the radio the source and waits for it: coming up, it tunes to its own last station, and a seek or
+     * preset sent before that was undone by it.
+     */
+    private suspend fun radioOn() {
+        if (Fyt.appId.value == 1) return
+        Fyt.ensureRadio()
+        // the source command, and the radio's activity when that alone didn't do (after 1.5 s)
+        withTimeoutOrNull(5000) { Fyt.appId.first { it == 1 } }
+        settled(Fyt.radio.value.freq, 1500)
+    }
+
+    /** The frequency once the tuner has stayed on it for [quietMs], starting from [from] (at most ~15 s). */
+    private suspend fun settled(from: Int, quietMs: Long): Int {
+        var f = from
+        repeat(15_000 / quietMs.toInt()) {
+            f = withTimeoutOrNull(quietMs) { Fyt.radio.first { it.freq != f } }?.freq ?: return f
+        }
+        return f
     }
 
     /** ⏮ ⏭: through the own stations when there are any, else the tuner's presets. */
@@ -383,12 +424,7 @@ private fun FmPanel(ui: RadioUi) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             (1..6).forEach { p ->
                 val f = known[p]?.substringBefore('|')
-                Pill(if (f != null) "P$p $f" else "P$p", null, r.preset == p, 36.dp) {
-                    val cur = r.preset.takeIf { it in 1..6 } ?: 1
-                    val fwd = (p - cur + 6) % 6
-                    if (fyt) { if (fwd <= 3) repeat(fwd) { Fyt.radioPreset(true) } else repeat(6 - fwd) { Fyt.radioPreset(false) } }
-                    else DemoRadio.set(DemoRadio.presets[p - 1])
-                }
+                Pill(if (f != null) "P$p $f" else "P$p", null, r.preset == p, 36.dp) { ui.toPreset(p) }
             }
         }
     }

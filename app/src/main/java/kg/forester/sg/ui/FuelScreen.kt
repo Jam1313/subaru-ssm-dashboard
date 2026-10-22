@@ -135,7 +135,7 @@ private fun CurrentTab() {
                         }
                         // an ECU without a usable MAF: say how the number comes about (or why there is none)
                         val live by Repo.live.collectAsState()
-                        if ((live.rpm ?: 0) > 300 && live.mafGs == null) {
+                        if ((live.rpm ?: 0) > 300 && live.mafGs == null && live.fuelRateLh == null) {
                             val inj = kg.forester.sg.service.FuelCalc.source == "inj"
                             // a sports ECU on the CAN usually runs on MAP with no MAF at all: that is how it works, not a fault
                             if (inj && kg.forester.sg.data.CanEcu.active)
@@ -149,8 +149,9 @@ private fun CurrentTab() {
                         Tile(Lucide.Milestone, "Запас хода", fmt(ts.rangeKm, 0), "км", Modifier.fillMaxWidth().weight(1f))
                         Box(Modifier.fillMaxWidth().weight(1.25f).clip(RoundedCornerShape(12.dp)).background(C.CardHi)) {
                             val leftTitle = if (ts.fuelFromSensor) "Осталось (датчик)" else "Осталось топлива"
-                            Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
-                                verticalArrangement = Arrangement.SpaceEvenly) {
+                            // shrunk as a whole when a big UI scale doesn't leave room for every line (the «62%» was cut)
+                            ShrinkToFit(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Lucide.Fuel, null, tint = C.Sub, modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
@@ -178,6 +179,7 @@ private fun CurrentTab() {
                                 val sensor = live.fuelSensorV?.let { "датчик ${"%.2f".format(it)} В" }
                                     ?: live.fuelSensorOhm?.let { "датчик ${"%.0f".format(it)} Ом" }
                                 if (sensor != null) T(sensor, 10.sp, C.Sub, maxLines = 1)
+                            }
                             }
                             InfoButton(leftTitle, "Осталось топлива", Modifier.align(Alignment.TopEnd))
                         }
@@ -210,41 +212,49 @@ private enum class Range(val title: String, val spanMs: Long, val stepMs: Long) 
     Week("Неделя", 7 * 86_400_000L, 3 * 3600_000L),
 }
 
+/** The chart's points (L/100 per step, null = a gap), the average over the range and its start. */
+private fun chartData(range: Range): Triple<List<Float?>, Float?, Long> {
+    val now = System.currentTimeMillis()
+    val from = if (range == Range.Today) startOfDay(now) else now - range.spanMs
+    val off = java.util.TimeZone.getDefault().getOffset(now).toLong()
+    val buckets = Repo.db.buckets(from, range.stepMs, off)
+    val byTime = buckets.associateBy { it.timeMs }
+    val values = ArrayList<Float?>()
+    // a point needs some distance behind it (≥ 10 km/h average over the step, at most 1 km): a few metres
+    // while pulling away would read hundreds of L/100. Idle and no-data steps are gaps, not zeros.
+    val minKm = maxOf(minOf(range.stepMs / 3_600_000.0 * 10.0, 1.0), 0.02)
+    var t = (from + off) / range.stepMs * range.stepMs - off
+    while (t <= now) {
+        val b = byTime[t]
+        values += if (b != null && b.km >= minKm) (b.fuelL / b.km * 100).toFloat().coerceAtMost(30f) else null
+        t += range.stepMs
+    }
+    val km = buckets.sumOf { it.km }
+    val l = buckets.sumOf { it.fuelL }
+    return Triple(values, if (km > 0.2) (l / km * 100).toFloat() else null, from)
+}
+
 @Composable
 private fun ChartPanel(version: Long, modifier: Modifier) {
     var range by remember { mutableStateOf(Range.H1) }
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(10_000); tick++ } }
-    val data = remember(range, version, tick) {
-        val now = System.currentTimeMillis()
-        val from = if (range == Range.Today) startOfDay(now) else now - range.spanMs
-        val off = java.util.TimeZone.getDefault().getOffset(now).toLong()
-        val buckets = Repo.db.buckets(from, range.stepMs, off)
-        val byTime = buckets.associateBy { it.timeMs }
-        val values = ArrayList<Float?>()
-        // a point needs some distance behind it (≥ 10 km/h average over the step, at most 1 km): a few metres
-        // while pulling away would read hundreds of L/100. Idle and no-data steps are gaps, not zeros.
-        val minKm = maxOf(minOf(range.stepMs / 3_600_000.0 * 10.0, 1.0), 0.02)
-        var t = (from + off) / range.stepMs * range.stepMs - off
-        while (t <= now) {
-            val b = byTime[t]
-            values += if (b != null && b.km >= minKm) (b.fuelL / b.km * 100).toFloat().coerceAtMost(30f) else null
-            t += range.stepMs
-        }
-        val km = buckets.sumOf { it.km }
-        val l = buckets.sumOf { it.fuelL }
-        Triple(values, if (km > 0.2) (l / km * 100).toFloat() else null, from)
-    }
+    // the first query is made at once (no empty chart on opening), the later ones off the main thread (every 10 s,
+    // while the service writes to the same database); the chart keeps the last result until the new one is in
+    var data by remember { mutableStateOf(chartData(range)) }
+    LaunchedEffect(range, version, tick) { data = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { chartData(range) } }
     Panel(modifier) {
         PanelTitle(Lucide.ChartColumn, "Динамика расхода") {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Range.entries.forEach { r ->
-                    Box(
-                        Modifier.clip(RoundedCornerShape(8.dp))
-                            .background(if (r == range) C.Purple.copy(alpha = 0.3f) else C.CardHi)
-                            .clickable { range = r }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) { T(r.title, 12.sp, if (r == range) C.Text else C.Sub) }
+                    // the chip keeps its look and its place in the title row; the area that takes the tap is 48 dp tall
+                    TapTarget({ range = r }) {
+                        Box(
+                            Modifier.clip(RoundedCornerShape(8.dp))
+                                .background(if (r == range) C.Purple.copy(alpha = 0.3f) else C.CardHi)
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                        ) { T(r.title, 13.sp, if (r == range) C.Text else C.Sub) }
+                    }
                 }
             }
         }
@@ -270,11 +280,11 @@ private fun TripInfoPanel(trip: Trip?, modifier: Modifier) {
     val price = Repo.settings.pricePerL
     Panel(modifier) {
         PanelTitle(Lucide.Timer, "Информация о поездке") {
-            Box(
-                Modifier.clip(RoundedCornerShape(8.dp)).background(C.CardHi)
-                    .clickable { EcuService.start(ctx, EcuService.ACTION_RESET_TRIP) }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) { T("Сбросить", 12.sp, C.Sub) }
+            TapTarget({ EcuService.start(ctx, EcuService.ACTION_RESET_TRIP) }) {
+                Box(
+                    Modifier.clip(RoundedCornerShape(8.dp)).background(C.CardHi).padding(horizontal = 14.dp, vertical = 7.dp)
+                ) { T("Сбросить", 13.sp, C.Sub) }
+            }
         }
         Spacer(Modifier.height(10.dp))
         val dur = trip?.durationS ?: 0
@@ -338,7 +348,8 @@ private fun ModesPanel(trip: Trip?, modifier: Modifier) {
                 }
             }
             Spacer(Modifier.width(12.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // four rows of two lines: at a large UI scale they shrink to the panel instead of losing «Стоянка»
+            ShrinkToFit(Modifier.weight(1f).fillMaxHeight()) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ModeRow("Город", C.Violet, per(cityKm, cityL), pct(cityL))
                 ModeRow("Трасса", C.Blue, per(hwyKm, hwyL), pct(hwyL))
                 ModeRow("Смешанный", C.Gray, per(mixKm, mixL), pct(mixL))
@@ -346,7 +357,7 @@ private fun ModesPanel(trip: Trip?, modifier: Modifier) {
                     "Стоянка", C.Orange,
                     "${fmt(idleL, 2)} л · ${if (idleS > 60) fmt(idleL / idleS * 3600) else "—"} л/ч", pct(idleL),
                 )
-            }
+            } }
         }
     }
 }
@@ -720,7 +731,7 @@ private fun NumField(label: String, value: String, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        label = { T(label, 12.sp, C.Sub) },
+        label = { FieldLabel(label) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         colors = OutlinedTextFieldDefaults.colors(

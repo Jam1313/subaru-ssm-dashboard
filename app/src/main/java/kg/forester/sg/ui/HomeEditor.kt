@@ -61,6 +61,7 @@ import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.ZoomIn
 import com.composables.icons.lucide.Palette
 import com.composables.icons.lucide.ZoomOut
+import com.composables.icons.lucide.Ellipsis
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.key
@@ -171,7 +172,9 @@ class BoardEdit(
 private val ClusterParts = setOf("car3d", "tach", "speedo")
 
 val HomeEdit = BoardEdit(
-    HomeLayout.board, HomeLayout.board.defaults.map { it.id }.toSet() - "car3d" - "minimap",
+    // the extra cards (Спорт-дисплей, G-метр…) and the output widgets have no needle look: they get their own buttons
+    HomeLayout.board, HomeLayout.board.defaults.map { it.id }.toSet() - "car3d" - "minimap" -
+        kg.forester.sg.data.EXTRA_CARDS.toSet() - kg.forester.sg.data.OUT_WIDGETS.toSet(),
     gridBand = {
         val c = HomeLayout.clusterWeight(Repo.clusterSize.value)
         c / (c + 3f) to 3f / (c + 3f)
@@ -209,11 +212,13 @@ fun HomeEditBar(onDone: () -> Unit) {
     BoardEditBar(HomeEdit, if (free) HomeTileInfo else HomeTileInfo - "car3d", onDone) {
         Chip("Просто", false, {
             val turbo = Repo.guard.value.turboCar
-            Repo.settings.homeTiles = HomeLayout.simple(turbo, Repo.settings.gearbox != "mt")
+            // another make: no ATF temperature (that is the Subaru transmission unit's)
+            Repo.settings.homeTiles = HomeLayout.simple(turbo, Repo.settings.gearbox != "mt" && !kg.forester.sg.data.CarKind.other.value)
             Repo.settings.clusterSize = 2
         }, Lucide.Sparkles)
         if (free) return@BoardEditBar // the 3D block is a card there, sized by dragging
-        T("3D:", 14.sp, C.Sub)
+        // another make has no car in the block, only the two dials
+        T(if (kg.forester.sg.data.CarKind.other.collectAsState().value) "Приборы:" else "3D:", 14.sp, C.Sub)
         listOf(0 to "Скрыть", 1 to "Обычный", 2 to "Большой", 3 to "Макс.").forEach { (v, l) ->
             Chip(l, cluster == v, { Repo.settings.clusterSize = v })
         }
@@ -328,7 +333,7 @@ private val CARD_GROUPS = listOf(
 
 /** The section a card is offered under in «Добавить виджет». */
 private fun cardGroup(id: String): String = when {
-    id in setOf("tach", "speedo", "car3d", "minimap", "gps", "altitude") -> "Приборы и карта"
+    id in setOf("defi", "navcluster", "tach", "speedo", "car3d", "minimap", "gps", "altitude") -> "Приборы и карта"
     id in setOf("gmeter", "incline", "peaks", "run") -> "Динамика и замеры"
     id in setOf("iam", "btarget", "turbo") -> "Защита мотора"
     id in setOf("tyres", "service") -> "Шины и ТО"
@@ -343,13 +348,15 @@ private fun cardGroup(id: String): String = when {
 }
 
 /**
- * Controls drawn over a card while editing: move, narrower/wider, gauge design (cards with one number), remove.
- * In the free layout ([free]) moving and sizing are done by dragging, so only "to front", design and remove stay.
- * Narrow cards get smaller buttons.
+ * Controls drawn over a card while editing: one «⋯» button in its middle, opening a menu with the card's actions —
+ * move, narrower/wider, gauge design (cards with one number), remove — in buttons a finger hits on a moving car
+ * (it was six 28 dp buttons squeezed into the card). In the free layout ([free]) moving and sizing are done by
+ * dragging, so only "to front", design and remove stay. Move and size leave the menu open for the next step.
  */
 @Composable
 fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", free: Boolean = false) {
     var picking by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
     Box(
         Modifier.matchParentSize().clip(RoundedCornerShape(14.dp)).background(Color(0x66070A14))
             .border(2.dp, C.Purple, RoundedCornerShape(14.dp)),
@@ -359,38 +366,43 @@ fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", 
         val car = cfg.id == "car3d" // the 3D card: car size instead of a gauge design
         val map = cfg.id == "minimap" // the map card: map design
         val slot = Regex("s[1-6]").matches(cfg.id) // «Датчик k»: which value it shows
-        val front = free && edit.covered(cfg.id)
-        val count = (if (gauge || map || slot) 1 else 0) + (if (car) 2 else 0) + if (free) (if (front) 2 else 1) else 5
-        val narrow = maxWidth < 260.dp || maxHeight < 44.dp
-        val gap = if (narrow) 3.dp else 5.dp
-        val btn = minOf(32.dp, (maxWidth - 8.dp - gap * (count - 1)) / count, maxHeight - 6.dp)
-        Row(
-            Modifier.padding(2.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (narrow) 3.dp else 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (free) {
-                // only when another card covers part of this one: bring it over
-                if (front) EditButton(Lucide.Layers, btn) { edit.toFront(cfg.id) }
-            } else {
-                EditButton(Lucide.ChevronLeft, btn) { edit.move(cfg.id, -1) }
-                EditButton(Lucide.Minus, btn, cfg.span > 1) { edit.resize(cfg.id, -1) }
-                if (!narrow) T("${cfg.span}", 15.sp, weight = FontWeight.Bold)
-                EditButton(Lucide.Plus, btn, cfg.span < edit.board.maxSpan) { edit.resize(cfg.id, 1) }
-                EditButton(Lucide.ChevronRight, btn) { edit.move(cfg.id, 1) }
+        val own = cfg.id == "defi" || cfg.id == "navcluster" // cards with an editor of their own
+        val btn = minOf(56.dp, maxWidth - 8.dp, maxHeight - 6.dp)
+        Box {
+            EditButton(Lucide.Ellipsis, btn, tint = C.Text, label = "Действия: $title") { menu = true }
+            androidx.compose.material3.DropdownMenu(
+                menu, { menu = false },
+                shape = RoundedCornerShape(16.dp), containerColor = C.Card,
+                border = androidx.compose.foundation.BorderStroke(1.dp, C.Border),
+            ) {
+                if (title.isNotEmpty()) T(title, 14.sp, C.Sub, FontWeight.SemiBold, maxLines = 1,
+                    modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 6.dp))
+                if (free) {
+                    // only when another card covers part of this one: bring it over
+                    if (edit.covered(cfg.id)) MenuAction(Lucide.Layers, "Поверх других") { edit.toFront(cfg.id); menu = false }
+                } else {
+                    MenuStepper("Место", null, Lucide.ChevronLeft, true, { edit.move(cfg.id, -1) },
+                        Lucide.ChevronRight, true) { edit.move(cfg.id, 1) }
+                    MenuStepper("Ширина", "${cfg.span}", Lucide.Minus, cfg.span > 1, { edit.resize(cfg.id, -1) },
+                        Lucide.Plus, cfg.span < edit.board.maxSpan) { edit.resize(cfg.id, 1) }
+                }
+                if (car) {
+                    val s = carScaleOf(cfg.style)
+                    MenuStepper("Размер машины", null,
+                        Lucide.ZoomOut, s > 0.31f, { edit.setStyle(cfg.id, "scale:%.1f".format(java.util.Locale.US, s - 0.1f)) },
+                        Lucide.ZoomIn, s < 0.99f) { edit.setStyle(cfg.id, "scale:%.1f".format(java.util.Locale.US, s + 0.1f)) }
+                }
+                if (gauge) MenuAction(Lucide.Gauge, "Вид прибора", if (cfg.style.isEmpty()) C.Text else C.Violet) { menu = false; picking = true }
+                if (map) MenuAction(Lucide.Palette, "Вид карты", C.Violet) { menu = false; picking = true }
+                if (slot) MenuAction(Lucide.ListChecks, "Что показывает", C.Violet) { menu = false; picking = true }
+                if (own) MenuAction(Lucide.Palette, "Настроить вид", C.Violet) { menu = false; picking = true }
+                MenuAction(Lucide.X, "Убрать с экрана", C.Red) { menu = false; edit.hide(cfg.id) }
             }
-            if (gauge) EditButton(Lucide.Gauge, btn, tint = if (cfg.style.isEmpty()) C.Text else C.Violet) { picking = true }
-            if (map) EditButton(Lucide.Palette, btn, tint = C.Violet) { picking = true }
-            if (slot) EditButton(Lucide.ListChecks, btn, tint = C.Violet) { picking = true }
-            if (car) {
-                val s = carScaleOf(cfg.style)
-                EditButton(Lucide.ZoomOut, btn, s > 0.31f) { edit.setStyle(cfg.id, "scale:%.1f".format(java.util.Locale.US, s - 0.1f)) }
-                EditButton(Lucide.ZoomIn, btn, s < 0.99f) { edit.setStyle(cfg.id, "scale:%.1f".format(java.util.Locale.US, s + 0.1f)) }
-            }
-            EditButton(Lucide.X, btn, tint = C.Red) { edit.hide(cfg.id) }
         }
     }
     if (picking && cfg.id == "minimap") MapStylePicker(cfg.style, { edit.setStyle(cfg.id, it) }, { picking = false })
+    else if (picking && cfg.id == "defi") SportEditor(cfg.style, { edit.setStyle(cfg.id, it) }) { picking = false }
+    else if (picking && cfg.id == "navcluster") NavClusterEditor(cfg.style, { edit.setStyle(cfg.id, it) }) { picking = false }
     else if (picking && Regex("s[1-6]").matches(cfg.id)) SlotPicker(cfg.id.drop(1).toInt()) { picking = false }
     else if (picking) {
         // the number in the dial's middle can be left out; it rides along with whatever design is picked
@@ -412,26 +424,34 @@ fun BoxScope.TileEditOverlay(edit: BoardEdit, cfg: TileCfg, title: String = "", 
  * Long press on any card switches to editing.
  */
 @Composable
-fun BoardScreen(edit: BoardEdit, names: CardNames, rowWeight: (TileCfg) -> Float, card: @Composable (TileCfg, Modifier) -> Unit) {
+fun BoardScreen(
+    edit: BoardEdit, names: CardNames, rowWeight: (TileCfg) -> Float,
+    /** Screen-specific controls at the start of the edit bar («Мой экран»: the ready-made layouts). */
+    leading: @Composable RowScope.() -> Unit = {},
+    card: @Composable (TileCfg, Modifier) -> Unit,
+) {
     val layout by Repo.boardFlow(edit.board.key).collectAsState()
     val list = remember(layout) { edit.board.parse(layout) }
     val rows = remember(layout) { edit.board.rows(list) }
     var editing by remember { mutableStateOf(false) }
     val longPress = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { editing = true }) }
     if (edit.board.isFree(layout)) {
-        FreeFrame(if (editing) ({ BoardEditBar(edit, names, { editing = false }) }) else null, Modifier.fillMaxSize()) { m ->
+        FreeFrame(if (editing) ({ BoardEditBar(edit, names, { editing = false }, leading) }) else null, Modifier.fillMaxSize()) { m ->
             FreeArea(edit, list.filter { it.on }, editing, names, longPress, m, card = card)
         }
         return
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (editing) BoardEditBar(edit, names, { editing = false })
+        if (editing) BoardEditBar(edit, names, { editing = false }, leading)
         rows.forEach { row ->
             Row(Modifier.weight(row.maxOf { rowWeight(it) }).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { t ->
-                    Box(Modifier.weight(t.span.toFloat()).fillMaxHeight().then(longPress)) {
-                        card(t, Modifier.fillMaxSize())
-                        if (editing) TileEditOverlay(edit, t, names[t.id]?.first ?: "")
+                    // keyed by the card: one moved along its row takes its state along (the open edit menu stays its own)
+                    key(t.id) {
+                        Box(Modifier.weight(t.span.toFloat()).fillMaxHeight().then(longPress)) {
+                            card(t, Modifier.fillMaxSize())
+                            if (editing) TileEditOverlay(edit, t, names[t.id]?.first ?: "")
+                        }
                     }
                 }
                 val used = row.sumOf { it.span }
@@ -603,12 +623,47 @@ fun FreeArea(
 }
 
 @Composable
-private fun EditButton(icon: ImageVector, size: androidx.compose.ui.unit.Dp, enabled: Boolean = true, tint: Color = C.Text, onClick: () -> Unit) {
+private fun EditButton(
+    icon: ImageVector, size: androidx.compose.ui.unit.Dp, enabled: Boolean = true, tint: Color = C.Text, label: String? = null,
+    onClick: () -> Unit,
+) {
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(9.dp)).background(C.CardHi)
-            .border(1.dp, C.Border, RoundedCornerShape(9.dp))
+        Modifier.size(size).clip(RoundedCornerShape(if (size >= 48.dp) 14.dp else 9.dp)).background(C.CardHi)
+            .border(1.dp, C.Border, RoundedCornerShape(if (size >= 48.dp) 14.dp else 9.dp))
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, null, tint = if (enabled) tint else C.Border, modifier = Modifier.size(18.dp)) }
+    ) { Icon(icon, label, tint = if (enabled) tint else C.Border, modifier = Modifier.size(if (size >= 48.dp) 24.dp else 18.dp)) }
+}
+
+/** A line of the card's edit menu: icon and words, 56 dp tall. */
+@Composable
+private fun MenuAction(icon: ImageVector, text: String, tint: Color = C.Text, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().widthIn(min = 280.dp).heightIn(min = 56.dp).clickable(onClick = onClick).padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        T(text, 17.sp, if (tint == C.Red) C.Red else C.Text, maxLines = 1)
+    }
+}
+
+/** A line of the card's edit menu with a pair of 56 dp buttons (left/right, narrower/wider) and the [value] between. */
+@Composable
+private fun MenuStepper(
+    label: String, value: String?, less: ImageVector, lessOn: Boolean, onLess: () -> Unit,
+    more: ImageVector, moreOn: Boolean, onMore: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().widthIn(min = 280.dp).padding(horizontal = 18.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        T(label, 16.sp, C.Sub, maxLines = 1, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        EditButton(less, 56.dp, lessOn, onClick = onLess)
+        if (value != null) T(value, 18.sp, weight = FontWeight.Bold, modifier = Modifier.widthIn(min = 36.dp).padding(horizontal = 6.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        else Spacer(Modifier.width(10.dp))
+        EditButton(more, 56.dp, moreOn, onClick = onMore)
+    }
 }
 

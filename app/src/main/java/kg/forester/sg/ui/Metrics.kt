@@ -5,7 +5,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.composables.icons.lucide.*
+import kg.forester.sg.data.Derived
 import kg.forester.sg.data.Scales
+import kg.forester.sg.data.SensorBox
 import kg.forester.sg.data.GpsFix
 import kg.forester.sg.data.Repo
 import kg.forester.sg.data.TripState
@@ -24,6 +26,8 @@ class MetricCtx(
     val rr: Map<String, Double>,
     /** SensorBox values by input ("A0", "TC0"). */
     val box: Map<String, kg.forester.sg.data.BoxReading> = emptyMap(),
+    val wideband: kg.forester.sg.data.WidebandState = kg.forester.sg.data.WidebandState(),
+    val elapsedMs: Long = 0,
 )
 
 /**
@@ -32,8 +36,8 @@ class MetricCtx(
  */
 class Indicator(
     val id: String,
-    val title: String,
-    val short: String,
+    title: String,
+    short: String,
     val icon: ImageVector,
     val unit: String,
     val format: String,
@@ -44,8 +48,14 @@ class Indicator(
     val warnBelow: Float? = null,
     /** Scale top that can change at run time (boost), instead of the fixed max. */
     private val maxNow: (() -> Float)? = null,
+    /** A mark after the title while the value is only worked out, not measured (the oil without a sensor: " ≈"). */
+    private val markNow: (() -> String)? = null,
     val read: (MetricCtx) -> Float?,
 ) {
+    private val fixedTitle = title
+    private val fixedShort = short
+    val title: String get() = fixedTitle + (markNow?.invoke() ?: "")
+    val short: String get() = fixedShort + (markNow?.invoke() ?: "")
     private val fixedMax = max
     val max: Float get() = maxNow?.invoke() ?: fixedMax
     fun text(v: Float?) = v?.takeIf { !it.isNaN() }?.let { format.format(it) } ?: "—"
@@ -63,7 +73,9 @@ object Metrics {
         Indicator("speed", "Скорость", "Скорость", Lucide.Car, "км/ч", "%.0f", 0f, 200f, "Двигатель") { it.e.speedKmh?.toFloat() },
         Indicator("coolant", "Темп. ОЖ", "Темп. ОЖ", Lucide.Thermometer, "°C", "%.0f", 40f, 110f, "Двигатель", warnAbove = 102f) { it.e.coolantC?.toFloat() },
         Indicator("intake", "Темп. впуска", "Впуск", Lucide.ThermometerSnowflake, "°C", "%.0f", -20f, 70f, "Двигатель", warnAbove = 55f) { it.e.intakeC?.toFloat() },
-        Indicator("oil", "Темп. масла", "Масло", Lucide.Droplet, "°C", "%.0f", 0f, 140f, "Двигатель", warnAbove = 125f) { it.guard.oilC },
+        // without an oil sensor (the EJ has none) the number is the guard's estimate from the coolant and load: "≈" says so
+        Indicator("oil", "Темп. масла", "Масло", Lucide.Droplet, "°C", "%.0f", 0f, 140f, "Двигатель", warnAbove = 125f,
+            markNow = { Repo.guard.value.let { g -> if (g.oilC != null && g.oilEstimated) " ≈" else "" } }) { it.guard.oilC },
         Indicator("battery", "Напряжение", "Напряжение", Lucide.BatteryCharging, "В", "%.1f", 10f, 15f, "Двигатель", warnBelow = 12f) { it.e.batteryV },
         Indicator("throttle", "Дроссель", "Дроссель", Lucide.Disc, "%", "%.0f", 0f, 100f, "Двигатель") { it.e.throttlePct },
         Indicator("pedal", "Педаль газа", "Педаль", Lucide.ChevronsUp, "%", "%.0f", 0f, 100f, "Двигатель") { it.e.pedalPct },
@@ -75,6 +87,8 @@ object Metrics {
         Indicator("inj", "Впрыск", "Впрыск", Lucide.Syringe, "мс", "%.2f", 0f, 20f, "Топливо") { it.e.injPwMs },
         Indicator("injDuty", "Загрузка форсунок", "Форсунки", Lucide.Percent, "%", "%.0f", 0f, 100f, "Топливо", warnAbove = 85f) { it.e.injDutyPct },
         Indicator("afr", "AFR", "AFR", Lucide.Flame, "", "%.1f", 10f, 20f, "Топливо") { it.e.afr },
+        Indicator("wideband_afr", "AFR ШДК (USB)", "AFR ШДК", Lucide.Flame, "", "%.2f", 7f, 23f, "ШДК USB") { it.wideband.afr(it.elapsedMs) },
+        Indicator("wideband_lambda", "λ ШДК (USB)", "λ ШДК", Lucide.Flame, "λ", "%.3f", 0.5f, 1.6f, "ШДК USB") { it.wideband.lambda(it.elapsedMs) },
         Indicator("afcorr", "Коррекция A/F", "Корр. A/F", Lucide.SlidersHorizontal, "%", "%+.1f", -25f, 25f, "Топливо") { it.e.afCorrPct },
         Indicator("aflearn", "Обучение A/F", "Обуч. A/F", Lucide.Brain, "%", "%+.1f", -25f, 25f, "Топливо") { it.e.afLearnPct },
         Indicator("fuel", "Расход, л/ч", "Расход", Lucide.Fuel, "л/ч", "%.1f", 0f, 40f, "Топливо") { it.trip.instLh.toFloat() },
@@ -95,15 +109,13 @@ object Metrics {
         Indicator("boost", "Наддув", "Наддув", Lucide.Fan, "бар", "%.2f", 0f, 1.2f, "Наддув", maxNow = { Scales.boost.top.value }) { it.e.boostBar },
         Indicator("gaugeKpa", "Наддув / разрежение", "Наддув", Lucide.CircleArrowUp, "кПа", "%.0f", -80f, 120f, "Наддув", maxNow = { Scales.boostKpa }) { it.e.gaugeKpa },
         Indicator("targetBoost", "Целевой наддув", "Цель", Lucide.Target, "кПа", "%.0f", 0f, 120f, "Наддув", maxNow = { Scales.boostKpa }) { it.guard.targetBoostKpa },
+        // the target minus what the manifold has: positive = short of it (after the spool ±10 kPa is normal, Cobb)
+        Indicator("boostErr", "Ошибка наддува (цель − факт)", "Ошибка надд.", Lucide.Crosshair, "кПа", "%+.0f", -40f, 40f, "Наддув", warnAbove = 15f, warnBelow = -20f) { c ->
+            c.guard.targetBoostKpa?.let { t -> c.e.gaugeKpa?.takeIf { it > 0f }?.let { t - it } }
+        },
         Indicator("map", "Абс. давление", "Абс. давл.", Lucide.Gauge, "кПа", "%.0f", 20f, 220f, "Наддув", maxNow = { 100f + Scales.boostKpa }) { it.e.mapKpa },
         Indicator("atm", "Атм. давление", "Атм.", Lucide.Cloudy, "кПа", "%.0f", 70f, 105f, "Наддув") { it.e.atmKpa },
         Indicator("wgdc", "Wastegate", "Wastegate", Lucide.Tornado, "%", "%.0f", 0f, 100f, "Наддув") { it.e.wastegatePct },
-        // the fuel pressure regulator holds the rail this much above the manifold: it should not change with boost
-        Indicator("fuelDp", "Перепад давления топлива", "Перепад топл.", Lucide.Fuel, "бар", "%.2f", 0f, 5f, "Доп датчики") { c ->
-            kg.forester.sg.data.SensorBox.slots.value.firstOrNull { it.role == "fuelP" }?.let { s ->
-                c.box[s.input]?.value?.let { p -> fuelBar(p, s.unit) - (c.e.gaugeKpa ?: return@let null) / 100f }
-            }
-        },
         // transmission
         Indicator("atf", "Темп. ATF", "ATF", Lucide.ThermometerSun, "°C", "%.0f", 0f, 130f, "АКПП", warnAbove = 110f) { it.t?.atfC?.toFloat() },
         Indicator("gear", "Передача", "Передача", Lucide.Cog, "", "%.0f", 0f, 4f, "АКПП") { it.t?.gear?.toFloat() },
@@ -117,15 +129,35 @@ object Metrics {
         },
     )
 
-    private val byId = builtIn.associateBy { it.id }
+    /**
+     * Values worked out from the extra sensors (SensorBox inputs or CAN channels with a role, see [Derived]): offered
+     * only once the sensors they need are set up, still found by id for a card that already shows one.
+     */
+    private val derived: List<Pair<Indicator, List<String>>> = listOf(
+        // the fuel pressure regulator holds the rail this much above the manifold: it should not change with boost
+        Indicator("fuelDp", "Перепад давления топлива", "Перепад топл.", Lucide.Fuel, "бар", "%.2f", 0f, 5f, "Доп датчики") { c ->
+            Derived.fuelDiffBar(SensorBox.roleBar("fuelP"), c.e.gaugeKpa)
+        } to listOf("fuelP"),
+        Indicator("icDrop", "Интеркулер: перепад", "Интеркулер", Lucide.ThermometerSnowflake, "°C", "%.0f", 0f, 60f, "Доп датчики") {
+            Derived.intercoolerDropC(SensorBox.role("iatIn"), SensorBox.role("iatOut"))
+        } to listOf("iatIn", "iatOut"),
+        // the air into the turbo: the stock ECU's intake sensor sits in the MAF, before it (a Link's is after the intercooler)
+        Indicator("icEff", "КПД интеркулера", "КПД интерк.", Lucide.Percent, "%", "%.0f", 0f, 100f, "Доп датчики", warnBelow = 50f) { c ->
+            Derived.intercoolerEfficiencyPct(SensorBox.role("iatIn"), SensorBox.role("iatOut"),
+                c.e.intakeC?.toFloat()?.takeIf { !kg.forester.sg.data.CanEcu.active })
+        } to listOf("iatIn", "iatOut"),
+        Indicator("exhRatio", "Выхлоп к наддуву", "Выхлоп/наддув", Lucide.Tornado, "", "%.2f", 0f, 3f, "Доп датчики", warnAbove = 2.2f) { c ->
+            Derived.exhaustRatio(SensorBox.roleBar("emap"), c.e.gaugeKpa)
+        } to listOf("emap"),
+        Indicator("exhOver", "Выхлоп выше наддува", "Выхлоп − надд.", Lucide.Gauge, "бар", "%.2f", -0.5f, 2f, "Доп датчики") { c ->
+            Derived.exhaustOverBoostBar(SensorBox.roleBar("emap"), c.e.gaugeKpa)
+        } to listOf("emap"),
+    )
+
+    private val byId = (builtIn + derived.map { it.first }).associateBy { it.id }
 
     /** A box pressure in bar, whatever unit its sensor was set up in. */
-    fun fuelBar(v: Float, unit: String) = when (unit.lowercase().trim()) {
-        "кпа", "kpa" -> v / 100f
-        "psi" -> v * 0.0689476f
-        "мпа", "mpa" -> v * 10f
-        else -> v
-    }
+    fun fuelBar(v: Float, unit: String) = Derived.bar(v, unit)
 
     /** An icon for [p] by what it measures (its name and units): the «Датчики» list and its cards. */
     fun iconOf(p: RrParam): androidx.compose.ui.graphics.vector.ImageVector {
@@ -172,15 +204,40 @@ object Metrics {
         ) { it.box[s.input]?.value }
     }
 
-    /** [id] as a metric: built in, "rr:<id>" for a parameter of this car's units (null while not connected), "box_<input>" ("box:" in beta18 tests). */
+    /**
+     * An own CAN channel as a metric ("can_C1", no colon as for the box), the way a SensorBox input is one: there
+     * with or without a sports ECU, its value in the ticked parameters' values (CanChannels.withValues).
+     */
+    fun ofCan(c: kg.forester.sg.data.CanChannel): Indicator {
+        val icon = when (c.role) {
+            "oil" -> Lucide.Droplet; "oilP", "fuelP", "emap" -> Lucide.Gauge; "afr" -> Lucide.Flame; "egt" -> Lucide.ThermometerSun
+            "iatIn", "iatOut" -> Lucide.ThermometerSnowflake
+            else -> Lucide.Cpu
+        }
+        val name = c.name.ifBlank { c.id }
+        return Indicator("can_${c.id}", name, name.take(14), icon, c.units, "%.${c.decimals}f", 0f, 100f, "Доп датчики") { it.rr[c.id]?.toFloat() }
+    }
+
+    /** The values worked out from the extra sensors whose sensors are set up now (see [derived]). */
+    fun derivedNow(): List<Indicator> = derived.filter { (_, roles) -> roles.all { SensorBox.hasRole(it) } }.map { it.first }
+
+    /** Every value worked out from the extra sensors, set up or not: the layouts' places for them. */
+    val derivedIds: List<String> get() = derived.map { it.first.id }
+
+    /** [id] as a metric: built in, "rr:<id>" for a parameter of this car's units (null while not connected), "box_<input>" ("box:" in beta18 tests), "can_<channel>". */
     fun of(id: String, avail: List<RrParam>): Indicator? =
         byId[id] ?: if (id.startsWith("rr:")) avail.firstOrNull { it.id == id.removePrefix("rr:") }?.let(::ofParam)
-        else if (id.startsWith("box_") || id.startsWith("box:")) kg.forester.sg.data.SensorBox.slot(id.drop(4))?.let(::ofBox) else null
+        else if (id.startsWith("box_") || id.startsWith("box:")) kg.forester.sg.data.SensorBox.slot(id.drop(4))?.let(::ofBox)
+        else if (id.startsWith("can_")) kg.forester.sg.data.CanChannels.list().firstOrNull { it.id == id.drop(4) }?.let(::ofCan) else null
 
-    /** Built-in ones plus the parameters ticked on «Датчики» and the SensorBox inputs. */
-    fun all(avail: List<RrParam>, watch: Set<String>): List<Indicator> =
-        builtIn + avail.filter { it.id in watch || it.id.startsWith(kg.forester.sg.data.CanEcu.PREFIX) }.map(::ofParam) +
-            kg.forester.sg.data.SensorBox.slots.value.map(::ofBox)
+    /** Built-in ones plus the parameters ticked on «Датчики», the SensorBox inputs and the own CAN channels. */
+    fun all(avail: List<RrParam>, watch: Set<String>): List<Indicator> {
+        val can = kg.forester.sg.data.CanChannels.list()
+        val canIds = can.map { it.id }.toSet()
+        return builtIn + derivedNow() +
+            avail.filter { (it.id in watch || it.id.startsWith(kg.forester.sg.data.CanEcu.PREFIX)) && it.id !in canIds }.map(::ofParam) +
+            kg.forester.sg.data.SensorBox.slots.value.map(::ofBox) + can.map(::ofCan)
+    }
 }
 
 /** This frame's values, for composables. */
@@ -193,7 +250,8 @@ fun rememberMetricCtx(): MetricCtx {
     val guard by Repo.guard.collectAsState()
     val rr by Repo.rrValues.collectAsState()
     val box by kg.forester.sg.data.SensorBox.readings.collectAsState()
-    return MetricCtx(e, t, trip, gps, guard, rr, box)
+    val wideband by kg.forester.sg.data.Wideband.state.collectAsState()
+    return MetricCtx(e, t, trip, gps, guard, rr, box, wideband, android.os.SystemClock.elapsedRealtime())
 }
 
 /** Tops of the scales that grow with the car (see [Scales]): boost in bar, MAF in g/s, load in g/rev. */

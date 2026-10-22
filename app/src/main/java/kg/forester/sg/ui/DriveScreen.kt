@@ -24,7 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,6 +80,7 @@ private val DriveEdit = BoardEdit(
 /** Row heights: gauges 0.9, charts 1.2, small tiles 0.55; a row with a needle gauge gets 1.3 so the dial is readable. */
 private fun driveRowWeight(t: TileCfg) = when {
     t.id.startsWith("chart") -> 1.2f
+    t.id == "defi" || t.id == "navcluster" -> 1.8f
     t.id in kg.forester.sg.data.EXTRA_CARDS -> 0.9f
     t.style.isNotEmpty() -> 1.3f
     t.id in setOf("avcs", "injDuty", "maf", "throttleMotor", "wgdc", "pressure") -> 0.55f
@@ -140,7 +141,7 @@ fun DriveScreen() {
             "throttleMotor" -> Small(Lucide.Cog, "Привод дросселя", e.throttleMotorPct, -100f, 100f, "%", "%.0f")
             "wgdc" -> Small(Lucide.Wind, "Wastegate", e.wastegatePct, 0f, 100f, "%", "%.0f")
             "pressure" -> Tile(Lucide.Gauge, "Абс. давление", "${fmtF(e.mapKpa, 0)} / ${fmtF(e.atmKpa, 0)}", "кПа", m, info)
-            else -> ExtraCard(t.id, info, m)
+            else -> ExtraCard(t.id, info, m, t.style)
         }
     }
 }
@@ -172,32 +173,48 @@ fun MiniGauge(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Stri
     }
 }
 
-/** Card header: a small accent icon and the parameter name. */
+/** Card header: a small accent icon and the parameter name; a low card gives it 16 dp instead of 20. */
 @Composable
-fun CardTitle(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, info: String = title) {
-    Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.material3.Icon(icon, null, tint = C.Violet.copy(alpha = 0.85f), modifier = Modifier.size(16.dp))
+fun CardTitle(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, info: String = title,
+    height: androidx.compose.ui.unit.Dp = 20.dp,
+) {
+    val small = height < 18.dp
+    Row(Modifier.fillMaxWidth().height(height), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Icon(icon, null, tint = C.Violet.copy(alpha = 0.85f), modifier = Modifier.size(if (small) 14.dp else 16.dp))
         Spacer(Modifier.width(6.dp))
-        T(title, 13.sp, C.Sub, maxLines = 1, modifier = Modifier.weight(1f))
+        T(title, if (small) 12.sp else 13.sp, C.Sub, maxLines = 1, modifier = Modifier.weight(1f))
         InfoButton(title, info)
     }
 }
 
-/** Big number + unit, bottom-aligned, as large as [maxSp] but never taller or wider than its box. */
+/**
+ * Big number + unit, bottom-aligned, as large as [maxSp] but never taller or wider than its box. [widest] is the
+ * longest text the number can take (the scale's ends): sized by it, the number keeps its size from «99» to «100».
+ */
 @Composable
-fun FitValue(text: String, unit: String, maxSp: Float, modifier: Modifier, color: androidx.compose.ui.graphics.Color = C.Text) {
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier, contentAlignment = Alignment.BottomStart) {
+fun FitValue(
+    text: String, unit: String, maxSp: Float, modifier: Modifier, color: androidx.compose.ui.graphics.Color = C.Text,
+    widest: String? = null, align: Alignment = Alignment.BottomStart,
+) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier, contentAlignment = align) {
         val d = androidx.compose.ui.platform.LocalDensity.current
         val unitW = if (unit.isEmpty()) 0.dp else (unit.length * 8 + 12).dp
-        val digits = text.length.coerceAtLeast(2)
+        val digits = maxOf(text.length, widest?.length ?: 0).coerceAtLeast(2)
         // a bold digit is ~0.6 em wide, the line is ~1.2 em tall
         val byH = with(d) { (maxHeight / 1.2f).toSp().value }
         val byW = with(d) { ((maxWidth - unitW) / (digits * 0.62f)).toSp().value }
-        // a card stretched over many cells: the number grows with it instead of staying at the size of a small card
-        val cap = if (byH > maxSp * 1.8f) maxOf(maxSp, byH * 0.7f) else maxSp
+        // a card stretched over many cells grows its number instead of keeping the size of a small card: up to 0.7 of
+        // the height, and up to 0.85 of it as the width to spare grows (a wide card on a 1920×720 screen)
+        val share = 0.7f + 0.15f * (byW / byH.coerceAtLeast(1f) - 1f).coerceIn(0f, 1f)
+        val cap = maxOf(maxSp, byH * share)
         val size = minOf(cap, byH, byW).coerceAtLeast(10f)
         Row(verticalAlignment = Alignment.Bottom) {
-            T(text, size.sp, color, FontWeight.Bold, maxLines = 1)
+            // tabular figures: every digit as wide as the others, so a changing number does not shift sideways
+            androidx.compose.material3.Text(
+                text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                style = androidx.compose.ui.text.TextStyle(fontSize = size.sp, color = color, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum"),
+            )
             if (unit.isNotEmpty()) {
                 Spacer(Modifier.width(5.dp))
                 T(unit, (size * 0.33f).coerceIn(10f, 15f).sp, C.Sub, maxLines = 1, modifier = Modifier.padding(bottom = (size * 0.2f).dp))
@@ -211,9 +228,10 @@ fun FitValue(text: String, unit: String, maxSp: Float, modifier: Modifier, color
 private fun KnockCard(stats: KnockStats, knockDeg: Float?, modifier: Modifier) {
     val active = (knockDeg ?: 0f) < 0f
     var open by remember { mutableStateOf(false) }
-    val pulse by rememberInfiniteTransition(label = "knock").animateFloat(
+    // the pulse runs only while timing is being pulled; its alpha is applied in the layer, not by recomposing the card
+    val pulse = if (active) rememberInfiniteTransition(label = "knock").animateFloat(
         0.35f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse), label = "pulse",
-    )
+    ) else null
     Panel(modifier.fillMaxHeight().clip(Rounded).clickable { open = true }, padding = 12.dp) {
         Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
             T("Детонация", 13.sp, C.Sub, modifier = Modifier.weight(1f))
@@ -223,7 +241,10 @@ private fun KnockCard(stats: KnockStats, knockDeg: Float?, modifier: Modifier) {
         T(
             if (active) "%.1f°".format(knockDeg) else "нет",
             30.sp, if (active) C.Red else C.Green, FontWeight.Bold,
-            Modifier.alpha(if (active) pulse else 1f),
+            Modifier.graphicsLayer {
+                alpha = pulse?.value ?: 1f
+                compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+            },
         )
         Spacer(Modifier.height(4.dp))
         T(

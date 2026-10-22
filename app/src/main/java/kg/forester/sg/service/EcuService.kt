@@ -60,11 +60,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -142,6 +145,7 @@ class EcuService : Service() {
             SensorBoxLink.start(scope, usb, { SensorBoxLink.drivers(usb).let { it + unknownSerial(usb, it) } },
                 { isOp2(it) || isOp13(it) || isCanable(it) }) { requestUsbPermission(usb, it) }
             ScreenLink.start(scope, this, usb) { requestUsbPermission(usb, it) }
+            InnovateLink.start(scope, usb) { requestUsbPermission(usb, it) }
         }
         wakeWatch.start(scope)
         scope.launch { headUnitWatch() }
@@ -162,6 +166,8 @@ class EcuService : Service() {
         when (intent?.action) {
             ACTION_RESET_TRIP -> scope.launch { tracker.resetTrip() }
             ACTION_START_GPS -> { startGps(); Voice.start(this) }
+            ACTION_RELEASE -> releaseAdapter()
+            ACTION_RECONNECT -> reconnectAdapter()
             ACTION_EXIT -> {
                 exitRequested.tryEmit(Unit)
                 stopService(Intent(this, PlayerService::class.java))
@@ -179,6 +185,36 @@ class EcuService : Service() {
         logger?.close()
         scope.cancel()
         super.onDestroy()
+    }
+
+    /** Lets another app have the adapter: polling stops and the session's finally closes the cable or socket. */
+    private fun releaseAdapter() {
+        if (Repo.adapterReleased.value || Repo.settings.demo) return
+        Repo.adapterReleased.value = true
+        val job = pollJob
+        scope.launch {
+            job?.cancelAndJoin()
+            if (!Repo.adapterReleased.value) return@launch
+            SsmTrace.log("adapter released for another app")
+            Repo.link.value = LinkState.NO_CABLE
+            Repo.adapterFound.value = ""
+            Repo.linkMessage.value = "Адаптер свободен для другой программы (BTSSM и т. п.). Подключиться снова: нажмите значок связи вверху"
+            // the last values must not stay on the screen as if they were live
+            Repo.live.value = EcuSnapshot()
+            Repo.tcu.value = null
+            refreshNotification()
+        }
+    }
+
+    private fun reconnectAdapter() {
+        if (!Repo.adapterReleased.value) return
+        Repo.adapterReleased.value = false
+        val old = pollJob
+        scope.launch {
+            old?.join()
+            pollJob = scope.launch { pollLoop() }
+            refreshNotification()
+        }
     }
 
     private suspend fun pollLoop() {
@@ -243,12 +279,16 @@ class EcuService : Service() {
             }
             if (!SensorBoxLink.claimForEcu(driver)) { delay(500); continue }
             Repo.link.value = LinkState.CONNECTING
-            val conn = usb.openDevice(driver.device)
+            val conn = runCatching { usb.openDevice(driver.device) }.getOrNull()
             if (conn == null) {
                 SensorBoxLink.releaseEcu()
                 delay(2000); continue
             }
             val port = driver.ports[0]
+            SensorBoxLink.ecuLease?.interrupt = { runCatching { conn.close() }; Unit }
+            if (SensorBoxLink.ecuLease?.permitted != true) {
+                conn.close(); SensorBoxLink.releaseEcu(); continue
+            }
             SsmTrace.log("=== ${driver.javaClass.simpleName} %04X:%04X, адаптер $kind, шина ${s.bus}"
                 .format(driver.device.vendorId, driver.device.productId))
             var op2: OpenPort2? = null
@@ -269,7 +309,7 @@ class EcuService : Service() {
                     }
                     isOp13(driver) -> {
                         Repo.adapterFound.value = "USB $id → OpenPort 1.3"
-                        session(klineOnly = true) { _ -> KklTransport(port, openPort13 = true).also { it.open() } }
+                        session(klineOnly = true, obd = { kklObd(port) }) { _ -> KklTransport(port, openPort13 = true).also { it.open() } }
                     }
                     else -> {
                         // a bare KKL cable or an ELM327 behind the same USB chip: ask, and remember the answer
@@ -294,19 +334,23 @@ class EcuService : Service() {
                             delay(3000)
                         } else {
                             Repo.adapterFound.value = "USB $id → KKL"
-                            session(klineOnly = true) { _ -> KklTransport(port).also { it.open() } }
+                            session(klineOnly = true, obd = { kklObd(port) }) { _ -> KklTransport(port).also { it.open() } }
                         }
                     }
                 }
             } catch (e: Exception) {
                 SsmTrace.log("error: $e")
-                Repo.link.value = LinkState.ERROR
-                Repo.linkMessage.value = e.message ?: "Ошибка связи"
+                // the wideband took this device (its connection was closed under us): not a cable fault
+                if (SensorBoxLink.ecuLease?.permitted != false) {
+                    Repo.link.value = LinkState.ERROR
+                    Repo.linkMessage.value = e.message ?: "Ошибка связи"
+                }
             } finally {
-                EcuLink.client?.close()
+                runCatching { EcuLink.client?.close() }
                 EcuLink.client = null
-                streams?.close()
-                if (op2 != null) op2.close() else runCatching { port.close() }
+                runCatching { streams?.close() }
+                runCatching { if (op2 != null) op2.close() else port.close() }
+                runCatching { conn.close() }
                 SensorBoxLink.releaseEcu()
                 logger?.close(); logger = null
             }
@@ -387,9 +431,7 @@ class EcuService : Service() {
             val now = System.currentTimeMillis()
             val (snap, tcu) = Demo.ecu(now)
             Repo.live.value = snap
-            history.addLast(snap)
-            while (history.size > 240) history.removeFirst()
-            Repo.history.value = history.toList()
+            addHistory(snap)
             knock.process(snap, record = false)
             extras(snap, now)
             if (Repo.settings.gearbox != "mt") {
@@ -421,7 +463,8 @@ class EcuService : Service() {
             val left = tank * 0.62
             Repo.trip.value = Repo.trip.value.copy(
                 trip = demoTrip, instLh = lh, instPer100 = if (v >= 5) lh / v * 100 else null, fuelLeftL = left,
-                rangeKm = (demoTrip.per100 ?: 11.0).let { left / it * 100 },
+                // as with the car: the trip's first minutes (a jam, a hard pull) must not swing the range
+                rangeKm = left / FuelCalc.rangePer100(demoTrip, emptyList()) * 100,
             )
             delay(250)
         }
@@ -608,7 +651,7 @@ class EcuService : Service() {
         var transport: SsmTransport? = null
         var transportKline = true
         // demo switched on: leave the car (the demo loop takes over)
-        while (scope.isActive && !Repo.settings.demo) {
+        while (scope.isActive && !Repo.settings.demo && SensorBoxLink.ecuLease?.permitted != false) {
             val kline = buses[busIdx % buses.size]
             if (transport == null || transportKline != kline) {
                 transport?.close()
@@ -620,14 +663,14 @@ class EcuService : Service() {
             EcuLink.client = client
             // a laptop already on the line: listen to it before we even say hello
             if (transport.passive) { passiveRound(transport, EcuParams.pollAddresses, emptySet()); continue }
-            val init = EcuLink.mutex.withLock { client.init() }
-            if (init == null && transport.passive) continue
+            val answer = EcuLink.mutex.withLock { client.init() }
+            if (answer == null && transport.passive) continue
             // no answer to the diagnostics, but the bus talks by itself: show what it says
-            if (init == null && !kline && Repo.settings.canListen && kg.forester.sg.ssm.CanBroadcast.fresh()) {
+            if (answer == null && !kline && Repo.settings.canListen && kg.forester.sg.ssm.CanBroadcast.fresh()) {
                 canOnlyRound()
                 continue
             }
-            if (init == null) {
+            if (answer == null) {
                 Repo.link.value = LinkState.NO_ECU
                 // other makes (Nissan Consult, Toyota…) never answer SSM: say so instead of letting them wait
                 Repo.linkMessage.value = "ЭБУ не отвечает (${client.transport.name}). Зажигание включено? " +
@@ -658,6 +701,11 @@ class EcuService : Service() {
             }
             silentRounds = 0
             Repo.obdMode.value = false
+            // with the sensors the driver says this ECU has although its list leaves them out (old JECS)
+            val capsSeen = Repo.capsVersion.value
+            val init = kg.forester.sg.data.EcuCaps.apply(answer)
+            if (init !== answer) SsmTrace.log("capability bits set by hand: ${kg.forester.sg.data.EcuCaps.forced(init.romId).joinToString(" ") { "${it.first}.${it.second}" }}")
+            Repo.ecuInitRaw.value = answer
             Repo.ecuInit.value = init
             runCatching { carFromEcu(init.romId) }
             Repo.link.value = LinkState.CONNECTED
@@ -689,8 +737,20 @@ class EcuService : Service() {
             tcuAddrs = null
             tcuNextTryMs = 0
             SsmTrace.polling = true
-            while (scope.isActive && failures < 5 && !Repo.settings.demo) {
+            // «fast poll» (K-line): the ECU sends the values by itself, three times as often; off for this connection
+            // when it doesn't
+            var fast = Repo.settings.fastPoll && transport is kg.forester.sg.ssm.KLineTransport
+            val fastFrames = Channel<ByteArray>(Channel.CONFLATED)
+            var fastAddrs: IntArray = addrs
+            var fastFrameSeen = false
+            var fastRun = 0
+            var fastTcuMs = 0L
+            var fastWatchMs = 0L
+            try { while (scope.isActive && failures < 5 && !Repo.settings.demo && capsSeen == Repo.capsVersion.value &&
+                SensorBoxLink.ecuLease?.permitted != false) {
                 if (transport.passive) {
+                    // the other tester's request has stopped the stream already
+                    if (client.streaming) client.stopStream()
                     passiveRound(transport, addrs, skip, afSensor)
                     continue
                 }
@@ -698,6 +758,70 @@ class EcuService : Service() {
                     wasPassive = false
                     SsmTrace.log("the other tester went quiet: polling again")
                     Repo.linkMessage.value = "ROM ${init.romId} · ${client.transport.name}"
+                }
+                if (fast && !Repo.settings.fastPoll) { fast = false; EcuLink.mutex.withLock { client.stopStream() } }
+                if (fast) {
+                    // the ticked parameters ride along in the stream, but each new list is read on its own first:
+                    // an address this ECU doesn't know would silence the whole stream, not just them
+                    if (ecuWatch.refresh() && client.streaming) EcuLink.mutex.withLock { client.stopStream() }
+                    // ticked ones that didn't answer get another try now and then (a manual gearbox never stops the stream)
+                    if (client.streaming && !ecuWatch.answers && ecuWatch.addresses.isNotEmpty() &&
+                        System.currentTimeMillis() - fastWatchMs > 10_000) EcuLink.mutex.withLock { client.stopStream() }
+                    if (!client.streaming) {
+                        fastWatchMs = System.currentTimeMillis()
+                        // a list already read on its own needs no second read after each transmission request: that
+                        // would leave the stream silent for one more request every N × 250 ms
+                        if (!ecuWatch.answers) ecuWatch.poll(client)
+                        val extra = if (ecuWatch.answers) ecuWatch.addresses.filter { it !in addrs } else emptyList()
+                        val room = client.transport.maxReadAddrs - addrs.size
+                        if (extra.size > room) SsmTrace.log("fast poll: ${extra.size - room} watched addresses left out")
+                        fastAddrs = addrs + extra.take(room.coerceAtLeast(0))
+                        while (fastFrames.tryReceive().isSuccess) Unit
+                        val read = fastAddrs
+                        fastRun = 0
+                        // refused (another tester took the line, a list too long): plain requests for this connection,
+                        // or the wait below would go round forever with nothing coming
+                        if (!EcuLink.mutex.withLock { client.startStream(read) { fastFrames.trySend(it) } }) {
+                            fast = false
+                            SsmTrace.log("fast poll: stream not started, plain requests")
+                            continue
+                        }
+                    }
+                    val raw = withTimeoutOrNull(1500) { fastFrames.receive() }
+                    val now = System.currentTimeMillis()
+                    if (raw == null) {
+                        // the cable was taken from us (its connection closed): nothing more will come
+                        if (SensorBoxLink.ecuLease?.permitted == false) break
+                        // stopped by another request in between (trouble codes, a write): start it again
+                        if (!client.streaming) continue
+                        EcuLink.mutex.withLock { client.stopStream() }
+                        // no answers, or one or two as to a plain request: this ECU doesn't stream
+                        if (fastRun < 3) {
+                            fast = false
+                            SsmTrace.log("fast poll: no stream from this ECU ($fastRun answers), plain requests")
+                        } else {
+                            failures++
+                            tracker.tick(now)
+                        }
+                        continue
+                    }
+                    failures = 0
+                    fastRun++
+                    if (!fastFrameSeen) { fastFrameSeen = true; SsmTrace.log("fast poll: ${fastAddrs.size} addresses") }
+                    if (cycle == 0) logFirstRead(addrs, raw)
+                    var snap = EcuParams.decode(fastAddrs, raw, now, skip)
+                    if (!afSensor) snap = snap.copy(lambda = null)
+                    ecuWatch.take(fastAddrs, raw)
+                    onSnapshot(snap, now)
+                    cycle++
+                    // the transmission in between, about as often as with plain requests (N engine reads of ~250 ms
+                    // between two of its own); its request stops the stream, the next round starts it again. The gap
+                    // counts from the end of the last one, so the stream always runs N × 250 ms in between
+                    if (Repo.settings.gearbox != "mt" && now - fastTcuMs >= Repo.settings.tcuEvery.coerceAtLeast(1) * 250L) {
+                        pollTcu(client, now)
+                        fastTcuMs = System.currentTimeMillis()
+                    }
+                    continue
                 }
                 val raw = EcuLink.mutex.withLock { client.read(addrs) }
                 val now = System.currentTimeMillis()
@@ -708,14 +832,7 @@ class EcuService : Service() {
                     continue
                 }
                 failures = 0
-                if (cycle == 0) {
-                    // what the ECU really sends for the values some early ECUs lack (MAF, throttle, injection), skipped or not
-                    val probe = intArrayOf(EcuParams.MAF_H, EcuParams.MAF_L, EcuParams.THROTTLE, EcuParams.INJ_PW)
-                    SsmTrace.log("first read, raw: " + probe.joinToString(" ") { a ->
-                        val i = addrs.indexOf(a)
-                        "%02X=%s".format(a, if (i in raw.indices) "%02X".format(raw[i].toInt() and 0xFF) else "--")
-                    })
-                }
+                if (cycle == 0) logFirstRead(addrs, raw)
                 var snap = EcuParams.decode(addrs, raw, now, skip)
                 // SSM answers any address; an A/F byte from an ECU without the wideband sensor would fake
                 // "enrichment" in the fuel calculation
@@ -723,8 +840,21 @@ class EcuService : Service() {
                 ecuWatch.poll(client)
                 onSnapshot(snap, now)
                 if (++cycle % Repo.settings.tcuEvery.coerceAtLeast(1) == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
+            } } finally {
+                // the ECU would go on sending to nobody; whoever comes next starts from a quiet line (a cable taken
+                // from us has no line left to quiet)
+                if (client.streaming && SensorBoxLink.ecuLease?.permitted != false) runCatching { client.stopStream() }
             }
             SsmTrace.polling = false
+            if (capsSeen != Repo.capsVersion.value) {
+                SsmTrace.log("capability bits changed: connecting again")
+                continue
+            }
+            if (SensorBoxLink.ecuLease?.permitted == false) {
+                SsmTrace.log("the USB device went to the wideband: polling stopped")
+                logger?.close(); logger = null
+                continue
+            }
             SsmTrace.log("ECU silent, polling stopped")
             Repo.link.value = LinkState.NO_ECU
             Repo.linkMessage.value = "Связь с ЭБУ потеряна"
@@ -733,6 +863,15 @@ class EcuService : Service() {
     }
 
     private var wasPassive = false
+
+    /** What the ECU really sends for the values some early ECUs lack (MAF, throttle, injection), skipped or not. */
+    private fun logFirstRead(addrs: IntArray, raw: ByteArray) {
+        val probe = intArrayOf(EcuParams.MAF_H, EcuParams.MAF_L, EcuParams.THROTTLE, EcuParams.INJ_PW)
+        SsmTrace.log("first read, raw: " + probe.joinToString(" ") { a ->
+            val i = addrs.indexOf(a)
+            "%02X=%s".format(a, if (i in raw.indices) "%02X".format(raw[i].toInt() and 0xFF) else "--")
+        })
+    }
 
     /** Only listening to CAN: no unit answers the diagnostics, the values come from what is broadcast. */
     private suspend fun canOnlyRound() {
@@ -765,19 +904,34 @@ class EcuService : Service() {
     }
 
     /** Everything a fresh sample feeds: live values, charts, battery, trip and fuel, knock, CSV log. */
+    private var historyMs = 0L
+
+    /**
+     * The charts' last minute: a point per ~250 ms, as the plain polling gives, kept by time. The fast poll's 12
+     * samples a second would shrink the minute to 20 s and triple what every chart draws on each new sample.
+     */
+    private fun addHistory(snap: EcuSnapshot) {
+        val t = snap.timeMs
+        if (history.isNotEmpty() && t - historyMs in 0 until HISTORY_STEP_MS) return
+        historyMs = t
+        history.addLast(snap)
+        while (history.size > 300 || (history.isNotEmpty() && t - history.first().timeMs > 60_000L)) history.removeFirst()
+        Repo.history.value = history.toList()
+    }
+
     private fun onSnapshot(raw0: EcuSnapshot, now: Long) {
         // what the CAN bus broadcasts fills what the diagnostics did not give
         val raw = if (Repo.settings.canListen) kg.forester.sg.ssm.CanBroadcast.fill(raw0, now) else raw0
+        // the own CAN channels heard on the same bus: read like the ticked parameters (a CANable session has them already)
+        if (Repo.settings.canListen && !kg.forester.sg.data.CanEcu.active) Repo.rrValues.value = kg.forester.sg.data.CanChannels.withValues(Repo.rrValues.value, now)
         val read = guard.withDirectMap(raw)
-        val snap = read.saneMaf()
+        val snap = read.saneMaf(kg.forester.sg.data.Scales.maf.top.value)
         if (snap !== read && !mafDropLogged) {
             mafDropLogged = true
             SsmTrace.log("MAF %.2f g/s at %s rpm is impossible, ignored".format(read.mafGs, read.rpm))
         }
         Repo.live.value = snap
-        history.addLast(snap)
-        while (history.size > 240) history.removeFirst()
-        Repo.history.value = history.toList()
+        addHistory(snap)
         battery.process(snap)
         // the Link demo's made-up drive is no trip of this car (as the regular demo's isn't)
         if (!Repo.linkDemo.value) tracker.process(snap, Repo.gps.value) // first: a new trip clears the knock events
@@ -811,7 +965,11 @@ class EcuService : Service() {
             guard.reset()
         }
         s.lastRomId = romId
-        val car = kg.forester.sg.ssm.EcuIds.car(this, romId) ?: return
+        val known = kg.forester.sg.ssm.EcuIds.car(this, romId)
+        // the gear guess picks its gearbox table by the car, the fuel count without a MAF its cylinders by the engine
+        Gears.car = known
+        FuelCalc.cylinders = (known?.let { kg.forester.sg.ssm.EngineId.fromCar(it) } ?: kg.forester.sg.ssm.EngineId.fromRomId(romId))?.cylinders ?: 4
+        val car = known ?: return
         if (!s.car3dCustom) kg.forester.sg.ui.car3dFor(car)?.let { if (it != s.car3d) s.car3d = it }
         Repo.carVersion.value++
     }
@@ -881,7 +1039,7 @@ class EcuService : Service() {
         if (Repo.settings.homeTiles.isEmpty()) Repo.settings.homeTiles = kg.forester.sg.data.HomeLayout.linkDefault()
         ecuWatch.clear(); tcuWatch.clear()
         Repo.obdMode.value = false
-        Repo.ecuInit.value = null
+        Repo.ecuInit.value = null; Repo.ecuInitRaw.value = null
         Repo.tcuStatus.value = "АКПП: нет (спортивный ЭБУ по CAN)"
         Repo.link.value = LinkState.CONNECTING
         Repo.linkMessage.value = "CANable: шина $kbit кбит открыта, жду кадры"
@@ -890,7 +1048,7 @@ class EcuService : Service() {
         var linkLogged = false
         var limitsLogged = emptyList<String>()
         try {
-            while (scope.isActive && !Repo.settings.demo && on()) {
+            while (scope.isActive && !Repo.settings.demo && on() && SensorBoxLink.ecuLease?.permitted != false) {
                 val frames = bus.read(100)
                 val now = System.currentTimeMillis()
                 for (f in frames) {
@@ -937,15 +1095,44 @@ class EcuService : Service() {
             EcuLink.obd = obd
             ecuWatch.clear(); tcuWatch.clear()
             Repo.obdMode.value = true
-            Repo.ecuInit.value = null
+            Repo.ecuInit.value = null; Repo.ecuInitRaw.value = null
             Repo.tcuStatus.value = "АКПП: недоступна в режиме OBD-II"
             Repo.link.value = LinkState.CONNECTED
             Repo.linkMessage.value = "OBD-II · ${link.name}: основные параметры (SSM не ответил)"
+            // the VIN once: the make for the trouble codes and OBDb, the car for the header
+            val vin = EcuLink.mutex.withLock { runCatching { obd.vin() }.getOrNull() }
+            SsmTrace.log("VIN (OBD 09 02): ${vin ?: "—"}")
+            // a Subaru that has spoken SSM on this app before, caught by the K-line OBD try just as the ignition came on:
+            // SSM gives it all, so back to it (one older than SSM2 has never answered it and stays here)
+            if (link is kg.forester.sg.ssm.KLineObd && vin != null && Repo.settings.lastRomId.isNotEmpty() &&
+                runCatching { kg.forester.sg.data.Brands.get(this).isSubaru(vin) }.getOrDefault(false)) {
+                SsmTrace.log("K-line OBD: a Subaru that answers SSM, back to SSM")
+                return true
+            }
+            if (vin != null) Repo.vin.value = vin
+            // the unit's own name and calibration (mode 09), for Настройки → Основные instead of the SSM ids
+            val ecuIds = EcuLink.mutex.withLock { runCatching { obd.ecuIds() }.getOrNull() }
+            SsmTrace.log("ECU (OBD 09 0A/04): ${ecuIds ?: "—"}")
+            Repo.obdEcu.value = ecuIds.orEmpty()
+            var obdb = obdbPoller(vin)
+            var obdbSeen = kg.forester.sg.ssm.Obdb.changed.value
             Repo.pollAddresses.value = obd.polledCount
             var failures = 0
             SsmTrace.polling = true
-            while (scope.isActive && failures < 5 && !Repo.settings.demo) {
+            while (scope.isActive && failures < 5 && !Repo.settings.demo && SensorBoxLink.ecuLease?.permitted != false) {
                 val now = System.currentTimeMillis()
+                // a set downloaded or switched on while connected
+                if (obdbSeen != kg.forester.sg.ssm.Obdb.changed.value) {
+                    obdbSeen = kg.forester.sg.ssm.Obdb.changed.value
+                    obdb = obdbPoller(vin ?: Repo.vin.value)
+                }
+                val ticked = Repo.settings.watchIds
+                // and what the guard reads by itself (the oil's PID 5C), ticked or not
+                obd.watched = ticked + Repo.internalWatch.value
+                obdb?.watched = ticked + Repo.internalWatch.value
+                val avail = obd.extraParams() + (obdb?.params ?: emptyList())
+                if (Repo.rrAvailable.value != avail) Repo.rrAvailable.value = avail
+                Repo.rrPolled.value = avail.filter { it.id in ticked }
                 val snap = EcuLink.mutex.withLock { runCatching { obd.poll(now) }.getOrNull() }
                 if (snap == null) {
                     failures++
@@ -953,6 +1140,8 @@ class EcuService : Service() {
                     continue
                 }
                 failures = 0
+                if (obdb != null) EcuLink.mutex.withLock { runCatching { obdb?.poll(link, now) }.onFailure { SsmTrace.log("OBDb: $it") } }
+                Repo.rrValues.value = obd.extraValues() + (obdb?.values() ?: emptyMap())
                 onSnapshot(snap, now)
                 // a fast CAN adapter would go round 100 times a second: 5 a second is plenty
                 delay((200 - (System.currentTimeMillis() - now)).coerceAtLeast(0))
@@ -964,9 +1153,41 @@ class EcuService : Service() {
             SsmTrace.polling = false
             EcuLink.obd = null
             Repo.obdMode.value = false
+            Repo.rrAvailable.value = emptyList(); Repo.rrPolled.value = emptyList(); Repo.rrValues.value = emptyMap()
             logger?.close(); logger = null
             runCatching { link.close() }
         }
+    }
+
+    /**
+     * Standard OBD-II on a bare KKL cable (no ELM327), for a car that does not answer SSM: KWP2000 fast init, then the
+     * 5-baud init (KWP2000 or ISO 9141-2 by the key bytes). The port goes back to the SSM transport afterwards.
+     */
+    private fun kklObd(port: UsbSerialPort): ObdLink? {
+        Repo.linkMessage.value = "SSM молчит, пробую OBD-II по K-line (KWP2000, ISO 9141-2)…"
+        val p = kg.forester.sg.ssm.UsbKLinePort(port)
+        return runCatching { p.open(); kg.forester.sg.ssm.KLineObd.open(p) }.onFailure { SsmTrace.log("K-line OBD: $it") }.getOrNull()
+            ?: run { p.close(); null }
+    }
+
+    /**
+     * The OBDb set downloaded for this car (Настройки на «Датчиках»), when switched on: the model the driver picked,
+     * else the only set of the VIN's make there is. CAN only (see [kg.forester.sg.ssm.Obdb]).
+     */
+    private fun obdbPoller(vin: String?): kg.forester.sg.ssm.Obdb.Poller? {
+        val s = Repo.settings
+        if (!s.obdbOn) return null
+        val repo = s.obdbRepo.ifEmpty {
+            val make = vin?.let { runCatching { kg.forester.sg.data.Brands.get(this).makeFromVin(it) }.getOrNull() } ?: return null
+            val prefixes = kg.forester.sg.ssm.Obdb.makePrefixes(make.slug).map { it.lowercase() + "-" }
+            kg.forester.sg.ssm.Obdb.dir(filesDir).listFiles()?.map { it.name.removeSuffix(".json") }
+                ?.filter { n -> prefixes.any { n.lowercase().startsWith(it) } }?.singleOrNull() ?: return null
+        }
+        val f = kg.forester.sg.ssm.Obdb.file(filesDir, repo) ?: return null
+        val year = vin?.let { kg.forester.sg.ssm.Obdb.modelYear(it) }
+        val cmds = runCatching { kg.forester.sg.ssm.Obdb.parse(f.readText(), year) }.onFailure { SsmTrace.log("OBDb $repo: $it") }.getOrNull() ?: return null
+        SsmTrace.log("OBDb $repo (${year ?: "год ?"}): ${cmds.size} requests, ${cmds.sumOf { it.signals.size }} signals")
+        return kg.forester.sg.ssm.Obdb.Poller(cmds).takeIf { cmds.isNotEmpty() }
     }
 
     private var ecuAvail: List<RrParam> = emptyList()
@@ -975,8 +1196,10 @@ class EcuService : Service() {
     private val tcuWatch = Watch(SsmClient.TCU, tcu = true)
 
     private fun publishWatch() {
-        Repo.rrAvailable.value = ecuAvail + tcuAvail
-        Repo.rrPolled.value = ecuWatch.params + tcuWatch.params
+        // the own CAN channels while an OpenPort listens to the bus: on «Датчики», cards and in the log as with a CANable
+        val can = if (Repo.settings.canListen) kg.forester.sg.data.CanChannels.list().map { it.toParam() } else emptyList()
+        Repo.rrAvailable.value = ecuAvail + tcuAvail + can
+        Repo.rrPolled.value = ecuWatch.params + tcuWatch.params + can
     }
 
     /**
@@ -992,11 +1215,17 @@ class EcuService : Service() {
         private var version = -1
         private var fails = 0
 
+        /** The base and, for the engine unit, the driver's own values: a formula may use any of them. */
+        private fun defs() = RomRaider.load(this@EcuService) +
+            if (tcu) emptyList() else kg.forester.sg.data.CustomParams.list().map { it.toParam() }
+
         fun setup(init: EcuInit) {
-            all = RomRaider.load(this@EcuService)
-            avail = RomRaider.available(this@EcuService, init, tcu)
+            all = defs()
+            profile = Repo.settings.loggerProfile
+            avail = RomRaider.available(this@EcuService, init, tcu, profile)
             this.init = init
             custom = Repo.customVersion.value
+            defsSeen = Repo.defsVersion.value
             if (tcu) tcuAvail = avail else ecuAvail = avail
             SsmTrace.log("RomRaider: ${avail.size} parameters for ${if (tcu) "TCU" else "ECU"} ROM ${init.romId}")
             version = -1
@@ -1013,31 +1242,63 @@ class EcuService : Service() {
         private var internal: Set<String> = emptySet()
         private var init: EcuInit? = null
         private var custom = 0
+        /** [Repo.defsVersion] the list was made with: the driver's own RomRaider files and their roles. */
+        private var defsSeen = 0
+        /** The SSM logger profile the list was made with (CarBerry 4.2 adds its channels for one ROM). */
+        private var profile = "stock"
 
-        suspend fun poll(client: SsmClient) {
-            // own addresses added or edited while connected: the list of what this unit has changes
-            if (custom != Repo.customVersion.value) {
+        /** What to read for the ticked parameters. */
+        val addresses: IntArray get() = addrs
+        /** The last read of [addresses] on their own was answered: they can join the engine unit's stream. */
+        var answers = false
+            private set
+
+        /** Brings the list up to date with the ticks and the own addresses; true when it changed. */
+        fun refresh(): Boolean {
+            // own addresses or definition files added or edited while connected, or another logger profile: the list of what this unit has changes
+            val newProfile = !tcu && profile != Repo.settings.loggerProfile
+            if (custom != Repo.customVersion.value || defsSeen != Repo.defsVersion.value || newProfile) {
+                if (newProfile) {
+                    profile = Repo.settings.loggerProfile
+                    // the channels the old list had must not stay on the screens with their last values
+                    Repo.rrValues.value = Repo.rrValues.value - avail.map { it.id }.toSet()
+                }
                 custom = Repo.customVersion.value
-                init?.let { avail = RomRaider.available(this@EcuService, it, tcu); if (tcu) tcuAvail = avail else ecuAvail = avail }
+                defsSeen = Repo.defsVersion.value
+                all = defs()
+                init?.let { avail = RomRaider.available(this@EcuService, it, tcu, profile); if (tcu) tcuAvail = avail else ecuAvail = avail }
                 version = -1
             }
-            if (version != Repo.watchVersion.value || internal != Repo.internalWatch.value) {
-                version = Repo.watchVersion.value
-                internal = Repo.internalWatch.value
-                val ids = Repo.settings.watchIds + internal
-                params = avail.filter { it.id in ids }
-                addrs = RomRaider.readList(params, all)
-                fails = 0
-                publishWatch()
-            }
+            if (version == Repo.watchVersion.value && internal == Repo.internalWatch.value) return false
+            version = Repo.watchVersion.value
+            internal = Repo.internalWatch.value
+            val ids = Repo.settings.watchIds + internal
+            params = avail.filter { it.id in ids }
+            addrs = RomRaider.readList(params, all)
+            fails = 0
+            answers = false
+            publishWatch()
+            return true
+        }
+
+        suspend fun poll(client: SsmClient) {
+            refresh()
             if (addrs.isEmpty()) return
             val raw = EcuLink.mutex.withLock { client.read(addrs, dest) }
             if (raw == null) {
+                answers = false
                 if (++fails >= 3) prune(client)
                 return
             }
             fails = 0
-            Repo.rrValues.value = Repo.rrValues.value + RomRaider.decode(params, addrs, raw, all)
+            answers = true
+            take(addrs, raw)
+        }
+
+        /** The ticked parameters' values out of a read of [read] ([raw] in its order) that has their addresses. */
+        fun take(read: IntArray, raw: ByteArray) {
+            if (params.isEmpty()) return
+            Repo.rrValues.value = Repo.rrValues.value + RomRaider.decode(params, read, raw, all)
         }
 
         /** The unit keeps refusing the request: keep only the parameters that answer on their own. */
@@ -1098,6 +1359,13 @@ class EcuService : Service() {
                 if (vin != null && vin.length == 17 && vin.all { it.isLetterOrDigit() }) Repo.vin.value = vin
                 SsmTrace.log("VIN: ${vin ?: "—"}")
             }
+        }
+        // on CAN the same unit also answers standard OBD-II: one request (mode 09 PID 02) for a VIN SSM did not give
+        if (Repo.vin.value.isNullOrEmpty() && client.transport.isCan) {
+            val r = EcuLink.mutex.withLock { runCatching { client.transport.exchange(SsmClient.ECU, byteArrayOf(0x09, 0x02)) }.getOrNull() }
+            val vin = r?.takeIf { it.size > 3 && it[0] == 0x49.toByte() && it[1] == 0x02.toByte() }?.let { Obd2.vinOf(it.copyOfRange(3, it.size)) }
+            SsmTrace.log("VIN (OBD 09 02): ${vin ?: "—"}")
+            if (vin != null) Repo.vin.value = vin
         }
         if (init.supports(19, 5)) {
             val t = EcuLink.mutex.withLock { client.read(intArrayOf(0x61)) }
@@ -1230,6 +1498,7 @@ class EcuService : Service() {
     private val gnssCallback = object : android.location.GnssStatus.Callback() {
         override fun onSatelliteStatusChanged(status: android.location.GnssStatus) {
             gpsSats = (0 until status.satelliteCount).count { status.usedInFix(it) }
+            Repo.gnssSats.value = gpsSats to status.satelliteCount
             if (System.currentTimeMillis() - lastGpsFixMs > 5000) {
                 Repo.gpsStatus.value = "ищу спутники: видно ${status.satelliteCount}, в решении $gpsSats"
             }
@@ -1288,7 +1557,8 @@ class EcuService : Service() {
 
     private fun startInForeground() {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "ЭБУ", NotificationManager.IMPORTANCE_LOW))
+        // Android 7.1 (some head units claim 13 and run 7.1 underneath) has no channels
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CHANNEL, "ЭБУ", NotificationManager.IMPORTANCE_LOW))
         val n = buildNotification("Подключение…")
         if (Build.VERSION.SDK_INT >= 29) {
             var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
@@ -1312,12 +1582,18 @@ class EcuService : Service() {
     }
 
     private var lastNotifMs = 0L
+    private fun refreshNotification() {
+        lastNotifMs = 0L
+        updateNotification()
+    }
+
     private fun updateNotification() {
         val now = System.currentTimeMillis()
         if (now - lastNotifMs < 5000) return
         lastNotifMs = now
         val t = Repo.trip.value
-        val text = t.instPer100?.let { "%.1f л/100 км".format(it) } ?: "%.1f л/ч".format(t.instLh)
+        val text = if (Repo.adapterReleased.value) "Адаптер отпущен для другой программы"
+        else t.instPer100?.let { "%.1f л/100 км".format(it) } ?: "%.1f л/ч".format(t.instLh)
         getSystemService(NotificationManager::class.java).notify(1, buildNotification(text))
     }
 
@@ -1325,12 +1601,23 @@ class EcuService : Service() {
         val pi = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
-        return Notification.Builder(this, CHANNEL)
+        @Suppress("DEPRECATION")
+        return (if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this))
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pi)
             .setOngoing(true)
+            .apply {
+                // another diagnostic app (BTSSM…) wants the same adapter: let it go from here, and take it back
+                if (!Repo.settings.demo) {
+                    val (label, action) = if (Repo.adapterReleased.value) "Подключиться" to ACTION_RECONNECT else "Отпустить адаптер" to ACTION_RELEASE
+                    addAction(Notification.Action.Builder(null, label, PendingIntent.getService(
+                        this@EcuService, 2, Intent(this@EcuService, EcuService::class.java).setAction(action),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                    )).build())
+                }
+            }
             .addAction(Notification.Action.Builder(null, "Выход", PendingIntent.getService(
                 this, 1, Intent(this, EcuService::class.java).setAction(ACTION_EXIT), PendingIntent.FLAG_IMMUTABLE
             )).build())
@@ -1338,19 +1625,24 @@ class EcuService : Service() {
     }
 
     companion object {
+        /** The charts' step (see addHistory): every sample of the plain polling, every third of the fast poll. */
+        private const val HISTORY_STEP_MS = 200L
         const val CHANNEL = "ecu"
         const val ACTION_USB_PERMISSION = "kg.forester.sg.USB_PERMISSION"
         const val ACTION_RESET_TRIP = "kg.forester.sg.RESET_TRIP"
         const val ACTION_START_GPS = "kg.forester.sg.START_GPS"
         /** From the notification: stop everything and close the app. */
         const val ACTION_EXIT = "kg.forester.sg.EXIT"
+        /** Let the adapter go for another app, and take it back (notification, the link icon in the header). */
+        const val ACTION_RELEASE = "kg.forester.sg.RELEASE_ADAPTER"
+        const val ACTION_RECONNECT = "kg.forester.sg.RECONNECT_ADAPTER"
         val exitRequested = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         /** Paired Bluetooth devices worth trying in "Auto". */
         private val OBD_NAMES = listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE", "ICAR", "OBDLINK", "CARISTA", "VEEPEAK")
 
         fun start(ctx: Context, action: String? = null) {
             val i = Intent(ctx, EcuService::class.java).setAction(action)
-            ctx.startForegroundService(i)
+            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
         }
     }
 }
@@ -1372,34 +1664,36 @@ class BootReceiver : BroadcastReceiver() {
     }
 }
 
-/** One CSV file per engine run in Android/data/kg.forester.sg/files/logs; columns as chosen on the «Лог» screen. */
+/**
+ * One CSV file per engine run in Android/data/kg.forester.sg/files/logs; columns as chosen on the «Лог» screen. «time»
+ * first is the wall clock in epoch ms, as always; «t_ms» last is ms from the start of the file, as in RomRaider logs
+ * (EcuEdit and the like choke on epoch ms). The start, to the second, is the file name.
+ */
 class CsvLogger(ctx: Context, val extras: List<RrParam> = emptyList()) {
     val file: File
     private val w: FileWriter
     private var lines = 0
     val columns: List<LogColumn> = LogColumns.enabled()
+    /** The start: now, down to the whole second the file name shows. */
+    private val t0 = System.currentTimeMillis() / 1000 * 1000
 
     init {
         val dir = File(ctx.getExternalFilesDir(null), "logs").apply { mkdirs() }
-        val name = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date()) + ".csv"
+        val name = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date(t0)) + ".csv"
         file = File(dir, name)
         w = FileWriter(file)
-        w.write(
-            (listOf("time") + columns.map { it.key }).joinToString(",") +
-                extras.joinToString("") { p -> "," + "${p.id} ${p.nameEn} ${p.units}".trim().replace(',', ' ') } + "\n"
-        )
+        w.write(LogColumns.header(columns.map { it.key } + extras.map { p -> "${p.id} ${p.nameEn} ${p.units}".trim().replace(',', ' ') }) + "\n")
     }
 
     fun write(s: kg.forester.sg.ssm.EcuSnapshot, g: GpsFix?, lh: Double, t: TcuSnapshot?, extra: Map<String, Double> = emptyMap()) {
         val row = LogRow(s, g, lh, t, Repo.guard.value)
-        w.write(
-            (listOf(s.timeMs.toString()) + columns.map { it.get(row) }).joinToString(",") + extras.joinToString("") { p ->
-                "," + (extra[p.id]?.let { v ->
-                    if (kotlin.math.abs(v) >= 1e7) "%.6g".format(Locale.US, v)
-                    else "%.4f".format(Locale.US, v).trimEnd('0').trimEnd('.')
-                } ?: "")
-            } + "\n"
-        )
+        val values = columns.map { it.get(row) } + extras.map { p ->
+            extra[p.id]?.let { v ->
+                if (kotlin.math.abs(v) >= 1e7) "%.6g".format(Locale.US, v)
+                else "%.4f".format(Locale.US, v).trimEnd('0').trimEnd('.')
+            } ?: ""
+        }
+        w.write(LogColumns.line(s.timeMs, t0, values.joinToString(",")) + "\n")
         if (++lines % 20 == 0) w.flush()
     }
 
