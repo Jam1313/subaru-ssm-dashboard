@@ -32,8 +32,8 @@ object PerfLog {
     }
 
     /**
-     * Writes the samples from [fromMs] to [toMs] to [dir]/"[title] <start>.csv", the time as in the drive logs (epoch ms
-     * first, ms from the start to the second last); the file name, or null with too little to keep.
+     * Writes the samples from [fromMs] to [toMs] to [dir]/"[title] <start>.csv", the time as in the drive logs (ms from the
+     * start to the second first, epoch ms last); the file name, or null with too little to keep.
      */
     @Synchronized
     fun save(dir: File, title: String, fromMs: Long, toMs: Long): String? = runCatching {

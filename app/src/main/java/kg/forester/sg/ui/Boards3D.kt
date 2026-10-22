@@ -32,8 +32,13 @@ import kotlin.math.roundToInt
  * the rest are built in the script from the boards' real layouts.
  */
 
-/** The model of [b]. */
-fun board3d(b: BoxBoard) = when (b) { BoxBoard.NANO -> "nano"; BoxBoard.UNO -> "uno"; BoxBoard.PROMICRO -> "promicro"; BoxBoard.MEGA -> "mega" }
+/** The model of [b] (the ESP32-S3 has none rendered yet: [hasModel3D] tells). */
+fun board3d(b: BoxBoard) = when (b) {
+    BoxBoard.NANO -> "nano"; BoxBoard.UNO -> "uno"; BoxBoard.PROMICRO -> "promicro"; BoxBoard.MEGA -> "mega"; BoxBoard.ESP32S3 -> "esp32s3"
+}
+
+/** Whether the turntable frames of [id] are in the app. */
+fun hasModel3D(ctx: android.content.Context, id: String) = Turntable.of(ctx, id) != null
 
 /** The module an output's load is, or null (an LED needs no module). */
 fun load3d(l: LoadKind) = when (l) {

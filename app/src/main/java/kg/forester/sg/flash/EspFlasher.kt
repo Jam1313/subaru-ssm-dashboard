@@ -41,7 +41,7 @@ object EspFlasher {
      */
     fun checkImage(b: ByteArray): String? = when {
         b.size < 0x10000 -> "Файл слишком мал для прошивки ESP32"
-        b.size > 4 * 1024 * 1024 -> "Файл больше 4 МБ: это не прошивка экрана"
+        b.size > 4 * 1024 * 1024 -> "Файл больше 4 МБ: это не прошивка для этих плат"
         (b[0].toInt() and 0xFF) != 0xE9 -> "Это не образ ESP32 (нет метки 0xE9 в начале)"
         (b[0x8000].toInt() and 0xFF) != 0xAA || (b[0x8001].toInt() and 0xFF) != 0x50 ->
             "В файле нет таблицы разделов: нужен склеенный образ (merged.bin) для адреса 0, а не один .bin программы"
@@ -65,22 +65,7 @@ object EspFlasher {
             val d = target(usb, screenId)
             hold(d.device.deviceName)
             Thread.sleep(600) // its session lets go of the port
-            val rom = loader(usb, ctx, d)
-            progress(0.06f, "Загрузчик ответил, проверяю чип")
-            if (!rom.first.isS3()) throw IllegalStateException("Это не ESP32-S3: прошивка экрана только для плат на ESP32-S3")
-            rom.first.attach()
-            try {
-                progress(0.08f, "Стираю место под прошивку")
-                rom.first.write(0, img) { f -> progress(0.1f + 0.8f * f, "Записываю ${(f * 100).toInt()} %") }
-                progress(0.92f, "Проверяю записанное")
-                val want = EspRom.md5Hex(img)
-                val got = rom.first.md5(0, img.size)
-                if (got != want) throw FlashProtocol("проверка не сошлась: на плате MD5 $got, а должно быть $want")
-                rom.first.finish()
-                hardReset(rom.second)
-            } finally {
-                rom.third.close()
-            }
+            burn(usb, ctx, d, img, ::progress, UsbScreen.devices.values.toSet() - d.device.deviceName, ::hold)
             done = "Записано и проверено (MD5): ${img.size / 1024} КБ."
         } catch (e: Exception) {
             SsmTrace.log("esp flash failed: $e")
@@ -92,6 +77,31 @@ object EspFlasher {
             runCatching { wake.release() }
         }
         done?.let { state.value = answer(it, screenId, before) }
+    }
+
+    /**
+     * [img] onto the ESP32-S3 on [d] through its ROM loader, checked by MD5, then restarted into it. [say] reports the
+     * progress, [others] are the Espressif devices that are someone else (a board that comes back under a new name is
+     * none of them), [hold] keeps a device for the upload. Also the SensorBox's on an ESP32-S3 ([FirmwareFlasher]).
+     */
+    fun burn(usb: UsbManager, ctx: Context, d: UsbSerialDriver, img: ByteArray, say: (Float, String) -> Unit,
+             others: Set<String>, hold: (String) -> Unit) {
+        val rom = loader(usb, ctx, d, say, others, hold)
+        say(0.06f, "Загрузчик ответил, проверяю чип")
+        if (!rom.first.isS3()) throw IllegalStateException("Это не ESP32-S3: эта прошивка только для плат на ESP32-S3")
+        rom.first.attach()
+        try {
+            say(0.08f, "Стираю место под прошивку")
+            rom.first.write(0, img) { f -> say(0.1f + 0.8f * f, "Записываю ${(f * 100).toInt()} %") }
+            say(0.92f, "Проверяю записанное")
+            val want = EspRom.md5Hex(img)
+            val got = rom.first.md5(0, img.size)
+            if (got != want) throw FlashProtocol("проверка не сошлась: на плате MD5 $got, а должно быть $want")
+            rom.first.finish()
+            hardReset(rom.second)
+        } finally {
+            rom.third.close()
+        }
     }
 
     /** The USB device of [screenId], or the screen-type device none of the screens on line holds (a new board). */
@@ -138,10 +148,11 @@ object EspFlasher {
     }
 
     /** The ESP32-S3's USB serial into its ROM loader (esptool's USB-JTAG-serial reset), reopened if it came back as a new device. */
-    private fun loader(usb: UsbManager, ctx: Context, d: UsbSerialDriver): Triple<EspRom, UsbSerialPort, UsbByteLink> {
+    private fun loader(usb: UsbManager, ctx: Context, d: UsbSerialDriver, say: (Float, String) -> Unit, others: Set<String>,
+                       hold: (String) -> Unit): Triple<EspRom, UsbSerialPort, UsbByteLink> {
         permission(usb, ctx, d.device)
         var (port, link) = open(usb, d)
-        progress(0.03f, "Перезагружаю экран в режим прошивки")
+        say(0.03f, "Перезагружаю плату в режим прошивки")
         runCatching {
             port.rts = false; port.dtr = false; Thread.sleep(100)
             port.dtr = true; port.rts = false; Thread.sleep(100)
@@ -154,7 +165,6 @@ object EspFlasher {
         if (rom.sync()) return Triple(rom, port, link)
         // a firmware with the USB of its own (TinyUSB) restarts into the loader as another device
         link.close()
-        val others = UsbScreen.devices.values.toSet() - d.device.deviceName
         val end = System.currentTimeMillis() + 8000
         var again: UsbSerialDriver? = null
         while (again == null && System.currentTimeMillis() < end) {
@@ -162,12 +172,12 @@ object EspFlasher {
             // the same board under a new name: an Espressif device that is none of the other screens
             again = SensorBoxLink.drivers(usb).firstOrNull { ScreenLink.isScreen(it.device.vendorId) && it.device.deviceName !in others }
         }
-        again ?: throw IllegalStateException("Экран не перешёл в режим прошивки")
+        again ?: throw IllegalStateException("Плата не перешла в режим прошивки")
         hold(again.device.deviceName)
         permission(usb, ctx, again.device)
         open(usb, again).let { (p, l) -> port = p; link = l }
         rom = EspRom(link)
-        if (!rom.sync(12)) { link.close(); throw IllegalStateException("Загрузчик экрана не отвечает") }
+        if (!rom.sync(12)) { link.close(); throw IllegalStateException("Загрузчик платы не отвечает") }
         return Triple(rom, port, link)
     }
 

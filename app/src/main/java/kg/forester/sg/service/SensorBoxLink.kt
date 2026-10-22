@@ -120,7 +120,8 @@ object SensorBoxLink {
             val candidate = synchronized(lock) {
                 drivers.firstOrNull { d ->
                     val n = d.device.deviceName
-                    n !in busy && n !in asked && n != ecuDevice && !isAdapter(d) && !ScreenLink.isScreen(d.device.vendorId) &&
+                    // an Espressif board may be the box (an ESP32-S3) as well as a colour screen: asked unless it answered as a screen
+                    n !in busy && n !in asked && n != ecuDevice && !isAdapter(d) && n !in ScreenLink.knownScreens &&
                         UsbDeviceRegistry.available(d.device, UsbDeviceRegistry.BOX)
                 }?.also { busy += it.device.deviceName; asked += it.device.deviceName }
             }
@@ -164,8 +165,11 @@ object SensorBoxLink {
             if (!lease.permitted) return false
             port.open(conn)
             port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-            runCatching { port.dtr = true } // a 32U4 sends nothing until the host raises DTR; a Nano restarts on it
-            delay(2200) // a Nano's bootloader
+            if (ScreenLink.isScreen(d.device.vendorId)) delay(300) // an ESP32-S3: DTR and RTS are its reset and boot lines, left alone
+            else {
+                runCatching { port.dtr = true } // a 32U4 sends nothing until the host raises DTR; a Nano restarts on it
+                delay(2200) // a Nano's bootloader
+            }
             val buf = ByteArray(512)
             val line = StringBuilder()
             var lastData = System.currentTimeMillis()

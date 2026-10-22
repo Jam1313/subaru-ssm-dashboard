@@ -359,7 +359,11 @@ private fun BoardStep(onNext: () -> Unit) {
                         if (slots.any { it.input !in b.inputs }) confirm = b else SensorBox.setBoard(b)
                     }.padding(10.dp),
             ) {
-                Model3D(board3d(b), Modifier.fillMaxWidth().height(120.dp))
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                if (hasModel3D(ctx, board3d(b))) Model3D(board3d(b), Modifier.fillMaxWidth().height(120.dp))
+                else Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                    Icon(Lucide.Cpu, null, tint = C.Sub, modifier = Modifier.size(56.dp))
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     T(b.title, 15.sp, weight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
                     if (sel) Icon(Lucide.Check, null, tint = C.Green, modifier = Modifier.size(18.dp))
@@ -385,6 +389,12 @@ private fun BoardStep(onNext: () -> Unit) {
     Hint(Lucide.Plug, "Два клеммника (WAGO или винтовые): один для +5V, другой для массы всех датчиков")
     Hint(Lucide.Zap, "Провода 0,35–0,5 мм², термоусадка, резисторы, если датчик их просит (написано в его схеме)")
     Hint(Lucide.Usb, "Если на магнитоле один USB занят флешкой, нужен USB-хаб, лучше с отдельным питанием")
+    if (board.lowVolt) {
+        Hint(Lucide.TriangleAlert, "ESP32-S3 на 3,3 В: на каждый аналоговый вход делитель из резисторов 100 кОм и 150 кОм. Ещё один такой же " +
+            "от 5V платы на пин 1: так плата меряет питание датчиков и считает их точно", C.Orange)
+        Hint(Lucide.Cpu, "Для точных входов A4–A7 модуль ADS1115 (16 бит) на I2C: SDA на 8, SCL на 9, питание 3V3. Без него работают A0–A3 на АЦП самой платы")
+        Hint(Lucide.Info, "Реле: берите модули, которые срабатывают от 3,3 В (с перемычкой High/Low или на транзисторе). Обычный модуль на 5 В от 3,3 В может не выключаться")
+    }
     Spacer(Modifier.height(14.dp))
     BigButton("Дальше: прошивка", Lucide.ArrowRight, onNext)
 }
@@ -577,7 +587,11 @@ private fun OwnFirmware(board: BoxBoard) {
     var open by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     var picked by remember(board) { mutableStateOf<Pair<String, kg.forester.sg.flash.FirmwareCheck>?>(null) }
-    val spec = kg.forester.sg.flash.FirmwareFlasher.specs.getValue(board)
+    // the ESP32-S3 takes one image for address 0 (.bin), the AVR boards an Intel HEX
+    val esp = board == BoxBoard.ESP32S3
+    val asset = if (esp) kg.forester.sg.flash.FirmwareFlasher.ESP_ASSET else kg.forester.sg.flash.FirmwareFlasher.specs.getValue(board).asset
+    val ext = if (esp) ".bin" else ".hex"
+    val limit = if (esp) kg.forester.sg.flash.FirmwareCheck.MAX_BIN else kg.forester.sg.flash.FirmwareCheck.MAX_FILE
     fun copy(asset: String, uri: android.net.Uri?) {
         if (uri == null) return
         msg = runCatching {
@@ -586,7 +600,7 @@ private fun OwnFirmware(board: BoxBoard) {
         }.getOrElse { "Не удалось сохранить: ${it.message}" }
     }
     val saveHex = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream")) { copy(spec.asset, it) }
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream")) { copy(asset, it) }
     val saveIno = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream")) { copy("sensorbox/sensorbox.ino", it) }
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -598,11 +612,12 @@ private fun OwnFirmware(board: BoxBoard) {
                 // at most a byte past the limit: enough to tell it is too big without reading a film into memory
                 val out = java.io.ByteArrayOutputStream()
                 val buf = ByteArray(8192)
-                while (out.size() <= kg.forester.sg.flash.FirmwareCheck.MAX_FILE) { val n = input.read(buf); if (n < 0) break; out.write(buf, 0, n) }
+                while (out.size() <= limit) { val n = input.read(buf); if (n < 0) break; out.write(buf, 0, n) }
                 out.toByteArray()
             }
-            if (bytes.size > kg.forester.sg.flash.FirmwareCheck.MAX_FILE) kg.forester.sg.flash.FirmwareCheck(null,
-                listOf(false to "Файл больше 2 МБ: это не прошивка для ${board.short}"), null, null)
+            if (bytes.size > limit) kg.forester.sg.flash.FirmwareCheck(null,
+                listOf(false to "Файл больше ${limit / 1024 / 1024} МБ: это не прошивка для ${board.short}"), null, null)
+            else if (esp) kg.forester.sg.flash.FirmwareCheck.ofEsp(bytes)
             else kg.forester.sg.flash.FirmwareCheck.of(String(bytes, Charsets.ISO_8859_1), board)
         }.getOrElse { kg.forester.sg.flash.FirmwareCheck(null, listOf(false to "Не удалось прочитать файл: ${it.message}"), null, null) }
     }
@@ -614,12 +629,13 @@ private fun OwnFirmware(board: BoxBoard) {
     T("Готовая прошивка платы и её исходник: чтобы держать копию, поменять скетч под себя в Arduino IDE и залить обратно отсюда же.", 13.sp, C.Sub)
     Spacer(Modifier.height(6.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Chip("Сохранить готовую прошивку (.hex) для ${board.short}", false, { saveHex.launch(spec.asset.substringAfterLast('/')) }, Lucide.Download)
+        Chip("Сохранить готовую прошивку ($ext) для ${board.short}", false, { saveHex.launch(asset.substringAfterLast('/')) }, Lucide.Download)
         Chip("Сохранить исходник sensorbox.ino", false, { saveIno.launch("sensorbox.ino") }, Lucide.FileCode)
-        Chip("Залить свою прошивку (.hex)…", false, { pick.launch(arrayOf("*/*")) }, Lucide.Upload)
+        Chip("Залить свою прошивку ($ext)…", false, { pick.launch(arrayOf("*/*")) }, Lucide.Upload)
     }
     if (msg.isNotEmpty()) T(msg, 13.sp, if (msg.startsWith("Сохранено")) C.Green else C.Orange)
-    T("Свой .hex собирается в Arduino IDE: Скетч, Экспорт бинарного файла. Берите файл без with_bootloader в имени.", 12.sp, C.Sub)
+    T(if (esp) "Свой .bin собирается в Arduino IDE: Скетч, Экспорт бинарного файла. Берите sensorbox.ino.merged.bin: в нём и загрузчик, и таблица разделов."
+        else "Свой .hex собирается в Arduino IDE: Скетч, Экспорт бинарного файла. Берите файл без with_bootloader в имени.", 12.sp, C.Sub)
     val p = picked ?: return
     val (name, chk) = p
     Spacer(Modifier.height(8.dp))
@@ -639,7 +655,7 @@ private fun OwnFirmware(board: BoxBoard) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val working = st is kg.forester.sg.flash.FlashState.Working
             if (chk.ok) Chip(if (working) "Прошиваю…" else "Залить в ${board.short}", true, {
-                if (!working && info?.via != "демо") kg.forester.sg.flash.FirmwareFlasher.start(ctx, board, chk.image)
+                if (!working && info?.via != "демо") kg.forester.sg.flash.FirmwareFlasher.start(ctx, board, chk.image, chk.bin)
             }, Lucide.Zap, Modifier.alpha(if (working || info?.via == "демо") 0.4f else 1f))
             Chip("Убрать файл", false, { picked = null }, Lucide.X)
         }
@@ -709,6 +725,8 @@ private fun FlashHere(board: BoxBoard, onNext: () -> Unit) {
     Spacer(Modifier.height(10.dp))
     if (board == BoxBoard.PROMICRO) Hint(Lucide.Info, "Pro Micro на время прошивки становится другим USB-устройством, и Android спросит доступ ещё раз. " +
         "Поставьте галочку «по умолчанию» и нажмите ОК в течение 5 секунд, тогда в следующий раз спрашивать не будет.")
+    if (board == BoxBoard.ESP32S3) Hint(Lucide.Info, "ESP32-S3 прошивается через свой USB: если на плате два разъёма, нужен тот, что подписан USB (не UART или COM). " +
+        "Если загрузчик не отвечает, зажмите BOOT, нажмите и отпустите RST, отпустите BOOT и прошейте ещё раз.")
     Hint(Lucide.Info, "Если прервалось (выдернули кабель, пропало питание), ничего страшного: загрузчик платы не трогается, просто прошейте ещё раз.")
     Hint(Lucide.Info, "Лучше прошивать, когда плата воткнута в магнитолу напрямую, без пассивного хаба.")
 }
@@ -771,6 +789,10 @@ private fun FlashGuide(onNext: () -> Unit) {
     if (board == BoxBoard.PROMICRO) {
         Hint(Lucide.CircleAlert, "Плата пропала из портов после загрузки: это нормально, она перезагружается. Если зависла, замкните RST на GND два раза быстро и сразу жмите Загрузка.")
         Hint(Lucide.CircleAlert, "Выбирайте версию 5 В / 16 МГц. Платы на 3,3 В для датчиков 0,5–4,5 В не подходят.")
+    }
+    if (board == BoxBoard.ESP32S3) {
+        Hint(Lucide.CircleAlert, "Платы ESP32S3 нет в списке: Инструменты, Плата, Менеджер плат, найдите esp32 от Espressif и установите.")
+        Hint(Lucide.CircleAlert, "Порт пропал после загрузки или не появился: подключите разъём USB (не UART/COM), зажмите BOOT, нажмите RST, отпустите BOOT и снова Загрузка.")
     }
     Hint(Lucide.CircleAlert, "Модуль термопары не нужен для прошивки: без него вход TC0 просто не появится.")
 }
@@ -992,17 +1014,25 @@ internal fun WiringSteps(board: BoxBoard, input: String, p: BoxPreset, others: L
     val power = others.filter { o -> o.p.wires.any { it.to == "5V" } || o.p.pullUp != null }
     val ground = others.filter { o -> o.p.wires.any { it.to == "GND" } }
     val needs5 = p.wires.any { it.to == "5V" } || p.pullUp != null
+    // 3.3 V pins (the ESP32-S3): an analog signal of up to 5 V comes in through a divider
+    val divided = board.lowVolt && input in board.analog
+    val sigPin = if (board.onAds(input)) "вход ${board.pinOf(input).removePrefix("ADS ")} модуля ADS1115" else "пин ${board.pinOf(input)} платы"
     p.wires.forEach { w ->
         val target = when {
             w.to == "12V" -> "+12 В машины через предохранитель 5 А (не к плате!)"
             w.to == "5V" && power.isNotEmpty() -> "клеммник +5V (общий с: ${power.joinToString { it.name }})"
             w.to == "GND" && ground.isNotEmpty() -> "клеммник GND (общий с: ${ground.joinToString { it.name }})"
+            w.to == "SIG" && divided -> "$sigPin через делитель (следующий шаг)"
             else -> "пин ${pinFor(board, input, w.to)} платы"
         }
         WireStep(++n, Color(w.color), "${w.label} → $target")
+        if (w.to == "SIG" && divided) WireStep(++n, C.Orange, "Делитель на $sigPin: резистор 100 кОм от сигнального провода к пину, 150 кОм " +
+            "от пина на GND, рядом конденсатор 100 нФ на GND. Пины ESP32-S3 на 3,3 В: 5 В напрямую их сожгут")
     }
+    if (board.lowVolt && input == "F0") WireStep(++n, C.Orange, "Датчик с открытым коллектором (flex fuel, датчик Холла) прямо на пин ${board.freqPin}: " +
+        "плата сама подтягивает его к 3,3 В. Датчик с выходом 5 В только через делитель 100k/150k")
     p.pullUp?.let {
-        WireStep(++n, Color(WIRE_RED), "Резистор ${it}: одной ногой в ${board.pinOf(input)}, другой в " +
+        WireStep(++n, Color(WIRE_RED), "Резистор ${it}: одной ногой в " + (if (divided) "сигнальный провод датчика (до делителя)" else board.pinOf(input)) + ", другой в " +
             if (power.isNotEmpty()) "клеммник +5V" else "${board.v5} (к тому же пину можно подпаять провод питания)")
     }
     if (needs5 && power.isNotEmpty() || ground.isNotEmpty()) WireStep(++n, C.Violet,

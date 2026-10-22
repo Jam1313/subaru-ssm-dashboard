@@ -128,7 +128,7 @@ fun TransmissionScreen() {
             ) { AtfCard(t?.atfC, m) }
             "converter" -> Panel(m) {
                 CardHeader(Lucide.Lock, "Гидротрансформатор", C.Blue, info)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
                 val stColor = when (lock) {
                     LockState.UNKNOWN -> C.Gray
                     LockState.OPEN -> C.Blue
@@ -143,12 +143,15 @@ fun TransmissionScreen() {
                     Spacer(Modifier.width(6.dp))
                     T(stText, 14.sp, stColor, FontWeight.SemiBold)
                 }
-                Spacer(Modifier.height(8.dp))
-                ConvRow(Lucide.Gauge, "Двигатель", if (rpm > 0) "$rpm" else "—", "об/мин")
-                ConvRow(Lucide.Fan, "Турбина", t?.turbineRpm?.toString() ?: "—", "об/мин")
-                ConvRow(Lucide.Percent, "Проскальзывание", fmtF(slip, 0), "%", if (lock == LockState.SLIPPING) C.Orange else C.Text)
-                Spacer(Modifier.weight(1f))
-                if (status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                // the rows share what is left: on a head unit's three-row board the tile is short, and the slip row
+                // and the status line under it were cut off
+                Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.SpaceEvenly) {
+                    ConvRow(Lucide.Gauge, "Двигатель", if (rpm > 0) "$rpm" else "—", "об/мин")
+                    ConvRow(Lucide.Fan, "Турбина", t?.turbineRpm?.toString() ?: "—", "об/мин")
+                    ConvRow(Lucide.Percent, "Проскальзывание", fmtF(slip, 0), "%", if (lock == LockState.SLIPPING) C.Orange else C.Text)
+                }
+                // only why there is nothing (the TCU's ROM while it answers is no news here)
+                if (t == null && status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Lucide.Info, null, tint = if (t == null) C.Orange else C.Sub, modifier = Modifier.size(13.dp))
                     Spacer(Modifier.width(6.dp))
                     T(status, 12.sp, if (t == null) C.Orange else C.Sub, maxLines = 2)

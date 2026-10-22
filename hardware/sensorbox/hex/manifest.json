@@ -1,22 +1,22 @@
 {
- "ino_sha256": "0e3aa6e6d5fa54e179454518735e1a396f855a47755b5c33b0ca00faa57ec350",
+ "ino_sha256": "0e213c02edc992e61ed544e1904a344d56efeeaad82b247a555f304d6cc5a0ca",
  "core": "arduino:avr@1.8.6",
  "files": {
   "nano": {
-   "sha256": "d1330d07515979471db6704388859c22ac8fd233cfe028a79153605558cba4ce",
+   "sha256": "e65f15c06ccb5b0cf8a55a378386cd0d2f68e31db1b7793936db12e21fbd0606",
    "bytes": 19084
   },
   "uno": {
-   "sha256": "054ac79015c489a0f69b19e2b7180bf1fbb1f49beec47a44a99aea6df78753a7",
+   "sha256": "18a3a8e320716e634a63a49dbf955aa9636cde7722fa8d175a1c1a3bde554326",
    "bytes": 19082
   },
   "32u4": {
-   "sha256": "5743c89abba5c42b0095d65e886ab68315beef84bb2d4b5e2101cd6c8dffdfa1",
-   "bytes": 21574
+   "sha256": "ef6024cffbe54a43f4511911e14faefc29434606f544519bb9f4dda57d9b85bb",
+   "bytes": 21570
   },
   "mega": {
-   "sha256": "08cc65fac92fe1a853a8726fc01ded3aa83c131a8498c63919af270d836da9c5",
-   "bytes": 20878
+   "sha256": "fe1fe71a5d3c6f3408f9b2b6269a5204ec68ad691cbb8596bf1f56c18c9986aa",
+   "bytes": 20880
   }
  }
 }

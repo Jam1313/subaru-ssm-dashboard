@@ -136,6 +136,13 @@ internal class RadioUi(val fyt: Boolean, internet: Boolean, cc: String, named: M
         tuning = true
         scope.launch {
             radioOn()
+            // straight there when the tuner takes a frequency, else station by station
+            val r0 = Fyt.radio.value
+            val tol0 = if (r0.isFm || r0.band == -1) 15 else 9
+            if (abs(r0.freq - target) > tol0) {
+                Fyt.radioTune(target)
+                withTimeoutOrNull(2500) { Fyt.radio.first { abs(it.freq - target) <= tol0 } }?.let { settled(it.freq, 400) }
+            }
             for (i in 0 until 12) {
                 val cur = Fyt.radio.value.freq
                 val fm = Fyt.radio.value.isFm || Fyt.radio.value.band == -1
@@ -160,6 +167,11 @@ internal class RadioUi(val fyt: Boolean, internet: Boolean, cc: String, named: M
         tuning = true
         scope.launch {
             radioOn()
+            if (Fyt.radio.value.preset == p) return@launch
+            // the preset itself; a unit that doesn't take that gets it step by step
+            val f0 = Fyt.radio.value.freq
+            Fyt.radioToPreset(p)
+            if (withTimeoutOrNull(2500) { Fyt.radio.first { it.preset == p || it.freq != f0 } } != null) return@launch
             val cur = Fyt.radio.value.preset.takeIf { it in 1..6 } ?: 1
             val fwd = (p - cur + 6) % 6
             repeat(if (fwd <= 3) fwd else 6 - fwd) {
@@ -175,7 +187,7 @@ internal class RadioUi(val fyt: Boolean, internet: Boolean, cc: String, named: M
      * preset sent before that was undone by it.
      */
     private suspend fun radioOn() {
-        if (Fyt.appId.value == 1) return
+        if (Fyt.appId.value == 1 || Fyt.radioUnconfirmed) return
         Fyt.ensureRadio()
         // the source command, and the radio's activity when that alone didn't do (after 1.5 s)
         withTimeoutOrNull(5000) { Fyt.appId.first { it == 1 } }
@@ -277,7 +289,7 @@ private fun FmHero(ui: RadioUi) {
         val p = ((r.preset.coerceAtLeast(1) - 1 + if (next) 1 else -1) + 6) % 6
         DemoRadio.set(DemoRadio.presets[p])
     }
-    fun band() = if (fyt) Fyt.radioBand() else DemoRadio.state.value = r.copy(band = when (r.band) { 65538 -> 0; 0, 1 -> 65536; else -> r.band + 1 })
+    fun band(b: Int) = if (fyt) Fyt.radioBand(b) else DemoRadio.state.value = r.copy(band = b)
     Hero(
         cover = { m -> Box(m.clip(RoundedCornerShape(22.dp)).clickable { ui.picking = true }) { GlowCover(ui.fmLogo, Lucide.Radio, on, Modifier.fillMaxSize(), whiteBack = true) } },
         onNext = { ui.step(r.freq, true, ::preset) }, onPrev = { ui.step(r.freq, false, ::preset) },
@@ -285,7 +297,7 @@ private fun FmHero(ui: RadioUi) {
             RadioKind(ui)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(65536 to "FM1", 65537 to "FM2", 65538 to "FM3", 0 to "AM").forEach { (b, t) ->
-                    Pill(t, null, r.band == b || (b == 0 && r.band == 1), 34.dp) { if (r.band != b) band() }
+                    Pill(t, null, r.band == b || (b == 0 && r.band == 1), 34.dp) { if (r.band != b) band(b) }
                 }
             }
             Spacer(Modifier.height(10.dp))

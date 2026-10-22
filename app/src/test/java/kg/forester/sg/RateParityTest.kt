@@ -86,7 +86,7 @@ class RateParityTest {
         assertEquals("1", LogColumns.all.first { it.key == "oil_estimated" }.get(row))
     }
 
-    /** «time» first is the epoch ms as up to 0.9-beta20, «t_ms» from the file's start is the last column. */
+    /** «Time» first is ms from the file's start (EcuEdit takes the first column), «epoch_ms» the last column. */
     @Test fun csvTimeColumns() {
         val t0 = 1_760_000_000_000L
         val cols = LogColumns.offered(false)
@@ -95,13 +95,13 @@ class RateParityTest {
         val head = LogColumns.header(cols.map { it.key } + extras).split(',')
         val line = LogColumns.line(t0 + 1234, t0, (cols.map { it.get(row) } + extras.map { "" }).joinToString(",")).split(',')
         assertEquals(head.size, line.size)
-        assertEquals("time", head.first()); assertEquals("t_ms", head.last())
-        assertEquals((t0 + 1234).toString(), line.first())
-        assertEquals("1234", line.last())
+        assertEquals("Time", head.first()); assertEquals("epoch_ms", head.last())
+        assertEquals("1234", line.first())
+        assertEquals((t0 + 1234).toString(), line.last())
         assertEquals("800", line[head.indexOf("rpm")])
         // nothing in between (all columns off): still the two clocks
-        assertEquals("time,t_ms", LogColumns.header(emptyList()))
-        assertEquals("${t0 + 5},5", LogColumns.line(t0 + 5, t0, ""))
+        assertEquals("Time,epoch_ms", LogColumns.header(emptyList()))
+        assertEquals("5,${t0 + 5}", LogColumns.line(t0 + 5, t0, ""))
     }
 
     /** The injectors' opening time: the 14 V figure as set, longer on a weak battery, clamped on a wild reading. */

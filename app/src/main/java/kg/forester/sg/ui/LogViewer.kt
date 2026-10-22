@@ -128,8 +128,8 @@ private fun readLog(f: File, rr: Map<String, kg.forester.sg.ssm.RrParam> = empty
         // a RomRaider parameter that repeats a regular column (older logs wrote both): shown once, under the regular name
         val param = Regex("^([PE]\\d+) ").find(head[c].trim())?.groupValues?.get(1)?.let { rr[it] }
         if (param != null && LogColumns.twinOf(param) in keys) return@mapNotNull null
-        // the second clock at the end (ms from the start) is no chart
-        if (head[c].trim() == LogColumns.T_MS) return@mapNotNull null
+        // the second clock at the end (the wall clock, or ms from the start in 0.9-beta21's logs) is no chart
+        if (head[c].trim() == LogColumns.EPOCH_MS || head[c].trim() == LogColumns.T_MS) return@mapNotNull null
         val v = FloatArray(rows.size) { rows[it].getOrNull(c)?.toFloatOrNull() ?: Float.NaN }
         if (v.all { it.isNaN() }) return@mapNotNull null
         val key = head[c].trim()

@@ -71,11 +71,69 @@ object FirmwareFlasher {
     fun isCaterina(d: UsbDevice) = (d.vendorId == 0x2341 || d.vendorId == 0x2A03) && d.productId in setOf(0x0036, 0x0037) ||
         d.vendorId == 0x1B4F && d.productId in setOf(0x9205, 0x9203)
 
-    /** Uploads the firmware shipped in the app, or [custom] (a .hex the driver picked, checked by [FirmwareCheck]). */
-    fun start(ctx: Context, board: BoxBoard, custom: HexImage? = null) {
+    /** The ESP32-S3's firmware: one image for address 0 (hardware/sensorbox/build-bin.sh). */
+    const val ESP_ASSET = "sensorbox/bin/sensorbox-esp32s3.bin"
+
+    /**
+     * Uploads the firmware shipped in the app, or [custom] (a .hex the driver picked, checked by [FirmwareCheck]); on
+     * the ESP32-S3 [customBin] (a .bin, checked the same way).
+     */
+    fun start(ctx: Context, board: BoxBoard, custom: HexImage? = null, customBin: ByteArray? = null) {
         if (state.value is FlashState.Working) return
         state.value = FlashState.Working(0f, "Готовлю прошивку")
-        scope.launch { run(ctx.applicationContext, board, custom) }
+        scope.launch { if (board == BoxBoard.ESP32S3) runEsp(ctx.applicationContext, customBin) else run(ctx.applicationContext, board, custom) }
+    }
+
+    /** The ESP32-S3: its own USB into the chip's ROM loader, as the colour screen is flashed ([EspFlasher.burn]). */
+    private fun runEsp(ctx: Context, custom: ByteArray?) {
+        val t0 = System.currentTimeMillis()
+        val usb = ctx.getSystemService(Context.USB_SERVICE) as UsbManager
+        val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val wake = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "sg:flash").apply { acquire(5 * 60_000L) }
+        val held = HashSet<String>()
+        // the screen loop must not ask the board meanwhile (the box loop is paused, the ECU loop never takes an Espressif board)
+        fun hold(n: String) { held += n; kg.forester.sg.service.ScreenLink.pauseForFlash(n, true) }
+        SensorBoxLink.pauseForFlash(true)
+        var written: String? = null
+        try {
+            val img = custom ?: ctx.assets.open(ESP_ASSET).use { it.readBytes() }
+            EspFlasher.checkImage(img)?.let { throw IllegalStateException(it) }
+            Thread.sleep(800) // the box loop closes its session
+            val d = pickEsp(usb)
+            SsmTrace.log("flash: esp32s3 on %04X:%04X".format(d.device.vendorId, d.device.productId))
+            hold(d.device.deviceName)
+            // a board without the firmware is being asked by the screen loop whether it is a screen: it lets go in a few seconds
+            val until = System.currentTimeMillis() + 8000
+            while (kg.forester.sg.service.ScreenLink.busy(d.device.deviceName) && System.currentTimeMillis() < until) Thread.sleep(200)
+            val screens = kg.forester.sg.data.UsbScreen.devices.values.toSet() - d.device.deviceName
+            EspFlasher.burn(usb, ctx, d, img, ::progress, screens, ::hold)
+            val s = (System.currentTimeMillis() - t0) / 1000
+            if (kg.forester.sg.data.SensorBox.info.value?.via?.startsWith("USB") == true) kg.forester.sg.data.SensorBox.info.value = null
+            written = "Записано и проверено (MD5): ${img.size / 1024} КБ за $s с."
+            progress(0.99f, "Жду, что ответит плата с новой прошивкой")
+        } catch (e: Exception) {
+            SsmTrace.log("flash failed: $e")
+            state.value = FlashState.Failed((e.message ?: e.toString()) +
+                ". Если плата не отвечает: зажмите на ней BOOT, нажмите и отпустите RST (или вставьте USB с зажатой BOOT), отпустите BOOT и прошейте ещё раз")
+        } finally {
+            held.forEach { kg.forester.sg.service.ScreenLink.pauseForFlash(it, false) }
+            SensorBoxLink.pauseForFlash(false)
+            runCatching { wake.release() }
+        }
+        written?.let { state.value = answer(it) }
+    }
+
+    /** The ESP32-S3: the box's own device, else the only Espressif board that is not a colour screen on line. */
+    private fun pickEsp(usb: UsbManager): UsbSerialDriver {
+        val all = SensorBoxLink.drivers(usb).filter { kg.forester.sg.service.ScreenLink.isScreen(it.device.vendorId) }
+        SensorBoxLink.lastBoxDevice?.let { n -> all.firstOrNull { it.device.deviceName == n }?.let { return it } }
+        val screens = kg.forester.sg.data.UsbScreen.devices.values.toSet() + kg.forester.sg.service.ScreenLink.knownScreens
+        val free = all.filter { it.device.deviceName !in screens }
+        return free.singleOrNull() ?: throw IllegalStateException(when {
+            all.isEmpty() -> "Плата ESP32-S3 не найдена на USB. Подключите её к магнитоле разъёмом USB (не UART/COM, если на плате их два)"
+            free.isEmpty() -> "На USB только цветные экраны: плату датчиков не видно. Подключите её к магнитоле"
+            else -> "На USB несколько плат ESP32-S3: подключите для прошивки одну"
+        })
     }
 
     fun reset() { if (state.value !is FlashState.Working) state.value = FlashState.Idle }

@@ -396,6 +396,8 @@ object RomRaider {
             if (depth > 4) return null
             val expr = units?.let { p.conversions[it.lowercase()] } ?: p.expr ?: return null
             val x = if (p.addr >= 0) rawValue(p) ?: return null else 0.0
+            // per revolution while cranking or stopping (a few rpm): P200 load came out as 842 g/rev
+            if (p.addr < 0 && "P8" in p.deps && (defs["P8"]?.let { value(it, null, depth + 1) } ?: 0.0) < 300) return null
             return expr.eval(x) { id, u -> defs[id]?.let { value(it, u, depth + 1) } }
         }
         for (p in params) value(p, null, 0)?.let { out[p.id] = it }

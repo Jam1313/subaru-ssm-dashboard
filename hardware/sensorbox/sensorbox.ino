@@ -5,9 +5,15 @@
  * a thermocouple's °C, a frequency) and the app turns them into oil °C, bar, AFR with the profile picked for
  * each input. A new sensor is a setting in the app, never a reflash.
  *
- * Boards: Arduino Nano / Nano V3 and Uno (ATmega328P), Pro Micro 5 V / Leonardo / Micro (ATmega32U4), Mega 2560.
- * A Nano's USB chip (CH340, FTDI) is often the same as a KKL cable's: the app tells them apart by the answer to «?».
- * MAX31855: SCK and SO on the board's SPI pins (Nano/Uno D13/D12, Pro Micro D15/D14, Mega D52/D50), CS on D10.
+ * Boards: Arduino Nano / Nano V3 and Uno (ATmega328P), Pro Micro 5 V / Leonardo / Micro (ATmega32U4), Mega 2560,
+ * ESP32-S3 on its own USB (USB CDC On Boot). A Nano's USB chip (CH340, FTDI) is often the same as a KKL cable's, an
+ * ESP32-S3 has the colour screen's ids: the app tells them apart by the answer to «?».
+ * MAX31855: SCK and SO on the board's SPI pins (Nano/Uno D13/D12, Pro Micro D15/D14, Mega D52/D50, ESP32-S3 12/13), CS on 10.
+ *
+ * ESP32-S3: 3.3 V pins, so a 5 V signal comes in through a divider (100k from the signal, 150k to ground: 5 V reads
+ * 3.0 V), the 5 V rail through one more on GPIO1 (the sensors' supply, for the ratio). A0..A3 are the chip's own ADC
+ * (GPIO 2, 4, 5, 6); an ADS1115 on I2C (16 bits, found at start) adds A4..A7. The counts sent are the same as an
+ * Arduino's: 0..1023 of the 5 V rail.
  *
  * Protocol, text lines at 115200 8N1 (\n at the end), see README.md:
  *   host → box   ?          who are you          → I SENSORBOX 2 board=promicro id=1A2B fw=5 rate=20 disp=none ch=A0,A1,A2,A3,TC0,F0
@@ -73,6 +79,18 @@
   const char *const AIN_NAME[] = {"A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7"};
   #define FREQ_PIN 2       // INT4
   const uint8_t OUT_PINS[] = {3, 4, 5, 6, 7, 8, 9, 11, 12, 22, 23, 24, 25, 26, 27, 28, 29};
+#elif defined(ARDUINO_ARCH_ESP32)
+  #define BOARD "esp32s3"
+  #define ESP_BOX 1
+  // the chip's own ADC (ADC1, it works next to Wi-Fi too) as A0..A3; an ADS1115 on the bus adds A4..A7
+  const uint8_t AIN[] = {2, 4, 5, 6};
+  const char *const AIN_NAME[] = {"A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7"};
+  #define VSENSE_PIN 1     // the 5 V rail through the divider
+  #define DIV_K 0.6f       // 150k / (100k + 150k)
+  #define FREQ_PIN 14
+  // not 0, 3, 45, 46 (strapping), 19/20 (USB), 26..37 (flash and PSRAM), 38/48 (the RGB LED on many boards),
+  // 8/9 (I2C), 10..13 (CS, SPI), 1..7 (analog), 14 (frequency)
+  const uint8_t OUT_PINS[] = {15, 16, 17, 18, 21, 39, 40, 41, 42, 47};
 #elif defined(ARDUINO_AVR_UNO)
   #define BOARD "uno"
   const uint8_t AIN[] = {A0, A1, A2, A3, A4, A5};
@@ -216,6 +234,17 @@ Out outs[NCH];
 bool hbArmed = false, failsafe = false;
 uint32_t hbTimeout = 3000, lastLine = 0, failsafeAt = 0;
 const uint8_t NAIN = sizeof(AIN) / sizeof(AIN[0]);
+uint8_t adsAddr = 0;  // an ADS1115 on I2C (ESP32-S3 only)
+
+#if defined(ESP_BOX)
+  // EEPROM is a flash page there: written only when a byte changes
+  void eeUpdate(int a, uint8_t v) { if (EEPROM.read(a) != v) { EEPROM.write(a, v); EEPROM.commit(); } }
+  portMUX_TYPE fMux = portMUX_INITIALIZER_UNLOCKED;
+  #define ISR_ATTR IRAM_ATTR
+#else
+  void eeUpdate(int a, uint8_t v) { EEPROM.update(a, v); }
+  #define ISR_ATTR
+#endif
 
 // ---- EEPROM: a magic byte, the box id (the app keeps the profiles per box), the rate -------------------------
 const uint8_t EE_MAGIC = 0x5B;
@@ -233,7 +262,7 @@ volatile uint16_t fN = 0;
 float fHz = 0;
 uint32_t fSeenMs = 0;
 
-void onEdge() {
+void ISR_ATTR onEdge() {
   uint32_t t = micros();
   uint32_t d = t - fLast;
   fLast = t;
@@ -244,6 +273,57 @@ void onEdge() {
 
 // ---- supply voltage: the 1.1 V bandgap against AVcc. Only for sensors with their own reference (a wideband
 // controller's 0–5 V output); a sender fed from the box's own 5 V is read as a ratio and needs no voltage at all.
+#if defined(ESP_BOX)
+// the 5 V rail, through the divider on VSENSE_PIN; not wired (reads nothing like 5 V): taken as 5.00 V
+long readVccMv() {
+  uint32_t s = 0;
+  for (uint8_t i = 0; i < 8; i++) s += analogReadMilliVolts(VSENSE_PIN);
+  long mv = lround(s / 8.0f / DIV_K);
+  return (mv < 3500 || mv > 6000) ? 5000 : mv;
+}
+
+// ADS1115: one single-shot conversion of AINx against ground at ±4.096 V, 860 a second; millivolts at the pin
+float adsMv(uint8_t ch) {
+  uint16_t cfg = 0x8000 | ((4 + ch) << 12) | (1 << 9) | (1 << 8) | (7 << 5) | 3;
+  Wire.beginTransmission(adsAddr); Wire.write(1); Wire.write(cfg >> 8); Wire.write(cfg & 0xFF);
+  if (Wire.endTransmission() != 0) return 0;
+  delayMicroseconds(1300);
+  for (uint8_t i = 0; i < 10; i++) {  // the OS bit comes back when the conversion is done
+    Wire.requestFrom(adsAddr, (uint8_t)2);
+    if (Wire.available() == 2 && (Wire.read() & 0x80)) { Wire.read(); break; }
+    delayMicroseconds(200);
+  }
+  Wire.beginTransmission(adsAddr); Wire.write(0); Wire.endTransmission();
+  Wire.requestFrom(adsAddr, (uint8_t)2);
+  if (Wire.available() != 2) return 0;
+  int16_t raw = (Wire.read() << 8) | Wire.read();
+  return raw * 0.125f;
+}
+
+void findAds() {
+  for (uint8_t a = 0x48; a <= 0x4B; a++) { Wire.beginTransmission(a); if (Wire.endTransmission() == 0) { adsAddr = a; return; } }
+}
+
+// the analog inputs as named in the I line: the chip's own A0..A3, then the ADS1115's A4..A7 when it is there
+// (the names stay put, so a sensor set up on one keeps its input when the module comes or goes)
+uint8_t nCh() { return NAIN + (adsAddr ? 4 : 0); }
+const char *chName(uint8_t i) { return AIN_NAME[i]; }
+bool chSkip(uint8_t i) { return false; }
+
+// a reading as an Arduino gives it: 0..1023 of the 5 V rail ([vcc] mV), the divider taken out
+float chRead(uint8_t i, long vcc) {
+  float mv;
+  if (i >= NAIN) mv = (adsMv(i - NAIN) + adsMv(i - NAIN)) / 2;
+  else {
+    uint8_t pin = AIN[i];
+    uint32_t s = 0;
+    for (uint8_t k = 0; k < 16; k++) s += analogReadMilliVolts(pin);
+    mv = s / 16.0f;
+  }
+  float r = mv / DIV_K / vcc * 1023.0f;
+  return r < 0 ? 0 : r > 1023 ? 1023 : r;
+}
+#else
 long readVccMv() {
 #if defined(__AVR_ATmega32U4__) || defined(__AVR_ATmega2560__)
   ADCSRB &= ~_BV(MUX5);
@@ -267,6 +347,12 @@ float readAin(uint8_t pin) {
   for (uint8_t i = 0; i < 16; i++) s += analogRead(pin);
   return s / 16.0f;
 }
+
+uint8_t nCh() { return NAIN; }
+const char *chName(uint8_t i) { return AIN_NAME[i]; }
+bool chSkip(uint8_t i) { return i2cOn && (AIN[i] == SDA || AIN[i] == SCL); }  // the display's pins (the Uno's A4/A5)
+float chRead(uint8_t i, long) { return readAin(AIN[i]); }
+#endif
 
 #if USE_MAX31855
 uint32_t tcRaw(uint8_t cs = TC_CS) {
@@ -511,14 +597,20 @@ void colInit() {
 /** What answers on I2C at the usual addresses: an OLED (0x3C/0x3D) or an LCD backpack (0x27/0x3F, 0x20/0x38). */
 void findDisplays() {
   Wire.begin();
+#if defined(ESP_BOX)
+  Wire.setTimeOut(20);
+  if (!adsAddr) findAds();
+#else
   Wire.setWireTimeout(3000, true);  // a sensor holding the line low must not hang the box
+#endif
   static const uint8_t oled[] = {0x3C, 0x3D}, lcd[] = {0x27, 0x3F, 0x20, 0x38};
   for (uint8_t a : oled) { Wire.beginTransmission(a); if (Wire.endTransmission() == 0) { oledAddr = a; break; } }
   // an OLED and a text LCD can share the bus: their addresses differ
   for (uint8_t a : lcd) { Wire.beginTransmission(a); if (Wire.endTransmission() == 0) { lcdAddr = a; break; } }
   if (oledAddr) { oledInit(); oledClear(); }
   if (lcdAddr) lcdInit();
-  if (!oledAddr && !lcdAddr) { Wire.end(); return; }  // nothing there: the pins go back to the inputs (the Uno's A4/A5)
+  // nothing there: the pins go back to the inputs (the Uno's A4/A5); the ESP32's ADS1115 keeps the bus
+  if (!oledAddr && !lcdAddr) { if (!adsAddr) Wire.end(); return; }
   i2cOn = true;
 }
 
@@ -794,7 +886,9 @@ void handleOut(char *s) {
       break;
     }
     case 'W': {
+#if !defined(ESP_BOX)  // any ESP32 pin can do PWM
       if (digitalPinToTimer(o.pin) == NOT_ON_TIMER) { reply('E', 'W', ch, F("pwm")); return; }
+#endif
       uint8_t d = constrain(atoi(a ? a : "0"), 0, 255);
       o.mode = 3; o.duty = d; o.on = d > 0;
       analogWrite(o.pin, o.activeLow ? 255 - d : d);
@@ -816,11 +910,11 @@ void printInfo() {
   Serial.print(oledAddr && lcdAddr ? F("oled+lcd") : oledAddr ? F("oled") : lcdAddr ? F("lcd") : F("none"));
   Serial.print(F(" ch="));
   bool first = true;
-  for (uint8_t i = 0; i < NAIN; i++) {
-    if (i2cOn && (AIN[i] == SDA || AIN[i] == SCL)) continue;
+  for (uint8_t i = 0; i < nCh(); i++) {
+    if (chSkip(i)) continue;
     if (!first) Serial.print(',');
     first = false;
-    Serial.print(AIN_NAME[i]);
+    Serial.print(chName(i));
   }
   if (tcPresent) Serial.print(F(",TC0"));
   Serial.print(F(",F0 out="));
@@ -845,7 +939,7 @@ void handle(char *s) {
       int r = atoi(s + 1);
       if (r >= 1 && r <= 50) {
         rateHz = r;
-        EEPROM.update(3, rateHz);
+        eeUpdate(3, rateHz);
       }
       printInfo();
       break;
@@ -884,14 +978,23 @@ void readCommands() {
 void setup() {
   for (uint8_t i = 0; i < NCH; i++) outs[i].pin = -1;  // every output an input until the app sets it up
   Serial.begin(115200);
+#if defined(ESP_BOX)
+  Serial.setTxTimeoutMs(0);  // nobody reading the USB: lines are dropped, the loop (and the outputs' guards) never waits
+  EEPROM.begin(16);
+  analogReadResolution(12);
+#endif
   findDisplays();
   if (EEPROM.read(0) != EE_MAGIC) {
+#if defined(ESP_BOX)
+    randomSeed(esp_random());
+#else
     randomSeed(analogRead(AIN[0]) ^ (analogRead(AIN[1]) << 4) ^ micros());
+#endif
     boxId = random(1, 0xFFFF);
-    EEPROM.update(1, boxId >> 8);
-    EEPROM.update(2, boxId & 0xFF);
-    EEPROM.update(3, rateHz);
-    EEPROM.update(0, EE_MAGIC);
+    eeUpdate(1, boxId >> 8);
+    eeUpdate(2, boxId & 0xFF);
+    eeUpdate(3, rateHz);
+    eeUpdate(0, EE_MAGIC);
   }
   boxId = (EEPROM.read(1) << 8) | EEPROM.read(2);
   rateHz = constrain(EEPROM.read(3), 1, 50);
@@ -903,7 +1006,11 @@ void setup() {
   pinMode(TC_CS, OUTPUT);
   digitalWrite(TC_CS, HIGH);
   SPI.begin();
+#if defined(ESP_BOX)
+  gpio_pullup_en((gpio_num_t)MISO);  // pinMode would take the pin away from the SPI unit
+#else
   pinMode(MISO, INPUT_PULLUP);  // no board on the bus reads all ones
+#endif
   delay(250);                   // its first conversion
   uint32_t v = tcRaw();
   tcPresent = v != 0 && v != 0xFFFFFFFFUL;
@@ -923,13 +1030,14 @@ void loop() {
   Serial.print(F("D t="));
   Serial.print(now);
   Serial.print(F(" vcc="));
-  Serial.print(readVccMv());
-  for (uint8_t i = 0; i < NAIN; i++) {
-    if (i2cOn && (AIN[i] == SDA || AIN[i] == SCL)) continue;  // the display's pins (the Uno's A4/A5)
+  long vcc = readVccMv();
+  Serial.print(vcc);
+  for (uint8_t i = 0; i < nCh(); i++) {
+    if (chSkip(i)) continue;
     Serial.print(' ');
-    Serial.print(AIN_NAME[i]);
+    Serial.print(chName(i));
     Serial.print('=');
-    Serial.print(readAin(AIN[i]), 1);
+    Serial.print(chRead(i, vcc), 1);
   }
 
 #if USE_MAX31855
@@ -951,12 +1059,20 @@ void loop() {
   }
 #endif
 
+#if defined(ESP_BOX)
+  portENTER_CRITICAL(&fMux);
+#else
   noInterrupts();
+#endif
   uint32_t sum = fSum;
   uint16_t n = fN;
   fSum = 0;
   fN = 0;
+#if defined(ESP_BOX)
+  portEXIT_CRITICAL(&fMux);
+#else
   interrupts();
+#endif
   if (n) {
     fHz = n * 1000000.0f / sum;
     fSeenMs = now;

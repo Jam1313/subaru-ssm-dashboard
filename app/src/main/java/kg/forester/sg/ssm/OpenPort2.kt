@@ -35,12 +35,15 @@ class OpenPort2(private val port: UsbSerialPort) {
         runCatching { port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE) }
         runCatching { port.dtr = true }
         runCatching { port.rts = true }
+        // Blocking reads with a timeout, not the async ones (readTimeout 0): the adapter ends a reply of
+        // exactly 64 bytes with a zero-length packet, and on an empty async read the library sends a
+        // USB GET_STATUS that some head units fail ("USB get_status request failed").
         io = SerialInputOutputManager(port, object : SerialInputOutputManager.Listener {
             override fun onNewData(data: ByteArray) = feed(data)
             override fun onRunError(e: Exception) {
                 ioError = e
             }
-        }).also { it.readTimeout = 0; it.start() }
+        }).also { it.readTimeout = 200; it.start() }
         // Drop a half-typed command from a previous session, then make sure it is an OpenPort.
         port.write("\r\n".toByteArray(), 500)
         Thread.sleep(80)

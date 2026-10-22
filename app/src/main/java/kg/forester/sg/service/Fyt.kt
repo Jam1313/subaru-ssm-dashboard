@@ -153,19 +153,20 @@ object Fyt {
 
     private val mainCb = object : Callback() {
         override fun onUpdate(code: Int, ints: IntArray?, strs: Array<String?>?) {
-            if (code == 0) appId.value = (ints?.getOrNull(0) ?: 0).also { Log.i(TAG, "source $it") }
+            if (code == 0) appId.value = (ints?.getOrNull(0) ?: 0).also { trace("source $it") }
         }
     }
 
     private val radioCb = object : Callback() {
         override fun onUpdate(code: Int, ints: IntArray?, strs: Array<String?>?) {
             val v = ints?.getOrNull(0) ?: return
-            Log.i(TAG, "radio update $code = $v")
+            trace("radio update $code = $v")
             val r = radio.value
             radio.value = when (code) {
                 0 -> r.copy(band = v)
                 1 -> withStation(r.copy(freq = v))
-                3 -> r.copy(preset = v)
+                // an MCU tuner tells the preset's index, FM ones from 65536 (P1 of the band = 65536); the radio app 1..6
+                3 -> r.copy(preset = if (v >= 65536) (v - 65536) % 6 + 1 else v)
                 else -> r
             }
         }
@@ -245,6 +246,9 @@ object Fyt {
             val tk = service ?: return
             main = module(tk, M_MAIN)?.also { register(it, mainCb, 0) }
             radioModule = module(tk, M_RADIO)?.also { m -> listOf(0, 1, 3).forEach { register(m, radioCb, it) } }
+            // 1 = the MCU's tuner, 3 / 4 = one the radio app drives (it gets our commands passed on), 2 = none
+            val type = runCatching { Runtime.getRuntime().exec(arrayOf("getprop", "sys.fyt.radio_type")).inputStream.bufferedReader().readText().trim() }.getOrDefault("?")
+            trace("bound: main ${main != null}, radio ${radioModule != null}, radio type $type")
             // all the module's updates, not only the known ones: the log tells which code carries what on this unit
             bt = module(tk, M_BT)?.also { m -> (0 until 100).forEach { register(m, btCb, it) } }
             sound = module(tk, M_SOUND)?.also { register(it, soundCb, 2) }
@@ -383,23 +387,42 @@ object Fyt {
     }
 
     private var radioAskedMs = -10_000L
+    private var radioLaunchMs = -120_000L
+
+    /** Also into the exchange log (Настройки → «Журнал обмена»), where a radio that won't switch can be seen. */
+    private fun trace(msg: String) {
+        Log.i(TAG, msg)
+        kg.forester.sg.ssm.SsmTrace.log("fyt: $msg", keep = true)
+    }
+
+    /**
+     * The radio's activity was started a moment ago and the unit still doesn't say the radio is the source: it
+     * plays all the same, so nothing more to wait for (and no second start, see [ensureRadio]).
+     */
+    val radioUnconfirmed get() = appId.value != 1 && SystemClock.uptimeMillis() - radioLaunchMs < 60_000
 
     /**
      * Radio as the active source: the source command alone, as a rule. The radio's activity flashed up on every
      * station picked, so it is started (and our screen brought back) only when the source hasn't switched in 1.5 s.
      */
     fun ensureRadio() {
-        if (appId.value == 1) return
+        // started a moment ago with no word of the source since: the source command again could throw it back too
+        if (appId.value == 1 || radioUnconfirmed) return
         val ctx = app ?: return
         // asked a moment ago and the switch is on its way: launched again, the radio starts over at its own last
         // station and undoes the seek or preset that follows
         if (SystemClock.uptimeMillis() - radioAskedMs < 3000) return
         radioAskedMs = SystemClock.uptimeMillis()
-        Log.i(TAG, "radio on (source ${appId.value})")
+        trace("radio on (source ${appId.value})")
         cmd(main, 0, intArrayOf(1))
         handler.postDelayed({
             if (appId.value == 1) return@postDelayed
-            Log.i(TAG, "radio: source still ${appId.value}, starting the radio's activity")
+            // started a minute ago, and the unit never said the radio is the source (some don't, or say another
+            // number): started again, the radio went back to its own last station each time and undid every seek
+            // and preset, so the buttons seemed dead
+            if (SystemClock.uptimeMillis() - radioLaunchMs < 60_000) { trace("radio: source still ${appId.value}, not starting it again"); return@postDelayed }
+            radioLaunchMs = SystemClock.uptimeMillis()
+            trace("radio: source still ${appId.value}, starting the radio's activity")
             runCatching {
                 ctx.startActivity(Intent().setClassName("com.syu.radio", "com.syu.radio.Launch").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
@@ -436,11 +459,40 @@ object Fyt {
     /** [ensure] false: the caller has made the radio the source and waited for it already. */
     fun radioSeek(up: Boolean, ensure: Boolean = true) {
         if (ensure) ensureRadio()
-        Log.i(TAG, "radio seek ${if (up) "up" else "down"} from ${radio.value.freq}")
+        trace("radio seek ${if (up) "up" else "down"} from ${radio.value.freq} (source ${appId.value}, module ${radioModule != null})")
         cmd(radioModule, if (up) 5 else 6)
     }
-    fun radioPreset(next: Boolean, ensure: Boolean = true) { if (ensure) ensureRadio(); cmd(radioModule, if (next) 0 else 1) }
-    fun radioBand() { ensureRadio(); cmd(radioModule, 11) }
+    /*
+     * The radio module's commands as com.syu.ms takes them (uis7862 build of 2021-11, decompiled): 0 / 1 preset up /
+     * down, 5 / 6 seek, 7 [index] a preset (FM ones from 65536), 11 [band] the band (65536..65538 FM1..3, 0/1 AM,
+     * -1 the band key; without the number it is ignored), 13 [1, freq] a frequency. A unit whose tuner the radio app
+     * drives itself (radio type 3/4, newer units) gets them passed on to that app, which must be running.
+     */
+
+    /** Straight to [freq] (FM in 10 kHz units, AM in kHz); a tuner that doesn't take it stays where it is. */
+    fun radioTune(freq: Int) {
+        trace("radio tune $freq from ${radio.value.freq} (source ${appId.value})")
+        cmd(radioModule, 13, intArrayOf(1, freq))
+    }
+
+    /** The tuner's preset [p] (1..6) of the band that plays. */
+    fun radioToPreset(p: Int) {
+        val index = if (radio.value.isFm || radio.value.band == -1) 65536 + p - 1 else p - 1
+        trace("radio preset $p (index $index) from ${radio.value.preset} (source ${appId.value})")
+        cmd(radioModule, 7, intArrayOf(index))
+    }
+
+    fun radioPreset(next: Boolean, ensure: Boolean = true) {
+        if (ensure) ensureRadio()
+        trace("radio preset ${if (next) "next" else "prev"} from ${radio.value.preset} (source ${appId.value}, module ${radioModule != null})")
+        cmd(radioModule, if (next) 0 else 1)
+    }
+    /** To [band] (65536..65538 FM1..3, 0 AM), or the next one like the band key (-1). */
+    fun radioBand(band: Int = -1) {
+        ensureRadio()
+        trace("radio band $band from ${radio.value.band}")
+        cmd(radioModule, 11, intArrayOf(band))
+    }
     fun openRadio() {
         runCatching { app?.startActivity(Intent().setClassName("com.syu.radio", "com.syu.radio.Launch").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }

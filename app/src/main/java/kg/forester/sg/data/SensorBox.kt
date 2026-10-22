@@ -42,6 +42,10 @@ enum class BoxBoard(
     val mosi: String = "D11",
     /** A 3.3 V pin, for a module that wants it (the 2.42" OLED); the Pro Micro 5 V has none. */
     val v33: String? = "3V3",
+    /** An input's pin as printed on the board, where it is not the input's own name (the ESP32-S3's GPIO numbers). */
+    val pinNames: Map<String, String> = emptyMap(),
+    /** 3.3 V pins: a 5 V signal needs a divider in front of them. */
+    val lowVolt: Boolean = false,
 ) {
     NANO(
         "nano", "Arduino Nano / Nano V3", "ATmega328P, чип USB CH340 или FTDI. Самый удобный: маленький, дешёвый, 6 аналоговых входов",
@@ -77,6 +81,19 @@ enum class BoxBoard(
         ide = "Arduino Mega or Mega 2560",
         pcb = 0xFF1E5AA8, outPins = (3..9).map { "D$it" } + listOf("D11", "D12") + (22..29).map { "D$it" },
         pwmPins = (3..9).map { "D$it" } + listOf("D11", "D12"), sda = "SDA", scl = "SCL", mosi = "D51",
+    ),
+    // ESP32-S3-DevKitC-1 and its clones; the rows from the USB end, as printed (hardware/sensorbox/README.md)
+    ESP32S3(
+        "esp32s3", "ESP32-S3 / DevKitC-1", "DevKitC-1 и клоны, свой USB, прошивается с магнитолы. Пины 3,3 В: датчики 5 В через делитель 100k/150k. " +
+            "4 входа, с модулем ADS1115 ещё 4 точных",
+        listOf("A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7"), "14", "12", "13", "10", "5V",
+        listOf("GND", "5V", "14", "13", "12", "11", "10", "9", "46", "3", "8", "18", "17", "16", "15", "7", "6", "5", "4", "RST", "3V3", "3V3"),
+        listOf("GND", "GND", "19", "20", "21", "47", "48", "45", "0", "35", "36", "37", "38", "39", "40", "41", "42", "2", "1", "RX", "TX", "GND"),
+        ide = "ESP32S3 Dev Module (пакет esp32 от Espressif), затем USB CDC On Boot: Enabled и USB Mode: Hardware CDC and JTAG",
+        pcb = 0xFF1F2430, outPins = listOf("15", "16", "17", "18", "21", "39", "40", "41", "42", "47"),
+        pwmPins = listOf("15", "16", "17", "18", "21", "39", "40", "41", "42", "47"), sda = "8", scl = "9", mosi = "11",
+        pinNames = mapOf("A0" to "2", "A1" to "4", "A2" to "5", "A3" to "6", "A4" to "ADS A0", "A5" to "ADS A1", "A6" to "ADS A2", "A7" to "ADS A3"),
+        lowVolt = true,
     );
 
     /** The name without its variants: «Arduino Nano», «Pro Micro 5 В». */
@@ -90,8 +107,11 @@ enum class BoxBoard(
         "TC0" -> cs
         "F0" -> freqPin
         in THERMOCOUPLES -> SensorBox.tcCs.value[input] ?: ""
-        else -> input
+        else -> pinNames[input] ?: input
     }
+
+    /** The inputs on an ADS1115 module rather than the board itself (the ESP32-S3's A4..A7). */
+    fun onAds(input: String) = pinNames[input]?.startsWith("ADS") == true
 
     companion object {
         fun of(id: String?) = entries.firstOrNull { it.id == id } ?: NANO
@@ -506,6 +526,9 @@ object SensorBox {
             "на Uno это SDA/SCL, их занимает дисплей на I2C"
         input in setOf("TC1", "TC2", "TC3") && tcCs.value[input].isNullOrEmpty() && freeOutPins(b).isEmpty() ->
             "нет свободного пина для CS модуля"
+        // the box on the cable said which inputs it has: without the module there are no A4..A7
+        b.onAds(input) && info.value?.let { it.via.startsWith("USB") && input !in it.inputs } == true ->
+            "нужен модуль ADS1115 на I2C (SDA ${b.sda}, SCL ${b.scl}), плата его не нашла"
         else -> null
     }
 

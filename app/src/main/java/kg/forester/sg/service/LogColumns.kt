@@ -139,18 +139,23 @@ object LogColumns {
         return offered().filter { it.key !in off }
     }
 
-    /** The first column, as it always was: the sample's wall clock in epoch ms (people's scripts read it so). */
-    const val TIME = "time"
-    /** The last one (0.9-beta21): ms from the start of the file, for programs that choke on epoch ms. */
+    /**
+     * The first column (since 0.9-beta22): ms from the start of the file, as RomRaider writes its «Time». EcuEdit
+     * and the like take the first column for the time axis and choke on epoch ms.
+     */
+    const val TIME = "Time"
+    /** The last one: the sample's wall clock in epoch ms (the first column «time» up to 0.9-beta21). */
+    const val EPOCH_MS = "epoch_ms"
+    /** 0.9-beta21's last column: ms from the start, when the first one was still the epoch. */
     const val T_MS = "t_ms"
 
-    /** A log's first line: [TIME], the [names] in between, [T_MS]. */
-    fun header(names: List<String>): String = (listOf(TIME) + names + T_MS).joinToString(",")
+    /** A log's first line: [TIME], the [names] in between, [EPOCH_MS]. */
+    fun header(names: List<String>): String = (listOf(TIME) + names + EPOCH_MS).joinToString(",")
 
     /** One line under [header]: [values] already joined by commas, the file started at [t0]. */
     fun line(timeMs: Long, t0: Long, values: String): String = buildString {
-        append(timeMs)
+        append((timeMs - t0).coerceAtLeast(0))
         if (values.isNotEmpty()) append(',').append(values)
-        append(',').append((timeMs - t0).coerceAtLeast(0))
+        append(',').append(timeMs)
     }
 }

@@ -1,0 +1,10 @@
+{
+ "ino_sha256": "0e213c02edc992e61ed544e1904a344d56efeeaad82b247a555f304d6cc5a0ca",
+ "core": "esp32:esp32@3.3.10",
+ "files": {
+  "esp32s3": {
+   "sha256": "6ab4fd415d73dc8b2f016f4261fca0ddf27fc76daf2149040fbbd707758c9fe5",
+   "bytes": 446464
+  }
+ }
+}

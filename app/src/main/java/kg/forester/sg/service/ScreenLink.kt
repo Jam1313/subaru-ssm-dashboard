@@ -24,8 +24,16 @@ object ScreenLink {
     private val flashing = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     /** Devices with a session running. */
     private val active = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** Espressif boards that answered as a screen, while they are plugged in: the box loop leaves them alone. */
+    val knownScreens: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    /** Espressif boards that answered as the SensorBox: not asked again while they are plugged in. */
+    private val boxes = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
+    /** Espressif's vendor id: the colour screen, or the SensorBox on an ESP32-S3 (told apart by the answer to «?»). */
     fun isScreen(vid: Int) = vid == 0x303A
+
+    /** A session (or a board being asked who it is) has [device] open. */
+    fun busy(device: String) = device in active
 
     fun pauseForFlash(device: String, on: Boolean) {
         if (on) flashing += device else flashing -= device
@@ -36,7 +44,11 @@ object ScreenLink {
     fun start(scope: CoroutineScope, ctx: Context, usb: UsbManager, askPermission: (android.hardware.usb.UsbDevice) -> Unit) {
         scope.launch(Dispatchers.IO) {
             while (isActive) {
-                val found = runCatching { SensorBoxLink.drivers(usb).filter { isScreen(it.device.vendorId) } }.getOrDefault(emptyList())
+                val all = runCatching { SensorBoxLink.drivers(usb).filter { isScreen(it.device.vendorId) } }.getOrDefault(emptyList())
+                val present = all.map { it.device.deviceName }.toSet()
+                boxes.retainAll(present)
+                knownScreens.retainAll(present)
+                val found = all.filter { it.device.deviceName !in boxes }
                 UsbScreen.status.value = if (found.isEmpty()) "Экран не найден на USB" else ""
                 for (d in found) {
                     val n = d.device.deviceName
@@ -92,13 +104,20 @@ object ScreenLink {
             // DTR and RTS stay low: on this USB they are the reset and boot lines
             val lines = Lines(port)
             var info: ScreenInfo? = null
+            var box = false
             repeat(4) {
-                if (info != null) return@repeat
+                if (info != null || box) return@repeat
                 port.write("?\n".toByteArray(), 300)
                 val end = System.currentTimeMillis() + 800
-                while (info == null && System.currentTimeMillis() < end) info = lines.next(200)?.let { ScreenInfo.parse(it) }
+                while (info == null && !box && System.currentTimeMillis() < end) lines.next(200)?.let { l ->
+                    info = ScreenInfo.parse(l)
+                    box = l.startsWith("I SENSORBOX")
+                }
             }
+            // the SensorBox on an ESP32-S3: the box loop takes it from here
+            if (box) { boxes += dev; SsmTrace.log("screen: $dev is the SensorBox"); return }
             val inf = info ?: run { UsbScreen.status.value = "Плата ESP32 на USB не отвечает как экран: прошейте её"; Thread.sleep(3000); return }
+            knownScreens += dev
             SsmTrace.log("screen: ${inf.board} ${inf.w}x${inf.h} fw ${inf.fw} id ${inf.id}")
             UsbScreen.attach(inf, dev)
             val id = inf.id.ifEmpty { "dev:$dev" }

@@ -746,6 +746,8 @@ class EcuService : Service() {
             var fastRun = 0
             var fastTcuMs = 0L
             var fastWatchMs = 0L
+            /** Plain requests: the ticked parameters go in the regular read until that is refused once. */
+            var joinWatch = true
             try { while (scope.isActive && failures < 5 && !Repo.settings.demo && capsSeen == Repo.capsVersion.value &&
                 SensorBoxLink.ecuLease?.permitted != false) {
                 if (transport.passive) {
@@ -823,7 +825,18 @@ class EcuService : Service() {
                     }
                     continue
                 }
-                val raw = EcuLink.mutex.withLock { client.read(addrs) }
+                // the ticked parameters that answered on their own ride in the same request, as in the stream: read
+                // apart, they were a request later than the regular values (load_grev and P200 differed in the log)
+                ecuWatch.refresh()
+                val extra = if (joinWatch && ecuWatch.answers) ecuWatch.addresses.filter { it !in addrs }.toIntArray() else IntArray(0)
+                var read = addrs + extra
+                var raw = EcuLink.mutex.withLock { client.read(read) }
+                if (raw == null && extra.isNotEmpty() && !transport.passive) {
+                    joinWatch = false
+                    SsmTrace.log("watched addresses refused together with the regular ones: read apart")
+                    read = addrs
+                    raw = EcuLink.mutex.withLock { client.read(read) }
+                }
                 val now = System.currentTimeMillis()
                 if (raw == null && transport.passive) continue
                 if (raw == null) {
@@ -833,11 +846,11 @@ class EcuService : Service() {
                 }
                 failures = 0
                 if (cycle == 0) logFirstRead(addrs, raw)
-                var snap = EcuParams.decode(addrs, raw, now, skip)
+                var snap = EcuParams.decode(read, raw, now, skip)
                 // SSM answers any address; an A/F byte from an ECU without the wideband sensor would fake
                 // "enrichment" in the fuel calculation
                 if (!afSensor) snap = snap.copy(lambda = null)
-                ecuWatch.poll(client)
+                if (read.size > addrs.size) ecuWatch.take(read, raw) else ecuWatch.poll(client)
                 onSnapshot(snap, now)
                 if (++cycle % Repo.settings.tcuEvery.coerceAtLeast(1) == 0 && Repo.settings.gearbox != "mt") pollTcu(client, now)
             } } finally {
@@ -1665,9 +1678,9 @@ class BootReceiver : BroadcastReceiver() {
 }
 
 /**
- * One CSV file per engine run in Android/data/kg.forester.sg/files/logs; columns as chosen on the «Лог» screen. «time»
- * first is the wall clock in epoch ms, as always; «t_ms» last is ms from the start of the file, as in RomRaider logs
- * (EcuEdit and the like choke on epoch ms). The start, to the second, is the file name.
+ * One CSV file per engine run in Android/data/kg.forester.sg/files/logs; columns as chosen on the «Лог» screen. «Time»
+ * first is ms from the start of the file, as in RomRaider logs (EcuEdit and the like choke on epoch ms); «epoch_ms»
+ * last is the wall clock. The start, to the second, is the file name.
  */
 class CsvLogger(ctx: Context, val extras: List<RrParam> = emptyList()) {
     val file: File

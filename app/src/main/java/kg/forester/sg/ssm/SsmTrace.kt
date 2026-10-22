@@ -40,11 +40,13 @@ object SsmTrace {
 
     val path: String? get() = file?.absolutePath
 
+    /** [keep]: a rare line from elsewhere (the radio's commands) that must not drown in the polling. */
     @Synchronized
-    fun log(msg: String) {
+    fun log(msg: String, keep: Boolean = false) {
         val line = "${fmt.format(Date())} $msg"
-        val r = if (polling) pollRing else ring
-        if (r.size >= (if (polling) KEEP_POLL else KEEP)) r.removeFirst()
+        val poll = polling && !keep
+        val r = if (poll) pollRing else ring
+        if (r.size >= (if (poll) KEEP_POLL else KEEP)) r.removeFirst()
         r.addLast(line)
         if (!enabled) return
         val f = file ?: return
